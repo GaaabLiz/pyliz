@@ -1,7 +1,3 @@
-import base64
-
-import requests
-
 from network.netres import NetResponse
 from network.netutils import exec_get, exec_post
 
