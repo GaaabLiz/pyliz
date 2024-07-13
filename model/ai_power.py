@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class AiPower(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
 
     @staticmethod
     def get_llava_from_power(ai_power: str) -> str:
