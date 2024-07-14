@@ -1,0 +1,15 @@
+from typing import Generic, TypeVar, Optional, Callable, Union
+
+T = TypeVar('T')
+
+
+class Operation(Generic[T]):
+    def __init__(self, payload: Optional[T] = None, status: bool = False, error: Optional[str] = None):
+        self.payload = payload
+        self.status = status
+        self.error = error
+
+    @classmethod
+    def is_ok(cls, operation: 'Operation[T]') -> bool:
+        return operation.status
+
