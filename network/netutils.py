@@ -4,6 +4,14 @@ from network.netres import NetResponse
 from network.netrestype import NetResponseType
 
 
+def test_with_head(url: str) -> bool:
+    try:
+        response = requests.head(url, timeout=5)
+        return response.status_code < 400
+    except requests.RequestException as e:
+        return False
+
+
 def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
     try:
         response = requests.get(url, timeout=10)

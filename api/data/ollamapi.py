@@ -1,3 +1,9 @@
+import json
+from typing import Callable
+
+import ollama
+from ollama import Client
+
 from network.netres import NetResponse
 from network.netutils import exec_get, exec_post
 
@@ -6,6 +12,7 @@ OLLAMA_HTTP_LOCALHOST_URL = "http://localhost:" + OLLAMA_PORT
 
 # https://github.com/ollama/ollama-python
 # https://github.com/ollama/ollama/blob/main/docs/api.md
+
 
 class OllamaApiLegacy:
     def __init__(self):
@@ -56,4 +63,19 @@ class Ollamapi:
 
     def __init__(self, url: str):
         self.url = url
-        pass
+        self.client = ollama.client = Client(host=url)
+
+    def get_models_list(self):
+        mappings = self.client.list()
+        json_str = json.dumps(mappings)
+        return json_str
+
+    def download_model(self, name: str, en_stream: bool, callback: Callable[[str], None] | None = None):
+        stream = self.client.pull(
+            model='name',
+            stream=en_stream,
+        )
+        if en_stream:
+            for data in stream:
+                if callback:
+                    callback(data["status"])
