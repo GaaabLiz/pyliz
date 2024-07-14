@@ -1,4 +1,4 @@
-from model.ai_power import AiPower
+from ai.model.ai_power import AiPower
 
 
 class AiModels:
