@@ -5,6 +5,8 @@ from api.data.ollamapi import OllamaApiLegacy, Ollamapi
 from ollama import Client
 
 from api.dto.ollama_models import OllamaModels
+from api.dto.ollama_response import OllamaResponse
+from model.operation import Operation
 
 
 class OllamalizLegacy:
@@ -42,6 +44,24 @@ class Ollamaliz:
 
     def download_model(self, name: str, en_stream: bool, callback: Callable[[str], None] | None = None):
         return self.obj.download_model(name, en_stream, callback)
+
+    def llava_query(
+            self,
+            prompt: str,
+            image_base_64: str,
+            model_name: str,
+    ) -> Operation[OllamaResponse]:
+        response = OllamaApiLegacy.send_llava_query(self.obj.url, prompt, image_base_64, model_name)
+        if response.is_successful():
+            resp_text = response.text
+            resp_text_json = json.loads(resp_text)
+            resp_obj = OllamaResponse.from_json(resp_text_json)
+            return Operation(payload=resp_obj, status=True)
+        else:
+            error = response.get_error()
+            return Operation(status=False, error=error)
+
+
 
 
 
