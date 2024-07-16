@@ -6,13 +6,14 @@ class AiSettings:
     def __init__(
             self,
             method: AiMethod,
-            model_name: str,
             power: AiPower,
+            model_name: str | None = None,
             remote_url: str | None = None,
             ai_tags: bool = False,
             ai_file_metadata: bool = False,
             ai_comment: bool = False,
             ai_rename: bool = False,
+            ai_ocr: bool = False,
     ):
         self.ai_tags = ai_tags
         self.ai_file_metadata = ai_file_metadata
@@ -22,4 +23,5 @@ class AiSettings:
         self.method = method
         self.power = power
         self.model_name = model_name
+        self.ai_ocr = ai_ocr
 
