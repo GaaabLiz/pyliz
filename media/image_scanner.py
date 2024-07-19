@@ -33,7 +33,7 @@ class ImageScanner:
 
     def __scan_image_with_llava_ollama(self) -> Operation[LizImage]:
         ollamaliz = Ollamaliz(self.settings.remote_url)
-        model_name = AiModels.get_llava_from_power(self.settings.power)
+        model_name = AiModels.get_llava(self.settings.power, AiMethod.LLAVA_OLLAMA).ollama_name
         with open(self.path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
         llava_result = ollamaliz.llava_query(prompt_llava_1, encoded_string, model_name)

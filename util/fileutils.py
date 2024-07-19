@@ -2,6 +2,10 @@ import os
 import platform
 from datetime import datetime
 
+import requests
+
+from model.operation import Operation
+
 
 def is_image_file(path: str) -> bool:
     image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
@@ -53,3 +57,31 @@ def get_file_c_date(path_to_file) -> datetime:
 
     # Convert timestamp to datetime object
     return datetime.fromtimestamp(timestamp)
+
+
+def download_file(url: str, destinazione: str, on_progress: callable) -> Operation[None]:
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Verifica se la richiesta è andata a buon fine
+
+        # Ottieni la dimensione totale del file dal campo 'Content-Length' dell'header
+        totale = int(response.headers.get('content-length', 0))
+
+        # Inizializza variabili per il calcolo della percentuale
+        scaricato = 0
+        percentuale = 0
+
+        with open(destinazione, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:  # Filtra fuori i chunk vuoti
+                    file.write(chunk)
+                    scaricato += len(chunk)
+
+                    # Calcola la nuova percentuale
+                    nuova_percentuale = int(scaricato * 100 / totale)
+                    if nuova_percentuale > percentuale:
+                        percentuale = nuova_percentuale
+                        on_progress(percentuale)
+        return Operation(status=True)
+    except Exception as e:
+        return Operation(status=False, error=str(e))

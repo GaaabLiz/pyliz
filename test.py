@@ -7,6 +7,7 @@ from api.service.eagleliz import Eagleliz
 from api.service.ollamaliz import Ollamaliz
 from media.image_scanner import ImageScanner
 from network.netutils import test_with_head
+from util import osutils
 
 url = "http://192.168.0.205:11434"
 # print(Ollamaliz(url).get_models_list().models[1].name)
@@ -23,4 +24,5 @@ setting = AiSettings(
 scanner = ImageScanner("/Users/gabliz/Pictures/obama343434333.jpg", setting)
 # op_image = scanner.scan()
 # print(op_image.status)
-print(test_with_head(url))
+# print(test_with_head(url))
+print(osutils.is_command_available("masske"))

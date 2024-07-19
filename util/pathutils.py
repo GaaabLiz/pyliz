@@ -45,6 +45,7 @@ def check_path(path, create_if_not: bool = False) -> bool:
     if not os.path.exists(path):
         if create_if_not:
             os.makedirs(path)
+            return False
         else:
             return False
     if not os.access(path, os.R_OK):

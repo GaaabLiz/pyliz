@@ -93,3 +93,19 @@ def check_move_dirs_free_space(src_path, dst_path) -> bool:
     # Check if there is enough space
     return free_space_mb >= src_size_mb
 
+
+def is_command_available_with_run(command: str) -> bool:
+    """
+    Check if a command is available in the system
+    :param command: The command to check
+    :return: True if the command is available, False otherwise
+    """
+    try:
+        subprocess.run([command], check=True)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def is_command_available(command: str) -> bool:
+    return shutil.which(command) is not None
