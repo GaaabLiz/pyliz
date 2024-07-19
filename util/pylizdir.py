@@ -6,32 +6,38 @@ from util.cfgutils import CfgItem, Cfgini
 
 class PylizDir:
 
-    base_path: str = pathutils.get_app_home_dir(".pyliz")
+    path: str = pathutils.get_app_home_dir(".pyliz")
+    path_config_ini = os.path.join(path, "config.ini")
+
+    default_path_models: str = os.path.join(path, "models")
 
     @staticmethod
     def create():
-        exist = pathutils.check_path(PylizDir.base_path, True)
+        exist = pathutils.check_path(PylizDir.path, True)
         if exist:
             return
-        pathutils.check_path_dir(PylizDir.base_path)
+        pathutils.check_path_dir(PylizDir.path)
 
     @staticmethod
     def set_default():
         # Creating variables
-        path_config_ini = os.path.join(PylizDir.base_path, "config.ini")
-        path_models_folder = os.path.join(PylizDir.base_path, "models")
         ini_items_list = [
-            CfgItem("paths", "model_folder", path_models_folder)
+            CfgItem("paths", "model_folder", PylizDir.default_path_models)
         ]
         # Checking variables
-        pathutils.check_path(path_models_folder, True)
-        pathutils.check_path_dir(path_models_folder)
+        pathutils.check_path(PylizDir.default_path_models, True)
+        pathutils.check_path_dir(PylizDir.default_path_models)
         # Creating config.ini file
-        cfgini = Cfgini(path_config_ini)
+        cfgini = Cfgini(PylizDir.path_config_ini)
         cfgini.create(ini_items_list)
 
+    @staticmethod
+    def get_models_folder() -> str:
+        cfgini = Cfgini(PylizDir.path_config_ini)
+        return cfgini.read("paths", "model_folder")
 
-    def check_models_folder(self):
-        path = os.path.join(self.base_path, "models")
+    @staticmethod
+    def get_ai_folder() -> str:
+        path = os.path.join(PylizDir.path, "ai")
         pathutils.check_path(path, True)
-        pathutils.check_path_dir(path)
+        return path

@@ -17,27 +17,24 @@ class LlamaCpp:
     def __init__(self, path_install: str, path_models: str):
         self.path_install = path_install
         self.path_models = path_models
-        self.main_dir = os.path.join(self.path_install, "llama.cpp")
+        # self.main_dir = os.path.join(self.path_install, "llama.cpp")
 
     def clone_and_build(self, on_log: Callable[[str], None]):
         # check if the folder already exists
-        if os.path.exists(self.main_dir):
+        if os.path.exists(self.path_install):
             on_log("LlamaCpp already installed.")
             return
-        try:
-            # Cloning github repo
-            on_log("Cloning LlamaCpp...")
-            Repo.clone_from(LlamaCpp.GITHUB_URL, self.path_install)
-            on_log("Clone successful.")
-            # Building sources with make
-            on_log("Building LLava from llamacpp...")
-            if not osutils.is_command_available("make"):
-                raise Exception("Make command not available. Plaase install make.")
-            pathutils.check_path_dir(self.main_dir)
-            risultato = subprocess.run(["make"], check=True, cwd=self.main_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            on_log("Build successful.")
-        except Exception as e:
-            on_log("An error occurred: " + str(e))
+        # Cloning github repo
+        on_log("Cloning LlamaCpp...")
+        Repo.clone_from(LlamaCpp.GITHUB_URL, self.path_install)
+        on_log("Clone successful.")
+        # Building sources with make
+        on_log("Building sources...")
+        if not osutils.is_command_available("make"):
+            raise Exception("Make command not available. Plaase install make.")
+        pathutils.check_path_dir(self.path_install)
+        risultato = subprocess.run(["make"], check=True, cwd=self.path_install, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        on_log("Build successful.")
 
     def install_llava(
             self,
@@ -46,16 +43,19 @@ class LlamaCpp:
             on_progress: Callable[[int], None]
     ):
         self.clone_and_build(on_log)
-        try:
-            on_log("Installing LLava...")
-            source = AiModels.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
-            folder = os.path.join(self.path_models, source.local_name)
-            pathutils.check_path(folder, True)
-            pathutils.check_path_dir(folder)
-            for hg_file in source.hg_files:
-                on_log("Downloading model " + hg_file.name + " from Huggingface...")
-                op = fileutils.download_file(hg_file.url, folder, on_progress)
-                if op.status is False:
-                    raise Exception("Error downloading model: " + op.error)
-        except Exception as e:
-            on_log("An error occurred: " + str(e))
+        on_log("Installing LLava...")
+        source = AiModels.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+        folder = os.path.join(self.path_models, source.local_name)
+        pathutils.check_path(folder, True)
+        pathutils.check_path_dir(folder)
+        for hg_file in source.hg_files:
+            current_file = os.path.join(folder, hg_file.file_name)
+            already_exist = os.path.exists(current_file)
+            if already_exist:
+                on_log("Model " + hg_file.file_name + " already installed.")
+                continue
+            on_log("Downloading model " + hg_file.file_name + " from Huggingface...")
+            op = fileutils.download_file(hg_file.url, current_file, on_progress)
+            if op.status is False:
+                raise Exception("Error downloading model: " + op.error)
+        on_log("LLava model installed.")

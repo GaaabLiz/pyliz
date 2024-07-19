@@ -9,7 +9,7 @@ class AiModels:
     llava_15_7b_mmproj_f16 = HgFile("mmproj-model-f16.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/mmproj-model-f16.gguf")
     llava_15_7b_ggml_model_q4 = HgFile("ggml-model-q4_k.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/ggml-model-q4_k.gguf")
     llava_15_7b_bundle = [llava_15_7b_mmproj_f16, llava_15_7b_ggml_model_q4]
-    llava_15_name = "llava15"
+    llava_15_7b_name = "llava157b"
 
     def __init__(self):
         pass
@@ -29,7 +29,7 @@ class AiModels:
         if method == AiMethod.LLAVA_OLLAMA:
             return AiSource(ollama_name="llava:7b")
         if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name="llava:7b", hg_files=AiModels.llava_15_7b_bundle)
+            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
         raise Exception("No model found for the given power and method.")
 
     @staticmethod
@@ -37,7 +37,7 @@ class AiModels:
         if method == AiMethod.LLAVA_OLLAMA:
             return AiSource(ollama_name="llava:13b")
         if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name="llava:13b", hg_files=AiModels.llava_15_7b_bundle)
+            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
         raise Exception("No model found for the given power and method.")
 
     @staticmethod
@@ -45,7 +45,7 @@ class AiModels:
         if method == AiMethod.LLAVA_OLLAMA:
             return AiSource(ollama_name="llava:15b")
         if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name="llava:15b", hg_files=AiModels.llava_15_7b_bundle)
+            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
         raise Exception("No model found for the given power and method.")
 
 
