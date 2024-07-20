@@ -17,3 +17,4 @@ def is_valid_url(url: str):
         return True
     else:
         return False
+

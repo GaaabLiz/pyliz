@@ -16,6 +16,9 @@ class Cfgini:
         self.config = None
         self.path = path_to_ini
 
+    def exists(self):
+        return os.path.exists(self.path)
+
     def create(self, items: List[CfgItem] | None = None):
         self.config = configparser.ConfigParser()
         list_of_sections = set()

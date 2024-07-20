@@ -5,6 +5,7 @@ import rich
 
 from ai.llm.llamacpp import LlamaCpp
 from ai.model.ai_power import AiPower
+from ai.prompts import prompt_llava_1
 from util.pylizdir import PylizDir
 
 
@@ -19,20 +20,23 @@ def progress(percent: int):
 class TestLlamaCPP(unittest.TestCase):
 
     def setUp(self):
+        print("Setting up test...")
         PylizDir.create()
-        PylizDir.set_default()
-        self.install_path = os.path.join(PylizDir.get_ai_folder(), "llama.cpp")
-        self.obj = LlamaCpp(self.install_path, PylizDir.get_models_folder())
-
-    def test_clone_and_build(self):
-        try:
-            self.obj.clone_and_build(log)
-        except Exception as e:
-            self.fail(e)
+        path_install: str = os.path.join(PylizDir.get_ai_folder(), "llama.cpp")
+        path_models: str = PylizDir.get_models_folder()
+        path_logs: str = os.path.join(PylizDir.get_logs_path(), "llama.cpp")
+        self.obj = LlamaCpp(path_install, path_models, path_logs)
 
     def test_install_llava(self):
         try:
             self.obj.install_llava(AiPower.LOW, log, progress)
+        except Exception as e:
+            self.fail(e)
+
+    def test_run_llava(self):
+        try:
+            result = self.obj.run_llava(AiPower.LOW, "/Users/gabliz/Pictures/obama343434333.jpg", prompt_llava_1)
+            print(result)
         except Exception as e:
             self.fail(e)
 

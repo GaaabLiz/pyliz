@@ -11,33 +11,39 @@ class PylizDir:
 
     default_path_models: str = os.path.join(path, "models")
 
-    @staticmethod
-    def create():
-        exist = pathutils.check_path(PylizDir.path, True)
-        if exist:
-            return
-        pathutils.check_path_dir(PylizDir.path)
+    ini_items_list = [
+        CfgItem("paths", "model_folder", default_path_models)
+    ]
 
     @staticmethod
-    def set_default():
-        # Creating variables
-        ini_items_list = [
-            CfgItem("paths", "model_folder", PylizDir.default_path_models)
-        ]
-        # Checking variables
+    def create():
+        # Cartella pyliz
+        pathutils.check_path(PylizDir.path, True)
+        pathutils.check_path_dir(PylizDir.path)
+        # File config.ini
+        cfgini = Cfgini(PylizDir.path_config_ini)
+        if not cfgini.exists():
+            cfgini.create(PylizDir.ini_items_list)
+        # Cartella models
         pathutils.check_path(PylizDir.default_path_models, True)
         pathutils.check_path_dir(PylizDir.default_path_models)
-        # Creating config.ini file
-        cfgini = Cfgini(PylizDir.path_config_ini)
-        cfgini.create(ini_items_list)
+
 
     @staticmethod
     def get_models_folder() -> str:
         cfgini = Cfgini(PylizDir.path_config_ini)
-        return cfgini.read("paths", "model_folder")
+        path = cfgini.read("paths", "model_folder")
+        pathutils.check_path(path, True)
+        return path
 
     @staticmethod
     def get_ai_folder() -> str:
         path = os.path.join(PylizDir.path, "ai")
+        pathutils.check_path(path, True)
+        return path
+
+    @staticmethod
+    def get_logs_path() -> str:
+        path = os.path.join(PylizDir.path, "logs")
         pathutils.check_path(path, True)
         return path

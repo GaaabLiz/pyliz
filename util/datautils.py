@@ -1,3 +1,6 @@
+import random
+import string
+from datetime import datetime
 
 
 def convert_months_number_to_str(number: int) -> str:
@@ -16,3 +19,12 @@ def convert_months_number_to_str(number: int) -> str:
         12: "December"
     }
     return months.get(number, "Invalid Month")
+
+
+def gen_random_string(length: int) -> str:
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
+
+def gen_timestamp_log_name(prefix: str, extension: str):
+    return prefix + datetime.now().strftime("%Y%m%d_%H%M%S") + extension
