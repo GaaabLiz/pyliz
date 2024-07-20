@@ -8,7 +8,6 @@ from ai.model.ai_method import AiMethod
 from ai.model.ai_models import AiModels
 from ai.model.ai_power import AiPower
 from util import pathutils, osutils, fileutils, datautils
-from util.pylizdir import PylizDir
 
 
 class LlamaCpp:
@@ -24,6 +23,7 @@ class LlamaCpp:
             path_models: str,
             path_logs: str
     ):
+        # Init paths
         self.path_install = path_install
         self.path_models = path_models
         self.path_logs = path_logs
