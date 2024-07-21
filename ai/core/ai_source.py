@@ -1,6 +1,6 @@
 from typing import List
 
-from ai.model.hg_file import HgFile
+from ai.core.hg_file import HgFile
 from model.file_type import FileType
 from network import netutils
 from util import unitutils

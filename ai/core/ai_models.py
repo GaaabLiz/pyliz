@@ -1,7 +1,7 @@
-from ai.model.ai_method import AiMethod
-from ai.model.ai_power import AiPower
-from ai.model.ai_source import AiSource
-from ai.model.hg_file import HgFile
+from ai.core.ai_method import AiMethod
+from ai.core.ai_power import AiPower
+from ai.core.ai_source import AiSource
+from ai.core.hg_file import HgFile
 from model.file_type import FileType
 
 

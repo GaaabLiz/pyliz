@@ -1,6 +1,6 @@
-from ai.model.ai_method import AiMethod
-from ai.model.ai_power import AiPower
-from ai.model.ai_setting import AiSettings
+from ai.core.ai_method import AiMethod
+from ai.core.ai_power import AiPower
+from ai.core.ai_setting import AiSettings
 from media.image_scanner import ImageScanner
 from util import osutils
 

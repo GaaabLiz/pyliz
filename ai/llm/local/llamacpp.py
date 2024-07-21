@@ -4,10 +4,10 @@ from typing import Callable
 
 from git import Repo
 
-from ai.model.ai_method import AiMethod
-from ai.model.ai_models import AiModels
-from ai.model.ai_power import AiPower
-from ai.model.ai_source import AiSource
+from ai.core.ai_method import AiMethod
+from ai.core.ai_models import AiModels
+from ai.core.ai_power import AiPower
+from ai.core.ai_source import AiSource
 from util import pathutils, osutils, fileutils, datautils
 
 

@@ -1,11 +1,11 @@
-from ai.model.ai_method import AiMethod
-from ai.model.ai_model_list import AiModelList
-from ai.model.ai_models import AiModels
-from ai.model.ai_power import AiPower
-from ai.model.ai_prompts import AiPrompt
-from ai.model.ai_scan_settings import AiScanSettings
-from ai.model.ai_source import AiSource
-from ai.model.ai_source_type import AiSourceType
+from ai.core.ai_method import AiMethod
+from ai.core.ai_model_list import AiModelList
+from ai.core.ai_models import AiModels
+from ai.core.ai_power import AiPower
+from ai.core.ai_prompts import AiPrompt
+from ai.core.ai_scan_settings import AiScanSettings
+from ai.core.ai_source import AiSource
+from ai.core.ai_source_type import AiSourceType
 
 
 class AiSettings:

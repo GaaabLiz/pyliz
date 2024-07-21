@@ -1,8 +1,8 @@
 import json
 
-from ai.model.ai_prompts import AiPrompt
-from ai.model.ai_scan_settings import AiScanSettings
-from ai.model.ai_setting import AiSettings
+from ai.core.ai_prompts import AiPrompt
+from ai.core.ai_scan_settings import AiScanSettings
+from ai.core.ai_setting import AiSettings
 from model.liz_image import LizImage
 from model.operation import Operation
 

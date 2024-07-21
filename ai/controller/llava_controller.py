@@ -1,4 +1,4 @@
-from ai.model.ai_setting import AiSettings
+from ai.core.ai_setting import AiSettings
 
 
 class LlavaController:

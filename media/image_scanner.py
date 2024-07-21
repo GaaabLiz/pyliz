@@ -3,8 +3,8 @@ import os
 
 from ai.handler.llava_result_handler import LlavaResultHandler
 from ai.llm.local.llamacpp import LlamaCpp
-from ai.model.ai_method import AiMethod
-from ai.model.ai_setting import AiSettings
+from ai.core.ai_method import AiMethod
+from ai.core.ai_setting import AiSettings
 from ai.llm.remote.service.ollamaliz import Ollamaliz
 from model.liz_image import LizImage
 from model.operation import Operation
