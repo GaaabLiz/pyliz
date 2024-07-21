@@ -3,7 +3,7 @@ import unittest
 
 import rich
 
-from ai.llm.llamacpp import LlamaCpp
+from ai.llm.local.llamacpp import LlamaCpp
 from ai.model.ai_power import AiPower
 from ai.model.ai_prompts import prompt_llava_1
 from util.pylizdir import PylizDir

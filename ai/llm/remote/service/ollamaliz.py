@@ -1,11 +1,10 @@
 import json
 from typing import Callable
 
-from api.data.ollamapi import OllamaApiLegacy, Ollamapi
-from ollama import Client
+from ai.llm.remote.data.ollamapi import OllamaApiLegacy, Ollamapi
 
-from api.dto.ollama_models import OllamaModels
-from api.dto.ollama_response import OllamaResponse
+from ai.llm.remote.dto.ollama_models import OllamaModels
+from ai.llm.remote.dto.ollama_response import OllamaResponse
 from model.operation import Operation
 
 

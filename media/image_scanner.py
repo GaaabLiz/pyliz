@@ -1,14 +1,11 @@
 import base64
-import json
 import os
 
 from ai.handler.llava_result_handler import LlavaResultHandler
-from ai.llm.llamacpp import LlamaCpp
+from ai.llm.local.llamacpp import LlamaCpp
 from ai.model.ai_method import AiMethod
-from ai.model.ai_models import AiModels
 from ai.model.ai_setting import AiSettings
-from ai.model.ai_prompts import prompt_llava_1
-from api.service.ollamaliz import Ollamaliz
+from ai.llm.remote.service.ollamaliz import Ollamaliz
 from model.liz_image import LizImage
 from model.operation import Operation
 from util.pylizdir import PylizDir

@@ -1,7 +1,7 @@
 import base64
 
-from api.data.eagleapi import EAGLE_LOCALHOST_URL, EagleApi
-from api.dto.eagle_dto import EagleDto
+from media.api.data.eagleapi import EAGLE_LOCALHOST_URL, EagleApi
+from media.api.dto.eagle_dto import EagleDto
 from model.liz_image import LizImage
 from model.operation import Operation
 
