@@ -16,18 +16,15 @@ from util.pylizdir import PylizDir
 
 class ImageScanner:
 
-
     def __init__(self, path: str, settings: AiSettings | None = None):
         self.path = path
         self.settings = settings
-
 
     def scan(self) -> Operation[LizImage]:
         if self.settings:
             return self.__scan_image_with_ai()
         else:
             return self.__scan_image()
-
 
     def __scan_image_with_ai(self) -> Operation[LizImage]:
         if self.settings.method == AiMethod.LLAVA_OLLAMA:
@@ -41,7 +38,6 @@ class ImageScanner:
     def __scan_image(self) -> Operation[LizImage]:
         return Operation(status=True, payload=LizImage(self.path))
 
-
     def __scan_image_with_llava_ollama(self) -> Operation[LizImage]:
         ollamaliz = Ollamaliz(self.settings.remote_url)
         model_name = self.settings.source.ollama_name
@@ -50,9 +46,8 @@ class ImageScanner:
         llava_result = ollamaliz.llava_query(self.settings.prompt.value, encoded_string, model_name)
         if not llava_result.status:
             return Operation(status=False, error=llava_result.error)
-        result_handler = LlavaResultHandler(self.settings, llava_result.payload.response)
-        return result_handler.get_image_from_json(self.path, self.settings.scan_settings)
-
+        result_handler = LlavaResultHandler(self.settings)
+        return result_handler.get_image_from_json(llava_result.payload.response, self.path, self.settings.scan_settings)
 
     def __scan_image_with_llamacpp(self) -> Operation[LizImage]:
         # Setup Llamacpp
@@ -64,8 +59,8 @@ class ImageScanner:
         obj.install_llava(self.settings.power, lambda x: None, lambda x: None)
         # Run llava
         result = obj.run_llava(self.settings.power, self.path, self.settings.prompt.value)
-        result_handler = LlavaResultHandler(self.settings, result)
-        return result_handler.get_image_from_json(self.path, self.settings.scan_settings)
+        result_handler = LlavaResultHandler(self.settings)
+        return result_handler.get_image_from_json(result, self.path, self.settings.scan_settings)
 
 
 

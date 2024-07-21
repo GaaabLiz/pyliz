@@ -9,17 +9,18 @@ from model.operation import Operation
 
 class LlavaResultHandler:
 
-    def __init__(self, settings: AiSettings, output: str):
-        self.output = output
+    def __init__(self, settings: AiSettings):
         self.settings = settings
 
     def get_image_from_json(
-            self, image_path: str,
+            self,
+            output: str,
+            image_path: str,
             scan_settings: AiScanSettings
     ) -> Operation[LizImage]:
         if self.settings.prompt != AiPrompt.LLAVA_JSON:
             raise Exception("Invalid prompt for LlavaAdapter adapter.")
-        info_json = json.loads(self.output)
+        info_json = json.loads(output)
         output_image = LizImage(image_path)
         output_image.set_ai_filename(info_json.get("filename")) if scan_settings.ai_rename else None
         output_image.set_ai_description(info_json.get("description")) if scan_settings.ai_comment else None
