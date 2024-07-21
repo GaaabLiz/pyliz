@@ -27,6 +27,10 @@ class PylizDir:
         # Cartella models
         pathutils.check_path(PylizDir.default_path_models, True)
         pathutils.check_path_dir(PylizDir.default_path_models)
+        # Cartella ai
+        pathutils.check_path(PylizDir.get_ai_folder(), True)
+        # Cartella logs
+        pathutils.check_path(PylizDir.get_logs_path(), True)
 
 
     @staticmethod

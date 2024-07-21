@@ -22,7 +22,7 @@ class LizImage:
         self.year, self.month, self.day = self.creation_time.year, self.creation_time.month, self.creation_time.day
         self.size_byte = os.path.getsize(self.path)
         self.size_mb = self.size_byte / (1024 * 1024)
-        self.output_path = None
+        # self.output_path = None
 
     def __str__(self):
         return f"Image: {self.file_name} - {self.size_mb} MB - {self.year}/{self.month}/{self.day}"

@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import platform
 
 
 def get_folder_size_mb(path) -> float:
@@ -109,3 +110,12 @@ def is_command_available_with_run(command: str) -> bool:
 
 def is_command_available(command: str) -> bool:
     return shutil.which(command) is not None
+
+
+def is_os_unix() -> bool:
+    """
+    Check if the operating system is Unix-based (Linux, MacOS)
+    :return: True if the operating system is Unix-based, False otherwise
+    """
+    current_os = platform.system()
+    return current_os in ["Linux", "Darwin"]

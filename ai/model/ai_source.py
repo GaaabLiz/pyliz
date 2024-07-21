@@ -2,6 +2,8 @@ from typing import List
 
 from ai.model.hg_file import HgFile
 from model.file_type import FileType
+from network import netutils
+from util import unitutils
 
 
 class AiSource:
@@ -29,3 +31,11 @@ class AiSource:
             if hg_file.file_type == FileType.HG_MMPROJ:
                 return hg_file
         raise Exception("No mmproj file found in the source.")
+
+    def get_files_size_mb(self) -> float:
+        total = 0.0
+        for hg_file in self.hg_files:
+            size_byte = hg_file.get_file_size_byte()
+            size_mb = unitutils.convert_byte_to_mb(size_byte)
+            total += size_mb
+        return total

@@ -1,6 +1,7 @@
 from enum import Enum
 
 from model.file_type import FileType
+from network import netutils
 
 
 class HgFile:
@@ -14,5 +15,6 @@ class HgFile:
         self.url = url
         self.file_type = file_type
 
-
+    def get_file_size_byte(self) -> int:
+        return netutils.get_file_size_byte(self.url)
 

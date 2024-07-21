@@ -45,3 +45,18 @@ def exec_post(
     except requests.RequestException as e:
         return NetResponse(None, NetResponseType.REQUEST_ERROR, e)
 
+
+def get_file_size_byte(url: str, exception_on_fail: bool = False) -> int:
+    try:
+        response = requests.head(url, timeout=5, allow_redirects=True)
+        response.raise_for_status()
+        file_size = response.headers.get('content-length', 0)
+        if file_size is None:
+            if exception_on_fail:
+                raise ValueError("Unable to get file size for url: " + url)
+            return -1
+        return int(file_size)
+    except requests.RequestException as e:
+        if exception_on_fail:
+            raise ValueError("Unable to get file size for url: " + url + ": " + str(e))
+        return -1
