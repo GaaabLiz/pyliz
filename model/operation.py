@@ -9,7 +9,10 @@ class Operation(Generic[T]):
         self.status = status
         self.error = error
 
-    @classmethod
-    def is_ok(cls, operation: 'Operation[T]') -> bool:
-        return operation.status
+    # @classmethod
+    # def is_ok(cls, operation: 'Operation[T]') -> bool:
+    #     return operation.status
+
+    def is_op_ok(self) -> bool:
+        return self.status
 

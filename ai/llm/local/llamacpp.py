@@ -8,6 +8,7 @@ from ai.core.ai_method import AiMethod
 from ai.core.ai_models import AiModels
 from ai.core.ai_power import AiPower
 from ai.core.ai_source import AiSource
+from model.operation import Operation
 from util import pathutils, osutils, fileutils, datautils
 
 
@@ -128,27 +129,27 @@ class LlamaCpp:
             power: AiPower,
             image_path: str,
             prompt: str,
-    ):
-        source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
-        folder = os.path.join(self.path_models, source.local_name)
-        if not os.path.exists(folder):
-            raise Exception("LLava model not installed.")
-        # Run the model
-        command = [
-            "./llama-llava-cli",
-            "-m",
-            os.path.join(self.path_models, source.local_name, source.get_ggml_file().file_name),
-            "--mmproj",
-            os.path.join(self.path_models, source.local_name, source.get_mmproj_file().file_name),
-            "--image",
-            image_path,
-            "-p",
-            prompt
-        ]
-        log_file = os.path.join(self.path_logs, datautils.gen_timestamp_log_name("llava-result", ".txt"))
-        with open(log_file, 'w') as file:
-            result = subprocess.run(command, cwd=self.path_install, stdout=file, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            raise Exception("Error running LLava: " + result.stderr.decode())
-        with open(log_file, 'r') as file:
-            return file.read()
+    ) -> Operation[str]:
+        try:
+            # Creating variables and checking requirements
+            source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+            folder = os.path.join(self.path_models, source.local_name)
+            if not os.path.exists(folder):
+                raise Exception("LLava model not installed.")
+            # Run the model
+            path_model_file = os.path.join(self.path_models, source.local_name, source.get_ggml_file().file_name)
+            path_mmproj_file = os.path.join(self.path_models, source.local_name, source.get_mmproj_file().file_name)
+            command = ["./llama-llava-cli", "-m", path_model_file, "--mmproj", path_mmproj_file, "--image", image_path, "-p", prompt ]
+            # saving and extracting the result
+            log_file = os.path.join(self.path_logs, datautils.gen_timestamp_log_name("llava-result", ".txt"))
+            with open(log_file, 'w') as file:
+                result = subprocess.run(command, cwd=self.path_install, stdout=file, stderr=subprocess.PIPE)
+            if result.returncode != 0:
+                raise Exception("Error running LLava: " + result.stderr.decode())
+            with open(log_file, 'r') as file:
+                return Operation(status=True, payload=file.read())
+        except Exception as e:
+            return Operation(status=False, error=str(e))
+
+
+
