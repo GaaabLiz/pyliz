@@ -1,3 +1,4 @@
+from enum import Enum
 
 prompt_llava_1 = """
 Analyze the image thoroughly and provide a detailed description of every visible element. Return a json including the following information:
@@ -6,3 +7,9 @@ Analyze the image thoroughly and provide a detailed description of every visible
 - "text": a list of all the text found in the image (if any).
 - "filename": phrase that summarizes the image content (maximum 30 characters).
 """
+
+
+class AiPrompt(Enum):
+    LLAVA_JSON = prompt_llava_1
+
+

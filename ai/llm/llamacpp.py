@@ -110,7 +110,7 @@ class LlamaCpp:
         self.clone_and_build(on_log)
         on_log("Installing LLava...")
         # creating and checking files/folders
-        source = AiModels.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+        source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
         folder = os.path.join(self.path_models, source.local_name)
         pathutils.check_path(folder, True)
         pathutils.check_path_dir(folder)
@@ -129,7 +129,7 @@ class LlamaCpp:
             image_path: str,
             prompt: str,
     ):
-        source = AiModels.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+        source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
         folder = os.path.join(self.path_models, source.local_name)
         if not os.path.exists(folder):
             raise Exception("LLava model not installed.")

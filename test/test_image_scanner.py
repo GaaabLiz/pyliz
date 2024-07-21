@@ -1,36 +1,36 @@
 import os
 import unittest
 
-import rich
+from dotenv import load_dotenv
 
-from ai.llm.llamacpp import LlamaCpp
 from ai.model.ai_method import AiMethod
+from ai.model.ai_model_list import AiModelList
 from ai.model.ai_power import AiPower
-from ai.model.ai_scan_setting import AiSettings
-from ai.prompts import prompt_llava_1
+from ai.model.ai_prompts import AiPrompt
+from ai.model.ai_scan_settings import AiScanSettings
+from ai.model.ai_setting import AiSettings
+from ai.model.ai_source_type import AiSourceType
 from media.image_scanner import ImageScanner
-from util.pylizdir import PylizDir
-
 
 
 class TestImageScanner(unittest.TestCase):
 
     def setUp(self):
+        load_dotenv()
+        self.test_image = os.getenv("LOCAL_IMAGE_FOR_TEST")
         print("Setting up test...")
 
     def test_scan_image_with_llamacpp(self):
         try:
-            path = "/Users/gabliz/Pictures/obama343434333.jpg"
-            setting = AiSettings(
-                method=AiMethod.LLAVA_LOCAL_LLAMACPP,
+            scan_settings = AiScanSettings(True, True, True, True, True)
+            ai_settings = AiSettings(
+                model=AiModelList.LLAVA,
+                source_type=AiSourceType.LOCAL_AI,
                 power=AiPower.LOW,
-                ai_tags=True,
-                ai_file_metadata=True,
-                ai_comment=True,
-                ai_rename=True,
-                ai_ocr=True
+                prompt=AiPrompt.LLAVA_JSON,
+                scan_settings=scan_settings
             )
-            result = ImageScanner(path, setting).scan()
+            result = ImageScanner(self.test_image, ai_settings).scan()
             self.assertTrue(result.status)
             if result.status:
                 image = result.payload

@@ -1,14 +1,8 @@
-from ai.model.ai_method import AiMethod
-from ai.model.ai_power import AiPower
 
+class AiScanSettings:
 
-class AiSettings:
     def __init__(
             self,
-            method: AiMethod,
-            power: AiPower,
-            model_name: str | None = None,
-            remote_url: str | None = None,
             ai_tags: bool = False,
             ai_file_metadata: bool = False,
             ai_comment: bool = False,
@@ -19,9 +13,11 @@ class AiSettings:
         self.ai_file_metadata = ai_file_metadata
         self.ai_comment = ai_comment
         self.ai_rename = ai_rename
-        self.remote_url = remote_url
-        self.method = method
-        self.power = power
-        self.model_name = model_name
         self.ai_ocr = ai_ocr
 
+    def set_all_true(self):
+        self.ai_tags = True
+        self.ai_file_metadata = True
+        self.ai_comment = True
+        self.ai_rename = True
+        self.ai_ocr = True

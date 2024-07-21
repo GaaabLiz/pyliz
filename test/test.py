@@ -2,7 +2,7 @@ import ollama
 
 from ai.model.ai_method import AiMethod
 from ai.model.ai_power import AiPower
-from ai.model.ai_scan_setting import AiSettings
+from ai.model.ai_setting import AiSettings
 from api.service.eagleliz import Eagleliz
 from api.service.ollamaliz import Ollamaliz
 from media.image_scanner import ImageScanner

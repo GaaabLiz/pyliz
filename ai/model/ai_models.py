@@ -15,38 +15,41 @@ class AiModels:
     def __init__(self):
         pass
 
-    @staticmethod
-    def get_llava(power: AiPower, method: AiMethod) -> AiSource:
-        if power == AiPower.LOW:
-            return AiModels.get_llava_power_low(method)
-        elif power == AiPower.MEDIUM:
-            return AiModels.get_llava_power_medium(method)
-        elif power == AiPower.HIGH:
-            return AiModels.get_llava_power_high(method)
-        raise Exception("No model found for the given power and method.")
 
-    @staticmethod
-    def get_llava_power_low(method: AiMethod) -> AiSource:
-        if method == AiMethod.LLAVA_OLLAMA:
-            return AiSource(ollama_name="llava:7b")
-        if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
-        raise Exception("No model found for the given power and method.")
+    class Llava:
 
-    @staticmethod
-    def get_llava_power_medium(method: AiMethod) -> AiSource:
-        if method == AiMethod.LLAVA_OLLAMA:
-            return AiSource(ollama_name="llava:13b")
-        if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
-        raise Exception("No model found for the given power and method.")
+        @staticmethod
+        def get_llava(power: AiPower, method: AiMethod) -> AiSource:
+            if power == AiPower.LOW:
+                return AiModels.Llava.get_llava_power_low(method)
+            elif power == AiPower.MEDIUM:
+                return AiModels.Llava.get_llava_power_medium(method)
+            elif power == AiPower.HIGH:
+                return AiModels.Llava.get_llava_power_high(method)
+            raise Exception("No model found for the given power and method.")
 
-    @staticmethod
-    def get_llava_power_high(method: AiMethod) -> AiSource:
-        if method == AiMethod.LLAVA_OLLAMA:
-            return AiSource(ollama_name="llava:15b")
-        if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
-        raise Exception("No model found for the given power and method.")
+        @staticmethod
+        def get_llava_power_low(method: AiMethod) -> AiSource:
+            if method == AiMethod.LLAVA_OLLAMA:
+                return AiSource(ollama_name="llava:7b")
+            if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
+                return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
+            raise Exception("No model found for the given power and method.")
+
+        @staticmethod
+        def get_llava_power_medium(method: AiMethod) -> AiSource:
+            if method == AiMethod.LLAVA_OLLAMA:
+                return AiSource(ollama_name="llava:13b")
+            if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
+                return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
+            raise Exception("No model found for the given power and method.")
+
+        @staticmethod
+        def get_llava_power_high(method: AiMethod) -> AiSource:
+            if method == AiMethod.LLAVA_OLLAMA:
+                return AiSource(ollama_name="llava:15b")
+            if method == AiMethod.LLAVA_LOCAL_LLAMACPP:
+                return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
+            raise Exception("No model found for the given power and method.")
 
 
