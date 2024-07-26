@@ -26,26 +26,13 @@ class ImageScanner:
             return self.__scan_image()
 
     def __scan_image_with_ai(self) -> Operation[LizImage]:
-        if self.settings.method == AiMethod.LLAVA_OLLAMA:
-            return self.__scan_image_with_llava_ollama()
-        elif self.settings.method == AiMethod.LLAVA_LOCAL_LLAMACPP:
-            return self.__scan_image_with_llamacpp()
-        else:
-            raise NotImplementedError("AI method not implemented.")
-
+        controller = LlavaController(self.settings)
+        return controller.run_and_get_liz_media(self.path)
 
     def __scan_image(self) -> Operation[LizImage]:
         return Operation(status=True, payload=LizImage(self.path))
 
-    def __scan_image_with_llava_ollama(self) -> Operation[LizImage]:
-        result = LlavaController(self.settings).run_from_ollama(self.path)
-        handler = LlavaResultHandler(self.path, self.settings, result)
-        return handler.get_operation_result()
 
-    def __scan_image_with_llamacpp(self) -> Operation[LizImage]:
-        result = LlavaController(self.settings).run_from_local_llamacpp(self.path)
-        handler = LlavaResultHandler(self.path, self.settings, result)
-        return handler.get_operation_result()
 
 
 

@@ -8,7 +8,7 @@ Analyze the image thoroughly and provide a detailed description of every visible
 - "filename": phrase that summarizes the image content (maximum 30 characters).
 """
 
-prompt_llava_detailed_1 = """
+prompt_llava_detailed_STEP1 = """
 Analyze the image thoroughly and provide a detailed description of every visible element. 
 If there are people, try to recognize them. If there are objects, try to identify them.
 If the are texts, try to read them.
@@ -17,7 +17,7 @@ If the are texts, try to read them.
 
 class AiPrompt(Enum):
     LLAVA_JSON = prompt_llava_1
-    LLAVA_DETAILED = prompt_llava_detailed_1
+    LLAVA_DETAILED = prompt_llava_detailed_STEP1
 
 
 

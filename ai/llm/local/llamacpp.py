@@ -8,6 +8,7 @@ from ai.core.ai_method import AiMethod
 from ai.core.ai_models import AiModels
 from ai.core.ai_power import AiPower
 from ai.core.ai_source import AiSource
+from ai.core.ai_source_type import AiSourceType
 from model.operation import Operation
 from util import pathutils, osutils, fileutils, datautils
 
@@ -111,7 +112,7 @@ class LlamaCpp:
         self.clone_and_build(on_log)
         on_log("Installing LLava...")
         # creating and checking files/folders
-        source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+        source = AiModels.Llava.get_llava(power, AiSourceType.LOCAL_LLAMACPP)
         folder = os.path.join(self.path_models, source.local_name)
         pathutils.check_path(folder, True)
         pathutils.check_path_dir(folder)
@@ -132,7 +133,7 @@ class LlamaCpp:
     ) -> Operation[str]:
         try:
             # Creating variables and checking requirements
-            source = AiModels.Llava.get_llava(power, AiMethod.LLAVA_LOCAL_LLAMACPP)
+            source = AiModels.Llava.get_llava(power, AiSourceType.LOCAL_LLAMACPP)
             folder = os.path.join(self.path_models, source.local_name)
             if not os.path.exists(folder):
                 raise Exception("LLava model not installed.")

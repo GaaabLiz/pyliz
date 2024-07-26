@@ -24,7 +24,7 @@ class TestImageScanner(unittest.TestCase):
             scan_settings = AiScanSettings(True, True, True, True, True)
             ai_settings = AiSettings(
                 model=AiModelList.LLAVA,
-                source_type=AiSourceType.LOCAL_AI,
+                source_type=AiSourceType.LOCAL_LLAMACPP,
                 power=AiPower.LOW,
                 prompt=AiPrompt.LLAVA_JSON,
                 scan_settings=scan_settings
