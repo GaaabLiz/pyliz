@@ -13,6 +13,8 @@ class AiModels:
     llava_15_7b_bundle = [llava_15_7b_mmproj_f16, llava_15_7b_ggml_model_q4]
     llava_15_7b_name = "llava157b"
 
+
+
     def __init__(self):
         pass
 
