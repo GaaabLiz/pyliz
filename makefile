@@ -12,5 +12,8 @@ clean:
 build:
 	pyinstaller main.py --onefile
 
+package:
+	python setup.py sdist bdist_wheel
+
 export:
 	pip freeze > requirements.txt
