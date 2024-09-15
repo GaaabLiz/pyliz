@@ -17,3 +17,6 @@ package:
 
 export:
 	pip freeze > requirements.txt
+
+upload:
+	twine upload dist/*
