@@ -16,7 +16,7 @@ If the are texts, try to read them.
 
 
 class AiPrompt(Enum):
-    LLAVA_JSON = prompt_llava_1
+    LLAVA_INNER_JSON = prompt_llava_1
     LLAVA_DETAILED = prompt_llava_detailed_STEP1
 
 

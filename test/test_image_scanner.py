@@ -26,7 +26,7 @@ class TestImageScanner(unittest.TestCase):
                 model=AiModelList.LLAVA,
                 source_type=AiSourceType.LOCAL_LLAMACPP,
                 power=AiPower.LOW,
-                prompt=AiPrompt.LLAVA_JSON,
+                prompt=AiPrompt.LLAVA_INNER_JSON,
                 scan_settings=scan_settings
             )
             result = ImageScanner(self.test_image, ai_settings).scan()
