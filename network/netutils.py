@@ -1,7 +1,12 @@
+import logging
+
 import requests
 
 from network.netres import NetResponse
 from network.netrestype import NetResponseType
+
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 def test_with_head(url: str) -> bool:
@@ -14,7 +19,7 @@ def test_with_head(url: str) -> bool:
 
 def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
