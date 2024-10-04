@@ -1,30 +1,40 @@
-from typing import List
-from typing import Any
-from dataclasses import dataclass
 import json
+from typing import List, Any, Dict
 
+class LmStudioModel:
+    def __init__(self, id: str, object_type: str, owned_by: str):
+        self.id = id
+        self.object_type = object_type
+        self.owned_by = owned_by
 
-@dataclass
-class LmModel:
-    id: str
-    object: str
-    owned_by: str
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'LmStudioModel':
+        return cls(
+            id=data['id'],
+            object_type=data['object'],
+            owned_by=data['owned_by']
+        )
 
-    @staticmethod
-    def from_dict(obj: Any) -> 'LmModel':
-        _id = str(obj.get("id"))
-        _object = str(obj.get("object"))
-        _owned_by = str(obj.get("owned_by"))
-        return LmModel(_id, _object, _owned_by)
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'object': self.object_type,
+            'owned_by': self.owned_by
+        }
 
+class LmStudioModelList:
+    def __init__(self, data: List[LmStudioModel], object_type: str):
+        self.data = data
+        self.object_type = object_type
 
-@dataclass
-class LmStudioModelResult:
-    data: List[LmModel]
-    object: str
+    @classmethod
+    def from_json(cls, json_string: str) -> 'LmStudioModelList':
+        json_data = json.loads(json_string)
+        models = [LmStudioModel.from_dict(item) for item in json_data['data']]
+        return cls(data=models, object_type=json_data['object'])
 
-    @staticmethod
-    def from_dict(obj: Any) -> 'LmStudioModelResult':
-        _data = [LmModel.from_dict(y) for y in obj.get("data")]
-        _object = str(obj.get("object"))
-        return LmStudioModelResult(_data, _object)
+    def to_json(self) -> str:
+        return json.dumps({
+            'data': [model.to_dict() for model in self.data],
+            'object': self.object_type
+        })
