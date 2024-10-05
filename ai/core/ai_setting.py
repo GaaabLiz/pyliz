@@ -17,7 +17,6 @@ class AiSettings:
             remote_url: str | None = None,
     ):
         self.source: AiSource | None = None
-        #self.method = None
 
         self.model = model
         self.source_type = source_type

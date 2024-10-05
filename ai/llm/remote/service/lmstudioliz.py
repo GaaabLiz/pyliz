@@ -15,3 +15,13 @@ class LmStudioLiz:
         if call.is_error():
             raise Exception(call.get_error())
         return LmStudioModelList.from_json(call.response.text)
+
+    def has_model_loaded(self, model_id: str) -> bool:
+        models = self.get_loaded_models()
+        for model in models.data:
+            if model.id == model_id:
+                return True
+        return False
+
+    def send_vision_prompt(self, image_base_64: str, prompt: str) -> str:
+        raise NotImplementedError("Not implemented yet.")
