@@ -12,6 +12,7 @@ class AiSource:
             self,
             ollama_name: str | None = None,
             lmstudio_name: str | None = None,
+            mistral_name: str | None = None,
             local_name: str | None = None,
             url: str | None = None,
             hg_files: List[HgFile] | None = None,
@@ -21,6 +22,7 @@ class AiSource:
         self.ollama_name = ollama_name
         self.local_name = local_name
         self.lmstudio_name = lmstudio_name
+        self.mistral_name = mistral_name
 
     def get_ggml_file(self) -> HgFile:
         for hg_file in self.hg_files:

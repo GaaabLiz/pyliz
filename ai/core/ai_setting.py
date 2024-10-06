@@ -26,12 +26,12 @@ class AiSettings:
         self.check()
         self.setup()
 
-    def __setup_llava(self):
-        self.source = AiModels.Llava.get_llava(self.power, self.source_type)
-
     def setup(self):
         if self.model == AiModelList.LLAVA:
-            self.__setup_llava()
+            self.source = AiModels.Llava.get_llava(self.power, self.source_type)
+        if self.model == AiModelList.OPEN_MISTRAL:
+            self.source = AiModels.Mistral.get_open_mistral()
+
 
     def check(self):
         if self.source_type == AiSourceType.OLLAMA_SERVER and self.remote_url is None:
