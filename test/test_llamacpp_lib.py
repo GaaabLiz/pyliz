@@ -6,7 +6,7 @@ import rich
 
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_power import AiPower
-from ai.core.ai_prompts import prompt_llava_1
+from ai.core.ai_prompts import prompt_llava_json
 from ai.llm.local.llamacpplib import LlamaCppLib
 from util.pylizdir import PylizDir
 

@@ -13,9 +13,8 @@ from util.pylizdir import PylizDir
 
 class LlavaController:
 
-    def __init__(self, settings: AiSettings, rag_settings: AiSettings | None = None):
+    def __init__(self, settings: AiSettings):
         self.settings = settings
-        self.rag_settings = rag_settings
 
     def __run_from_ollama(self, image_path: str, prompt: str) -> Operation[str]:
         ollama = Ollamaliz(self.settings.remote_url)
@@ -54,8 +53,9 @@ class LlavaController:
         return Operation(status=True, payload=llava_result.payload)
 
 
-    def get_liz_media_from_json(self, output: str) -> Operation[LizMedia]:
-        raise NotImplementedError("This method is not implemented.")
+    # def get_liz_media_from_json(self, output: str) -> Operation[LizMedia]:
+    #     raise NotImplementedError("This method is not implemented.")
+
 
     def run_and_get_vanilla_json(self, image_path: str, prompt: str) -> Operation[str]:
         if self.settings.source_type == AiSourceType.LMSTUDIO_SERVER:

@@ -5,7 +5,7 @@ import rich
 
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_power import AiPower
-from ai.core.ai_prompts import prompt_llava_1
+from ai.core.ai_prompts import prompt_llava_json
 from util.pylizdir import PylizDir
 
 
@@ -35,7 +35,7 @@ class TestLlamaCPP(unittest.TestCase):
 
     def test_run_llava(self):
         try:
-            result = self.obj.run_llava(AiPower.LOW, "/Users/gabliz/Pictures/obama343434333.jpg", prompt_llava_1)
+            result = self.obj.run_llava(AiPower.LOW, "/Users/gabliz/Pictures/obama343434333.jpg", prompt_llava_json)
             print(result)
         except Exception as e:
             self.fail(e)
