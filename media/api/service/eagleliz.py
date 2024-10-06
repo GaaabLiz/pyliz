@@ -2,7 +2,7 @@ import base64
 
 from media.api.data.eagleapi import EAGLE_LOCALHOST_URL, EagleApi
 from media.api.dto.eagle_dto import EagleDto
-from model.liz_image import LizImage
+from old_code.liz_image import LizImage
 from model.operation import Operation
 
 

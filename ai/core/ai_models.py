@@ -21,7 +21,7 @@ class AiModels:
     def __init__(self):
         pass
 
-
+    # noinspection DuplicatedCode
     class Llava:
 
         @staticmethod
@@ -50,6 +50,8 @@ class AiModels:
                 return AiSource(ollama_name="llava:13b")
             if source == AiSourceType.LOCAL_LLAMACPP:
                 return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
+            if source == AiSourceType.LMSTUDIO_SERVER:
+                return AiSource(lmstudio_name=AiModels.llava_phi_3_mini_1)
             raise Exception("No model found for the given power and method.")
 
         @staticmethod
@@ -58,6 +60,8 @@ class AiModels:
                 return AiSource(ollama_name="llava:13b")
             if source == AiSourceType.LOCAL_LLAMACPP:
                 return AiSource(local_name=AiModels.llava_15_7b_name, hg_files=AiModels.llava_15_7b_bundle)
+            if source == AiSourceType.LMSTUDIO_SERVER:
+                return AiSource(lmstudio_name=AiModels.llava_phi_3_mini_1)
             raise Exception("No model found for the given power and method.")
 
 

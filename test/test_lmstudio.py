@@ -19,7 +19,7 @@ class TestLmStudio(unittest.TestCase):
     def test1(self):
         liz = LmStudioLiz(os.getenv('LMSTUDIO_URL'))
         obj = liz.get_loaded_models()
-        print(obj.data)
+        print(obj.data[0].id)
 
     def test2(self):
         import http.client
