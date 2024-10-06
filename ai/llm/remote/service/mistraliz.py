@@ -35,3 +35,16 @@ class Mistraliz:
             messages=messages
         )
         return chat_response.choices[0].message.content
+
+    def run_open_mistral(self, model_name: str, prompt: str) -> str:
+        client = Mistral(api_key=self.api_key)
+        chat_response = client.chat.complete(
+            model=model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ]
+        )
+        return chat_response.choices[0].message.content
