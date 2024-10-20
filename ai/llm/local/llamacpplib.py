@@ -1,7 +1,7 @@
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
-from util.pylizdir import PylizDir
+from old_code.pylizdir_OLD import PylizDir
 
 # https://github.com/abetlen/llama-cpp-python
 

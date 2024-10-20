@@ -6,9 +6,8 @@ from ai.core.ai_source_type import AiSourceType
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 from ai.llm.remote.service.ollamaliz import Ollamaliz
-from model.liz_media import LizMedia
 from model.operation import Operation
-from util.pylizdir import PylizDir
+from old_code.pylizdir_OLD import PylizDir
 
 
 class LlavaController:

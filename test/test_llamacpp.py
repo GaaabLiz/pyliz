@@ -6,7 +6,7 @@ import rich
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_power import AiPower
 from ai.core.ai_prompts import prompt_llava_json
-from util.pylizdir import PylizDir
+from old_code.pylizdir_OLD import PylizDir
 
 
 def log(message: str):
