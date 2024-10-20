@@ -20,22 +20,29 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 class TestPylizDir(unittest.TestCase):
 
+    liz = PylizDir(".testPylizdir")
+
     def setUp(self):
         list = [
             CfgItem("api_keys", "mistral", "cringewhoreads"),
             CfgItem("api_keys", "openai", "cringewhoreads"),
-            CfgItem("general", "test", "valueFromGeneral"),
+            CfgItem("general", "test", "valueFromGeneral2"),
         ]
-        PylizDir.create(".testPylizdir", list)
+        self.liz.create_ini("testFromPython.ini", list)
         print("SDone setup")
 
+    def print_values(self):
+        print(self.liz.get_ini_value("api_keys", "mistral"))
+        print(self.liz.get_ini_value("api_keys", "openai"))
+        print(self.liz.get_ini_value("general", "test"))
 
-    def test1(self):
-        print(PylizDir.get_models_folder())
-        print(PylizDir.get_ai_folder())
-        print(PylizDir.get_logs_path())
-        print(PylizDir.get_ini_item("api_keys", "mistral"))
-        print(PylizDir.get_ini_item("general", "test"))
+    def testGet(self):
+        self.print_values()
+
+    def testSet(self):
+        self.print_values()
+        self.liz.set_ini_value("api_keys", "mistral", "newMistralKey")
+        self.print_values()
 
 
 

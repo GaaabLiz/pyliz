@@ -40,12 +40,14 @@ class Cfgini:
             print("Error while creating configuration file: ", e)
 
     def read(self, section, key, is_bool=False):
+        self.config = configparser.ConfigParser()
         self.config.read(self.path)
         if is_bool:
             return self.config.getboolean(section, key)
         return self.config.get(section, key)
 
     def write(self, section, key, value):
+        self.config = configparser.ConfigParser()
         self.config.read(self.path)
         self.config.set(section, key, value)
         with open(self.path, 'w') as configfile:
