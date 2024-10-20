@@ -7,14 +7,20 @@ from util.cfgutils import CfgItem, Cfgini
 
 class PylizDir:
     cfgini: Cfgini = None
+
     path: str = None
     path_config_ini = None
     path_models: str = None
+
     ini_initialized = False
 
 
     @staticmethod
-    def create(folder_name: str, main_config_name: str = "config.ini"):
+    def create(
+            folder_name: str,
+            list_of_items: List[CfgItem] = None,
+            main_config_name: str = "config.ini",
+    ):
         # Settaggio path
         PylizDir.path = pathutils.get_app_home_dir(folder_name)
         PylizDir.path_config_ini = os.path.join(PylizDir.path, main_config_name)
@@ -32,6 +38,8 @@ class PylizDir:
         # File config.ini
         item_model = CfgItem("paths", "model_folder", PylizDir.path_models)
         ini_items_list: List[CfgItem] = [item_model]
+        if list_of_items is not None:
+            ini_items_list.extend(list_of_items)
         PylizDir.cfgini = Cfgini(PylizDir.path_config_ini)
         if not PylizDir.cfgini.exists():
             PylizDir.cfgini.create(ini_items_list)
