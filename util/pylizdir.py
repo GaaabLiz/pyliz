@@ -12,9 +12,6 @@ class PylizDir:
     path_models: str = None
     ini_initialized = False
 
-    ini_items_list = [
-        CfgItem("paths", "model_folder", path_models)
-    ]
 
     @staticmethod
     def create(folder_name: str, main_config_name: str = "config.ini"):
@@ -24,11 +21,6 @@ class PylizDir:
         # Cartella pyliz
         pathutils.check_path(PylizDir.path, True)
         pathutils.check_path_dir(PylizDir.path)
-        # File config.ini
-        PylizDir.cfgini = Cfgini(PylizDir.path_config_ini)
-        if not PylizDir.cfgini.exists():
-            PylizDir.cfgini.create(PylizDir.ini_items_list)
-        PylizDir.ini_initialized = True
         # Cartella models
         PylizDir.path_models = os.path.join(PylizDir.path, "models")
         pathutils.check_path(PylizDir.path_models, True)
@@ -37,6 +29,13 @@ class PylizDir:
         pathutils.check_path(PylizDir.get_ai_folder(), True)
         # Cartella logs
         pathutils.check_path(PylizDir.get_logs_path(), True)
+        # File config.ini
+        item_model = CfgItem("paths", "model_folder", PylizDir.path_models)
+        ini_items_list: List[CfgItem] = [item_model]
+        PylizDir.cfgini = Cfgini(PylizDir.path_config_ini)
+        if not PylizDir.cfgini.exists():
+            PylizDir.cfgini.create(ini_items_list)
+        PylizDir.ini_initialized = True
 
 
     @staticmethod
