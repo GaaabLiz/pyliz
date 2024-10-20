@@ -10,6 +10,7 @@ class PylizDir:
     path: str = None
     path_config_ini = None
     path_models: str = None
+    ini_initialized = False
 
     ini_items_list = [
         CfgItem("paths", "model_folder", path_models)
@@ -27,6 +28,7 @@ class PylizDir:
         PylizDir.cfgini = Cfgini(PylizDir.path_config_ini)
         if not PylizDir.cfgini.exists():
             PylizDir.cfgini.create(PylizDir.ini_items_list)
+        PylizDir.ini_initialized = True
         # Cartella models
         PylizDir.path_models = os.path.join(PylizDir.path, "models")
         pathutils.check_path(PylizDir.path_models, True)
@@ -58,8 +60,12 @@ class PylizDir:
 
     @staticmethod
     def set_ini_item(item: CfgItem):
+        if not PylizDir.cfgini.exists() or not PylizDir.ini_initialized:
+            raise Exception("CfgUtil object inside PylizDir not initialized.")
         PylizDir.cfgini.write(item.section, item.key, item.value)
 
     @staticmethod
     def get_ini_item(section: str, key: str, is_bool=False):
+        if not PylizDir.cfgini.exists() or not PylizDir.ini_initialized:
+            raise Exception("CfgUtil object inside PylizDir not initialized.")
         return PylizDir.cfgini.read(section, key, is_bool)
