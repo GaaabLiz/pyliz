@@ -8,18 +8,18 @@ from util.cfgutils import CfgItem, Cfgini
 class PylizDir:
     cfgini: Cfgini = None
     path: str = None
-    path_config_ini = os.path.join(path, "config.ini")
-
-    default_path_models: str = os.path.join(path, "models")
+    path_config_ini = None
+    path_models: str = None
 
     ini_items_list = [
-        CfgItem("paths", "model_folder", default_path_models)
+        CfgItem("paths", "model_folder", path_models)
     ]
 
     @staticmethod
-    def create(folder_name: str):
+    def create(folder_name: str, main_config_name: str = "config.ini"):
         # Settaggio path
         PylizDir.path = pathutils.get_app_home_dir(folder_name)
+        PylizDir.path_config_ini = os.path.join(PylizDir.path, main_config_name)
         # Cartella pyliz
         pathutils.check_path(PylizDir.path, True)
         pathutils.check_path_dir(PylizDir.path)
@@ -28,8 +28,9 @@ class PylizDir:
         if not PylizDir.cfgini.exists():
             PylizDir.cfgini.create(PylizDir.ini_items_list)
         # Cartella models
-        pathutils.check_path(PylizDir.default_path_models, True)
-        pathutils.check_path_dir(PylizDir.default_path_models)
+        PylizDir.path_models = os.path.join(PylizDir.path, "models")
+        pathutils.check_path(PylizDir.path_models, True)
+        pathutils.check_path_dir(PylizDir.path_models)
         # Cartella ai
         pathutils.check_path(PylizDir.get_ai_folder(), True)
         # Cartella logs
