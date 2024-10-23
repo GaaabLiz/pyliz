@@ -7,5 +7,5 @@ class AiSourceType(Enum):
     LOCAL_LLAMACPP = "Local (Llamacpp)",
     LOCAL_LLAMACPP_LIB = "Local (Official Llamacpp Library)"
     API_MISTRAL = "Mistral API"
-    GEMINI = "Gemini"
+    API_GEMINI = "Gemini API"
 
