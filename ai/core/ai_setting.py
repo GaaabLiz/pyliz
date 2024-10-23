@@ -31,6 +31,8 @@ class AiSettings:
             self.source = AiModels.Llava.get_llava(self.power, self.source_type)
         if self.model == AiModelList.OPEN_MISTRAL:
             self.source = AiModels.Mistral.get_open_mistral()
+        if self.model == AiModelList.PIXSTRAL:
+            self.source = AiModels.Mistral.get_pixstral()
 
 
     def check(self):

@@ -1,6 +1,8 @@
 import os
 from typing import Callable, List
 
+from util import fileutils
+
 
 def get_home_dir():
     """
@@ -176,5 +178,24 @@ def scan_directory_match_bool(path: str, to_be_add: Callable[[str], bool]) -> Li
                 matching_files.append(file_path)
     return matching_files
 
+
+def dir_contains_image(path: str):
+    """
+    Check if a directory contains an image file
+    :param path: path to the directory to check
+    :return: True if the directory contains an image file, False otherwise
+    """
+    files = scan_directory_match_bool(path, fileutils.is_image_file)
+    return len(files) > 0
+
+
+def dir_contains_video(path: str):
+    """
+    Check if a directory contains a video file
+    :param path: path to the directory to check
+    :return: True if the directory contains a video file, False otherwise
+    """
+    files = scan_directory_match_bool(path, fileutils.is_video_file)
+    return len(files) > 0
 
 

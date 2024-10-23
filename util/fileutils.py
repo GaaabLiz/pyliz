@@ -1,3 +1,4 @@
+import json
 import os
 import platform
 from datetime import datetime
@@ -85,3 +86,16 @@ def download_file(url: str, destinazione: str, on_progress: callable) -> Operati
         return Operation(status=True)
     except Exception as e:
         return Operation(status=False, error=str(e))
+
+
+def write_json_to_file(path, filename, content):
+    # Verifica se la directory esiste, altrimenti la crea
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    # Crea il percorso completo del file
+    file_path = os.path.join(path, filename)
+
+    # Scrive il contenuto JSON nel file
+    with open(file_path, 'w') as json_file:
+        json.dump(content, json_file, indent=4)

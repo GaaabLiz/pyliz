@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Optional, List
 
@@ -49,3 +50,21 @@ class LizMedia:
     def get_video_frame_rate(self) -> float:
         # Logica per ottenere il frame rate del video (da implementare)
         return 0.0
+
+    def to_dict_only_ai(self):
+        return {
+            "path": self.path,
+            "file_name": self.file_name,
+            "extension": self.extension,
+            "creation_time_timestamp": self.creation_time_timestamp,
+            "size_byte": self.size_byte,
+            "size_mb": self.size_mb,
+            "ai_ocr_text": self.ai_ocr_text,
+            "ai_file_name": self.ai_file_name,
+            "ai_description": self.ai_description,
+            "ai_tags": self.ai_tags,
+            "ai_scanned": self.ai_scanned,
+        }
+
+    def to_json_only_ai(self):
+        return json.dumps(self.to_dict_only_ai(), indent=4)
