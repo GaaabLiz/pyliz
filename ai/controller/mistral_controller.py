@@ -16,9 +16,9 @@ class MistralController:
             prompt: str,
             image_path: str | None = None
     ) -> Operation[str]:
-        if ai_setting.model == AiModelList.OPEN_MISTRAL:
+        if ai_setting.model_name == AiModelList.OPEN_MISTRAL:
             return self.__run_open_mistral(ai_setting.source.mistral_name, prompt)
-        if ai_setting.model == AiModelList.PIXSTRAL:
+        if ai_setting.model_name == AiModelList.PIXSTRAL:
             return self.__run_pixstral_vision(ai_setting.source.mistral_name, prompt, image_path)
         raise NotImplementedError("Model not implemented in MistralController")
 

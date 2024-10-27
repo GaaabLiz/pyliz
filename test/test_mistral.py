@@ -4,7 +4,9 @@ import unittest
 
 from numba.cuda.printimpl import print_item
 
+from ai.controller.ai_runner import AiRunner
 from ai.controller.mistral_controller import MistralController
+from ai.core.ai_inputs import AiInputs
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.core.ai_prompts import AiPrompt
@@ -28,10 +30,11 @@ class TestLmStudio(unittest.TestCase):
         setting = AiSettings(
             model=AiModelList.OPEN_MISTRAL,
             source_type=AiSourceType.API_MISTRAL,
-            power=AiPower.LOW
+            power=AiPower.LOW,
+            api_key=os.getenv('MISTRAL_API_KEY'),
         )
-        controller = MistralController(os.getenv('MISTRAL_API_KEY'))
-        result = controller.run(setting, "Why the sky is blue? answer in 20 words.")
+        inputs = AiInputs(prompt="Why is the sky blue? answer in 20 words or less")
+        result = AiRunner(setting, inputs).run()
         print(result.payload)
 
 
@@ -39,10 +42,11 @@ class TestLmStudio(unittest.TestCase):
         setting = AiSettings(
             model=AiModelList.PIXSTRAL,
             source_type=AiSourceType.API_MISTRAL,
-            power=AiPower.MEDIUM
+            power=AiPower.MEDIUM,
+            api_key=os.getenv('MISTRAL_API_KEY'),
         )
-        controller = MistralController(os.getenv('MISTRAL_API_KEY'))
-        result = controller.run(setting, AiPrompt.LLAVA_DETAILED.value, os.getenv('LOCAL_IMAGE_FOR_TEST'))
+        inputs = AiInputs(prompt=AiPrompt.LLAVA_DETAILED.value, file_path=os.getenv('LOCAL_IMAGE_FOR_TEST'))
+        result = AiRunner(setting, inputs).run()
         print("Local image for test: ", os.getenv('LOCAL_IMAGE_FOR_TEST'))
         print(f"Result status: {result.status}")
         print("Result error: ", result.error)

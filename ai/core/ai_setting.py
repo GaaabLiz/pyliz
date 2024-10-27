@@ -15,10 +15,11 @@ class AiSettings:
             source_type: AiSourceType,
             power: AiPower,
             remote_url: str | None = None,
+            api_key: str | None = None,
     ):
         self.source: AiSource | None = None
-
-        self.model = model
+        self.api_key = api_key
+        self.model_name = model
         self.source_type = source_type
         self.remote_url = remote_url
         self.power = power
@@ -27,11 +28,11 @@ class AiSettings:
         self.setup()
 
     def setup(self):
-        if self.model == AiModelList.LLAVA:
+        if self.model_name == AiModelList.LLAVA:
             self.source = AiModels.Llava.get_llava(self.power, self.source_type)
-        if self.model == AiModelList.OPEN_MISTRAL:
+        if self.model_name == AiModelList.OPEN_MISTRAL:
             self.source = AiModels.Mistral.get_open_mistral()
-        if self.model == AiModelList.PIXSTRAL:
+        if self.model_name == AiModelList.PIXSTRAL:
             self.source = AiModels.Mistral.get_pixstral()
 
 
@@ -40,3 +41,5 @@ class AiSettings:
             raise ValueError("Remote URL is required for Ollama Server.")
         if self.source_type == AiSourceType.LMSTUDIO_SERVER and self.remote_url is None:
             raise ValueError("Remote URL is required for LM Studio Server.")
+        if self.source_type == AiSourceType.API_MISTRAL and self.api_key is None:
+            raise ValueError("API Key is required for Mistral API.")
