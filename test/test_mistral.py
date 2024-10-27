@@ -30,8 +30,8 @@ class TestLmStudio(unittest.TestCase):
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.LOW
         )
-        controller = MistralController(setting, os.getenv('MISTRAL_API_KEY'))
-        result = controller.run_open_mistral("Why the sky is blue? answer in 20 words.")
+        controller = MistralController(os.getenv('MISTRAL_API_KEY'))
+        result = controller.run(setting, "Why the sky is blue? answer in 20 words.")
         print(result.payload)
 
 
@@ -41,8 +41,8 @@ class TestLmStudio(unittest.TestCase):
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.MEDIUM
         )
-        controller = MistralController(setting, os.getenv('MISTRAL_API_KEY'))
-        result = controller.run_pixstral_vision(os.getenv('LOCAL_IMAGE_FOR_TEST'), AiPrompt.LLAVA_DETAILED.value)
+        controller = MistralController(os.getenv('MISTRAL_API_KEY'))
+        result = controller.run(setting, AiPrompt.LLAVA_DETAILED.value, os.getenv('LOCAL_IMAGE_FOR_TEST'))
         print("Local image for test: ", os.getenv('LOCAL_IMAGE_FOR_TEST'))
         print(f"Result status: {result.status}")
         print("Result error: ", result.error)
