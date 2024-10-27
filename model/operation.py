@@ -16,3 +16,6 @@ class Operation(Generic[T]):
     def is_op_ok(self) -> bool:
         return self.status
 
+    def __str__(self):
+        return f"Operation(status={self.status}, payload={self.payload}, error={self.error})"
+

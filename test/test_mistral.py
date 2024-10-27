@@ -1,18 +1,12 @@
-
-import os
 import unittest
 
-from numba.cuda.printimpl import print_item
-
-from ai.controller.ai_runner import AiRunner
-from ai.controller.mistral_controller import MistralController
+from ai.util.ai_runner import AiRunner
 from ai.core.ai_inputs import AiInputs
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.core.ai_prompts import AiPrompt
 from ai.core.ai_setting import AiSettings
 from ai.core.ai_source_type import AiSourceType
-from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 import sys
 import os
 from dotenv import load_dotenv
@@ -45,7 +39,7 @@ class TestLmStudio(unittest.TestCase):
             power=AiPower.MEDIUM,
             api_key=os.getenv('MISTRAL_API_KEY'),
         )
-        inputs = AiInputs(prompt=AiPrompt.LLAVA_DETAILED.value, file_path=os.getenv('LOCAL_IMAGE_FOR_TEST'))
+        inputs = AiInputs(prompt=AiPrompt.VISION_DETAILED.value, file_path=os.getenv('LOCAL_IMAGE_FOR_TEST'))
         result = AiRunner(setting, inputs).run()
         print("Local image for test: ", os.getenv('LOCAL_IMAGE_FOR_TEST'))
         print(f"Result status: {result.status}")
