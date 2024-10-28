@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
-from ai.core.ai_prompts import AiPrompt
+from ai.prompt.ai_prompts import AiPrompt
 from ai.core.ai_scan_settings import AiScanSettings
 from ai.core.ai_setting import AiSettings
 from ai.core.ai_source_type import AiSourceType

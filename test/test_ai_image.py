@@ -4,6 +4,8 @@
 import os
 import unittest
 
+import rich
+
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.core.ai_setting import AiSettings
@@ -14,6 +16,7 @@ import os
 from dotenv import load_dotenv
 
 from ai.util.ai_runner import AiCustomRunner
+from util import pylizLogging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -22,6 +25,7 @@ class TestAiImage(unittest.TestCase):
 
     def setUp(self):
         load_dotenv()
+        pylizLogging.enable_logging("DEBUG", None, True)
         print("Setting up test...")
 
 
@@ -41,6 +45,10 @@ class TestAiImage(unittest.TestCase):
             api_key=api_key,
         )
         media = AiCustomRunner.run_for_image(ai_image_setting, ai_text_setting, image)
+        rich.print("----")
+        rich.print(media.payload.ai_description)
+        rich.print(media.payload.ai_file_name)
+        rich.print("end")
 
 
 

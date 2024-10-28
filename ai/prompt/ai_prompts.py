@@ -1,5 +1,7 @@
 from enum import Enum
 
+from ai.prompt.customPrompt import CustomPrompt, PromptType, PromptInfo
+
 prompt_llava_json = """
 Analyze the image thoroughly and provide a detailed description of every visible element. Return a json including the following information:
 - "description": a detailed description of the image (minimum 15-20 words), considering colors, objects, actions, and any other relevant details.
@@ -23,9 +25,10 @@ If the are texts, try to read them.
 
 
 class AiPrompt(Enum):
-    LLAVA_INNER_JSON = prompt_llava_json
-    VISION_DETAILED = prompt_llava_detailed_STEP1
-    EXTRACT_INFO_FROM_VISION_QUERY_JSON = extract_info_from_image
+
+    IMAGE_VISION_DETAILED_1 = prompt_llava_detailed_STEP1
+    TEXT_EXTRACT_FROM_VISION_1 = extract_info_from_image
+
 
 
 
