@@ -6,7 +6,7 @@ from network.netres import NetResponse
 from network.netrestype import NetResponseType
 
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 def test_with_head(url: str) -> bool:
