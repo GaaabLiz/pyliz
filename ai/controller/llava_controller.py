@@ -1,7 +1,7 @@
 import base64
 import os
 
-from ai.core.ai_setting import AiSettings
+from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.llm.remote.service.lmstudioliz import LmStudioLiz
@@ -12,7 +12,7 @@ from old_code.pylizdir_OLD import PylizDir
 
 class LlavaController:
 
-    def __init__(self, settings: AiSettings):
+    def __init__(self, settings: AiQuery):
         self.settings = settings
 
     def __run_from_ollama(self, image_path: str, prompt: str) -> Operation[str]:

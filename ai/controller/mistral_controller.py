@@ -1,5 +1,5 @@
 from ai.core.ai_model_list import AiModelList
-from ai.core.ai_setting import AiSettings
+from ai.core.ai_setting import AiQuery
 from ai.llm.remote.service.mistraliz import Mistraliz
 from model.operation import Operation
 
@@ -12,7 +12,7 @@ class MistralController:
 
     def run(
             self,
-            ai_setting: AiSettings,
+            ai_setting: AiQuery,
             prompt: str,
             image_path: str | None = None
     ) -> Operation[str]:

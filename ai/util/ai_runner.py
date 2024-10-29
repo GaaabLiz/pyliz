@@ -3,11 +3,11 @@ import os
 
 from loguru import logger
 
+from ai.controller.gemini_controller import GeminiController
 from ai.controller.mistral_controller import MistralController
-from ai.core.ai_inputs import AiInputs
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.prompt.ai_prompts import AiPrompt
-from ai.core.ai_setting import AiSettings
+from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from media.liz_media import LizMedia
 from model.operation import Operation
@@ -17,9 +17,8 @@ from util.pylizdir import PylizDir
 
 class AiRunner:
 
-    def __init__(self, pyliz_dir: PylizDir, settings: AiSettings, inputs: AiInputs):
+    def __init__(self, pyliz_dir: PylizDir, settings: AiQuery):
         self.ai = settings
-        self.inputs = inputs
         self.pyliz_dir = pyliz_dir
         self.folder_ai = self.pyliz_dir.get_folder_path("ai")
         self.folder_logs = self.pyliz_dir.get_folder_path("logs")
@@ -35,19 +34,25 @@ class AiRunner:
         llama_cpp = LlamaCpp(folder, self.model_folder, logs)
         pass
 
+    def __handle_gemini(self):
+        controller = GeminiController(self.ai.api_key)
+        return controller.run(self.ai)
+
 
     def run(self) -> Operation[str]:
         if self.ai.source_type == AiSourceType.API_MISTRAL:
             return self.__handle_mistral()
         if self.ai.source_type == AiSourceType.LOCAL_LLAMACPP:
             return self.__handle_git_llama_cpp()
+        if self.ai.source_type == AiSourceType.API_GEMINI:
+            return self.__handle_gemini()
         raise NotImplementedError("Source type not implemented yet in AiRunner")
 
 
 class AiCustomRunner:
 
     @staticmethod
-    def run_for_image(ai_image_setting: AiSettings, ai_text_setting, image_path: str) -> Operation[LizMedia]:
+    def run_for_image(ai_image_setting: AiQuery, ai_text_setting, image_path: str) -> Operation[LizMedia]:
         # Image query
         ai_image_inputs = AiInputs(file_path=image_path, prompt=AiPrompt.IMAGE_VISION_DETAILED_1.value)
         ai_image_result = AiRunner(ai_image_setting, ai_image_inputs).run()

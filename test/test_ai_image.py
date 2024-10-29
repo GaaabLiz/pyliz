@@ -8,7 +8,7 @@ import rich
 
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
-from ai.core.ai_setting import AiSettings
+from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 import sys
@@ -32,13 +32,13 @@ class TestAiImage(unittest.TestCase):
     def test1(self):
         image = os.getenv('LOCAL_IMAGE_FOR_TEST')
         api_key = os.getenv('MISTRAL_API_KEY')
-        ai_image_setting = AiSettings(
+        ai_image_setting = AiQuery(
             model=AiModelList.PIXSTRAL,
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.MEDIUM,
             api_key=api_key,
         )
-        ai_text_setting = AiSettings(
+        ai_text_setting = AiQuery(
             model=AiModelList.OPEN_MISTRAL,
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.LOW,

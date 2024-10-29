@@ -37,31 +37,31 @@ class AiModels:
         @staticmethod
         def get_llava_power_low(source: AiSourceType) -> AiSource:
             if source == AiSourceType.OLLAMA_SERVER:
-                return AiSource(ollama_name="llava:7b")
+                return AiSource(model_name="llava:7b")
             if source == AiSourceType.LOCAL_LLAMACPP:
-                return AiSource(local_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
+                return AiSource(model_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
             if source == AiSourceType.LMSTUDIO_SERVER:
-                return AiSource(lmstudio_name=AiModels.Llava.llava_phi_3_mini_1)
+                return AiSource(model_name=AiModels.Llava.llava_phi_3_mini_1)
             raise Exception("No model found for the given power and method.")
 
         @staticmethod
         def get_llava_power_medium(source: AiSourceType) -> AiSource:
             if source == AiSourceType.OLLAMA_SERVER:
-                return AiSource(ollama_name="llava:13b")
+                return AiSource(model_name="llava:13b")
             if source == AiSourceType.LOCAL_LLAMACPP:
-                return AiSource(local_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
+                return AiSource(model_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
             if source == AiSourceType.LMSTUDIO_SERVER:
-                return AiSource(lmstudio_name=AiModels.Llava.llava_phi_3_mini_1)
+                return AiSource(model_name=AiModels.Llava.llava_phi_3_mini_1)
             raise Exception("No model found for the given power and method.")
 
         @staticmethod
         def get_llava_power_high(source: AiSourceType) -> AiSource:
             if source == AiSourceType.OLLAMA_SERVER:
-                return AiSource(ollama_name="llava:13b")
+                return AiSource(model_name="llava:13b")
             if source == AiSourceType.LOCAL_LLAMACPP:
-                return AiSource(local_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
+                return AiSource(model_name=AiModels.Llava.llava_15_7b_name, hg_files=AiModels.Llava.llava_15_7b_bundle)
             if source == AiSourceType.LMSTUDIO_SERVER:
-                return AiSource(lmstudio_name=AiModels.Llava.llava_phi_3_mini_1)
+                return AiSource(model_name=AiModels.Llava.llava_phi_3_mini_1)
             raise Exception("No model found for the given power and method.")
 
 
@@ -69,8 +69,15 @@ class AiModels:
 
         @staticmethod
         def get_pixstral() -> AiSource:
-            return AiSource(mistral_name="pixtral-12b-2409")
+            return AiSource(model_name="pixtral-12b-2409")
 
         @staticmethod
         def get_open_mistral() -> AiSource:
-            return AiSource(mistral_name="open-mistral-7b")
+            return AiSource(model_name="open-mistral-7b")
+
+
+    class Gemini:
+
+        @staticmethod
+        def get_flash() -> AiSource:
+            return AiSource(model_name="gemini-1.5-flash")

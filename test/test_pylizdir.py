@@ -5,7 +5,7 @@ import unittest
 from ai.controller.mistral_controller import MistralController
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
-from ai.core.ai_setting import AiSettings
+from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 import sys
