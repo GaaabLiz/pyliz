@@ -1,31 +1,46 @@
 import json
+import os
 
 from loguru import logger
 
 from ai.controller.mistral_controller import MistralController
 from ai.core.ai_inputs import AiInputs
+from ai.llm.local.llamacpp import LlamaCpp
 from ai.prompt.ai_prompts import AiPrompt
 from ai.core.ai_setting import AiSettings
 from ai.core.ai_source_type import AiSourceType
 from media.liz_media import LizMedia
 from model.operation import Operation
 from util.jsonUtils import JsonUtils
+from util.pylizdir import PylizDir
 
 
 class AiRunner:
 
-    def __init__(self, settings: AiSettings, inputs: AiInputs):
+    def __init__(self, pyliz_dir: PylizDir, settings: AiSettings, inputs: AiInputs):
         self.ai = settings
         self.inputs = inputs
+        self.pyliz_dir = pyliz_dir
+        self.folder_ai = self.pyliz_dir.get_folder_path("ai")
+        self.folder_logs = self.pyliz_dir.get_folder_path("logs")
+        self.model_folder = self.pyliz_dir.get_folder_path("models")
 
     def __handle_mistral(self) -> Operation[str]:
         controller = MistralController(self.ai.api_key)
         return controller.run(self.ai, self.inputs.prompt, self.inputs.file_path)
 
+    def __handle_git_llama_cpp(self) -> Operation[str]:
+        folder = os.path.join(self.folder_ai, "llama.cpp")
+        logs = os.path.join(self.folder_logs, "llama.cpp")
+        llama_cpp = LlamaCpp(folder, self.model_folder, logs)
+        pass
+
 
     def run(self) -> Operation[str]:
         if self.ai.source_type == AiSourceType.API_MISTRAL:
             return self.__handle_mistral()
+        if self.ai.source_type == AiSourceType.LOCAL_LLAMACPP:
+            return self.__handle_git_llama_cpp()
         raise NotImplementedError("Source type not implemented yet in AiRunner")
 
 

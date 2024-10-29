@@ -6,7 +6,7 @@ import rich
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_power import AiPower
 from ai.prompt.ai_prompts import prompt_llava_json
-from old_code.pylizdir_OLD import PylizDir
+from util.pylizdir import PylizDir
 
 
 def log(message: str):
@@ -21,11 +21,14 @@ class TestLlamaCPP(unittest.TestCase):
 
     def setUp(self):
         print("Setting up test...")
-        PylizDir.create()
-        path_install: str = os.path.join(PylizDir.get_ai_folder(), "llama.cpp")
-        path_models: str = PylizDir.get_models_folder()
-        path_logs: str = os.path.join(PylizDir.get_logs_path(), "llama.cpp")
-        self.obj = LlamaCpp(path_install, path_models, path_logs)
+        self.dir = PylizDir(".pyliztest")
+        self.ai_folder = self.dir.add_folder("ai", "ai")
+        self.model_folder = self.dir.add_folder("models", "models")
+        self.log_folder = self.dir.add_folder("log", "log")
+        self.path_install = os.path.join(self.ai_folder, "llama.cpp")
+        self.path_models = os.path.join(self.model_folder, "llama.cpp")
+        self.path_logs = os.path.join(self.log_folder, "llama.cpp")
+        self.obj = LlamaCpp(self.path_install, self.path_models, self.path_logs)
 
     def test_install_llava(self):
         try:
