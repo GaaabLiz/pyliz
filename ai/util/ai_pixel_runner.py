@@ -113,9 +113,11 @@ class AiPixelRunner:
         else:
             raise ValueError("Unsupported image_method in AiPixelRunner")
 
+    def __run_video(self, media_path: str, on_log: Callable[[str], None] = lambda x: None) -> Operation[LizMedia]:
+        raise NotImplementedError("Video not implemented yet in AiPixelRunner")
 
 
-    def run(
+    def scan(
             self,
             media_path: str,
             on_log: Callable[[str], None] = lambda x: None

@@ -48,7 +48,7 @@ class TestAiImage(unittest.TestCase):
             api_key=api_key,
         )
         pixel_runner = AiPixelRunner(pyliz_dir, PixelRunnerMethod.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
-        media = pixel_runner.run(image)
+        media = pixel_runner.scan(image)
         rich.print("----")
         rich.print(media.payload.ai_description)
         rich.print(media.payload.ai_file_name)
