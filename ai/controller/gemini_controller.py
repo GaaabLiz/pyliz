@@ -5,7 +5,7 @@ import time
 import google.generativeai as genai
 from loguru import logger
 
-from ai.core.ai_setting import AiQuery
+from ai.core.ai_setting import AiSetting, AiQuery
 from model.operation import Operation
 from util import fileutils
 
@@ -15,11 +15,13 @@ class GeminiController:
     def __init__(self, key: str):
         genai.configure(api_key=key)
 
+    @staticmethod
     def __upload(self, path: str, file_name: str):
         uri = sample_file = genai.upload_file(path=path, display_name=file_name)
         logger.info(f"Uploaded file to Google temp cache: {sample_file}")
         return uri
 
+    @staticmethod
     def __verify_loaded_video(self, uri):
         # Check whether the file is ready to be used.
         while uri.state.name == "PROCESSING":
@@ -32,10 +34,10 @@ class GeminiController:
 
     def scan_image(self, query: AiQuery) -> Operation[str]:
         try:
-            path = query.payload_file_path
+            path = query.payload_path
             file_name = os.path.basename(path)
             uri = self.__upload(path, file_name)
-            model = genai.GenerativeModel(model_name=query.source.model_name)
+            model = genai.GenerativeModel(model_name=query.setting.source.model_name)
             response = model.generate_content([uri, query.prompt])
             genai.delete_file(uri.name)
             logger.info("result =" + response.text)
@@ -43,14 +45,13 @@ class GeminiController:
         except Exception as e:
             return Operation(status=False, error=str(e))
 
-
     def scan_video(self, query: AiQuery) -> Operation[str]:
         try:
-            path = query.payload_file_path
+            path = query.payload_path
             file_name = os.path.basename(path)
             uri = self.__upload(path, file_name)
             self.__verify_loaded_video(uri)
-            model = genai.GenerativeModel(model_name=query.source.model_name)
+            model = genai.GenerativeModel(model_name=query.setting.source.model_name)
             response = model.generate_content([uri, query.prompt], request_options={"timeout": 600})
             logger.debug("result =" + response.text)
             genai.delete_file(uri.name)
@@ -59,7 +60,7 @@ class GeminiController:
             return Operation(status=False, error=str(e))
 
     def run(self, query: AiQuery) -> Operation[str]:
-        path = query.payload_file_path
+        path = query.payload_path
         if fileutils.is_image_file(path):
             return self.scan_image(query)
         elif fileutils.is_video_file(path):

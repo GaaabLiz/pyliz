@@ -7,7 +7,7 @@ from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.prompt.ai_prompts import AiPrompt
 from ai.core.ai_scan_settings import AiScanSettings
-from ai.core.ai_setting import AiQuery
+from ai.core.ai_setting import AiSetting
 from ai.core.ai_source_type import AiSourceType
 from old_code.image_scanner import ImageScanner
 
@@ -22,7 +22,7 @@ class TestImageScanner(unittest.TestCase):
     def test_scan_image_with_llamacpp(self):
         try:
             scan_settings = AiScanSettings(True, True, True, True, True)
-            ai_settings = AiQuery(
+            ai_settings = AiSetting(
                 model=AiModelList.LLAVA,
                 source_type=AiSourceType.LOCAL_LLAMACPP,
                 power=AiPower.LOW,

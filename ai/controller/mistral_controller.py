@@ -1,5 +1,5 @@
 from ai.core.ai_model_list import AiModelList
-from ai.core.ai_setting import AiQuery
+from ai.core.ai_setting import AiSetting, AiQuery
 from ai.llm.remote.service.mistraliz import Mistraliz
 from model.operation import Operation
 
@@ -12,12 +12,12 @@ class MistralController:
 
     def run(
             self,
-            ai_setting: AiQuery,
+            query: AiQuery,
     ) -> Operation[str]:
-        if ai_setting.model_name == AiModelList.OPEN_MISTRAL:
-            return self.__run_open_mistral(ai_setting.source.model_name, ai_setting.prompt)
-        if ai_setting.model_name == AiModelList.PIXSTRAL:
-            return self.__run_pixstral_vision(ai_setting.source.model_name, ai_setting.prompt, ai_setting.payload_file_path)
+        if query.setting.model == AiModelList.OPEN_MISTRAL:
+            return self.__run_open_mistral(query.setting.source.model_name, query.prompt)
+        if query.setting.model == AiModelList.PIXSTRAL:
+            return self.__run_pixstral_vision(query.setting.source.model_name, query.prompt, query.payload_path)
         raise NotImplementedError("Model not implemented in MistralController")
 
     def __run_pixstral_vision(self, model_id: str, prompt: str, image_path: str | None) -> Operation[str]:

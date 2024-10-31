@@ -22,11 +22,11 @@ class Eagleliz:
 
     def add_image_from_path(self, image: LizImage) -> Operation[None]:
         # Converting image to base64
-        with open(image.path, "rb") as image_file:
+        with open(image.payload_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
         # calling api
         resp_obj = self.obj.add_image_from_path(
-            path=image.path,
+            path=image.payload_path,
             name=image.ai_file_name,
             tags=image.ai_tags,
             annotation=image.get_desc_plus_text(),

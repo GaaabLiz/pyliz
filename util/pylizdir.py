@@ -57,7 +57,7 @@ class PylizDir:
     def get_folder_path(self, key: str):
         for folder in self.__folders:
             if folder.key == key:
-                return folder.path
+                return folder.payload_path
         return None
 
     def check_for_all_init(self):

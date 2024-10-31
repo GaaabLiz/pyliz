@@ -27,6 +27,7 @@ If the are texts, try to read them.
 class AiPrompt(Enum):
 
     IMAGE_VISION_DETAILED_1 = prompt_llava_detailed_STEP1
+    IMAGE_VISION_JSON = prompt_llava_json
     TEXT_EXTRACT_FROM_VISION_1 = extract_info_from_image
 
 

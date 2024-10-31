@@ -5,7 +5,7 @@ from ai.core.ai_inputs import AiInputs
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.prompt.ai_prompts import AiPrompt
-from ai.core.ai_setting import AiQuery
+from ai.core.ai_setting import AiSetting
 from ai.core.ai_source_type import AiSourceType
 import sys
 import os
@@ -21,7 +21,7 @@ class TestLmStudio(unittest.TestCase):
 
 
     def test1(self):
-        setting = AiQuery(
+        setting = AiSetting(
             model=AiModelList.OPEN_MISTRAL,
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.LOW,
@@ -33,7 +33,7 @@ class TestLmStudio(unittest.TestCase):
 
 
     def test2(self):
-        setting = AiQuery(
+        setting = AiSetting(
             model=AiModelList.PIXSTRAL,
             source_type=AiSourceType.API_MISTRAL,
             power=AiPower.MEDIUM,

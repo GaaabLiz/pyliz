@@ -4,7 +4,7 @@ from ai.util.ai_runner import AiRunner
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.prompt.ai_prompts import AiPrompt
-from ai.core.ai_setting import AiQuery
+from ai.core.ai_setting import AiSetting
 from ai.core.ai_source_type import AiSourceType
 import sys
 import os
@@ -25,7 +25,7 @@ class TestLmStudio(unittest.TestCase):
 
     def test1(self):
         self.pyliz_dir = PylizDir(".pyliztest")
-        setting = AiQuery(
+        setting = AiSetting(
             model=AiModelList.GEMINI,
             source_type=AiSourceType.API_GEMINI,
             power=AiPower.LOW,
@@ -41,7 +41,7 @@ class TestLmStudio(unittest.TestCase):
 
     def test2(self):
         self.pyliz_dir = PylizDir(".pyliztest")
-        setting = AiQuery(
+        setting = AiSetting(
             model=AiModelList.GEMINI,
             source_type=AiSourceType.API_GEMINI,
             power=AiPower.LOW,
