@@ -1,5 +1,7 @@
 import json
 import os
+import time
+from typing import Callable
 
 from loguru import logger
 
@@ -26,7 +28,7 @@ class AiRunner:
 
     def __handle_mistral(self) -> Operation[str]:
         controller = MistralController(self.ai.api_key)
-        return controller.run(self.ai, self.inputs.prompt, self.inputs.file_path)
+        return controller.run(self.ai)
 
     def __handle_git_llama_cpp(self) -> Operation[str]:
         folder = os.path.join(self.folder_ai, "llama.cpp")
@@ -52,22 +54,30 @@ class AiRunner:
 class AiCustomRunner:
 
     @staticmethod
-    def run_for_image(ai_image_setting: AiQuery, ai_text_setting, image_path: str) -> Operation[LizMedia]:
+    def run_for_image(
+            pyliz_dir: PylizDir,
+            ai_image_setting: AiQuery,
+            ai_text_setting: AiQuery,
+            on_log: Callable[[str], None] = lambda x: None
+    ) -> Operation[LizMedia]:
         # Image query
-        ai_image_inputs = AiInputs(file_path=image_path, prompt=AiPrompt.IMAGE_VISION_DETAILED_1.value)
-        ai_image_result = AiRunner(ai_image_setting, ai_image_inputs).run()
-        logger.info(ai_image_result)
+        on_log("Running image query")
+        ai_image_result = AiRunner(pyliz_dir, ai_image_setting).run()
+        logger.info(f"RunForMedia (image) result = {ai_image_result}")
         if not ai_image_result.status:
             return Operation(status=False, error=ai_image_result.error)
         # Text query
-        ai_text_inputs = AiInputs(prompt=AiPrompt.TEXT_EXTRACT_FROM_VISION_1.value + ai_image_result.payload)
-        ai_text_result = AiRunner(ai_text_setting, ai_text_inputs).run()
-        logger.info(ai_text_result)
+        on_log("Generating text")
+        ai_text_result = AiRunner(pyliz_dir, ai_text_setting).run()
+        logger.info(f"RunForMedia (text) result = {ai_text_result}")
         if not ai_text_result.status:
             return Operation(status=False, error=ai_text_result.error)
         # Media creation
-        media = LizMedia(image_path)
+        on_log("Generating object")
+        time.sleep(0.5)
+        media = LizMedia(ai_image_setting.payload_file_path)
         # Extract ai info from json
+        on_log("Validating ai results")
         json_result_text = ai_text_result.payload
         if not JsonUtils.is_valid_json(json_result_text):
             return Operation(status=False, error="Ai returned an invalid json")
@@ -79,4 +89,6 @@ class AiCustomRunner:
         media.ai_tags = data['tags']
         media.ai_file_name = data['filename']
         media.ai_scanned = True
+        time.sleep(0.5)
+        on_log("Completed")
         return Operation(status=True, payload=media)

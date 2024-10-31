@@ -13,13 +13,11 @@ class MistralController:
     def run(
             self,
             ai_setting: AiQuery,
-            prompt: str,
-            image_path: str | None = None
     ) -> Operation[str]:
         if ai_setting.model_name == AiModelList.OPEN_MISTRAL:
-            return self.__run_open_mistral(ai_setting.source.mistral_name, prompt)
+            return self.__run_open_mistral(ai_setting.source.model_name, ai_setting.prompt)
         if ai_setting.model_name == AiModelList.PIXSTRAL:
-            return self.__run_pixstral_vision(ai_setting.source.mistral_name, prompt, image_path)
+            return self.__run_pixstral_vision(ai_setting.source.model_name, ai_setting.prompt, ai_setting.payload_file_path)
         raise NotImplementedError("Model not implemented in MistralController")
 
     def __run_pixstral_vision(self, model_id: str, prompt: str, image_path: str | None) -> Operation[str]:

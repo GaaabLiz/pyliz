@@ -1,5 +1,6 @@
 
 import os
+import time
 import unittest
 
 from ai.controller.mistral_controller import MistralController
@@ -11,6 +12,7 @@ from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 import sys
 import os
 from dotenv import load_dotenv
+from yaspin import yaspin
 
 from util.cfgutils import CfgItem
 from util.pylizdir import PylizDir
