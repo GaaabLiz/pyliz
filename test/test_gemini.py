@@ -4,7 +4,7 @@ from ai.util.ai_runner import AiRunner
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.prompt.ai_prompts import AiPrompt
-from ai.core.ai_setting import AiSetting
+from ai.core.ai_setting import AiSetting, AiQuery
 from ai.core.ai_source_type import AiSourceType
 import sys
 import os
@@ -29,11 +29,10 @@ class TestLmStudio(unittest.TestCase):
             model=AiModelList.GEMINI,
             source_type=AiSourceType.API_GEMINI,
             power=AiPower.LOW,
-            payload_file_path=os.getenv('LOCAL_IMAGE_FOR_TEST'),
             api_key=os.getenv('GEMINI_API_KEY'),
-            prompt="Analyze this image and tell me what you see."
         )
-        result = AiRunner(self.pyliz_dir, setting).run()
+        query = AiQuery(setting=setting, prompt="Analyze this image and tell what you see", payload_path=os.getenv("LOCAL_IMAGE_FOR_TEST"))
+        result = AiRunner(self.pyliz_dir, query).run()
         print("result status = " + str(result.status))
         print(result.payload)
         print("result error = " + result.error if result.error is not None else "No error")
@@ -45,15 +44,13 @@ class TestLmStudio(unittest.TestCase):
             model=AiModelList.GEMINI,
             source_type=AiSourceType.API_GEMINI,
             power=AiPower.LOW,
-            payload_file_path=os.getenv('LOCAL_VIDEO_FOR_TEST'),
             api_key=os.getenv('GEMINI_API_KEY'),
-            prompt="Analyze this video and tell me what you see."
         )
-        result = AiRunner(self.pyliz_dir, setting).run()
+        query = AiQuery(setting=setting, prompt="Analyze this video and tell what you see", payload_path=os.getenv("LOCAL_VIDEO_FOR_TEST"))
+        result = AiRunner(self.pyliz_dir, query).run()
         print("result status = " + str(result.status))
         print(result.payload)
-        print("result error = " + result.error if result.error is not None else "No error")
-
+        print("result error = \n" + result.error if result.error is not None else "No error")
 
 
 
