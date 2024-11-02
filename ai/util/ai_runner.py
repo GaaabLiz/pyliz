@@ -14,8 +14,8 @@ from util.pylizdir import PylizDir
 
 class AiRunner:
 
-    def __init__(self, pyliz_dir: PylizDir, query: AiQuery):
-        self.query = query
+    def __init__(self, pyliz_dir: PylizDir):
+        self.query = None
         self.pyliz_dir = pyliz_dir
         self.folder_ai = self.pyliz_dir.get_folder_path("ai")
         self.folder_logs = self.pyliz_dir.get_folder_path("logs")
@@ -36,7 +36,8 @@ class AiRunner:
         return controller.run(self.query)
 
 
-    def run(self) -> Operation[str]:
+    def run(self, query: AiQuery) -> Operation[str]:
+        self.query = query
         if self.query.setting.source_type == AiSourceType.API_MISTRAL:
             return self.__handle_mistral()
         if self.query.setting.source_type == AiSourceType.LOCAL_LLAMACPP:

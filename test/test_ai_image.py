@@ -16,7 +16,6 @@ import os
 from dotenv import load_dotenv
 
 from ai.util.ai_pixel_runner import AiPixelRunner, PixelRunnerMethod
-from ai.util.ai_runner import AiCustomRunner
 from util import pylizLogging
 from util.pylizdir import PylizDir
 

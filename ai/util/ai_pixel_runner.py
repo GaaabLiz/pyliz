@@ -61,7 +61,7 @@ class AiPixelRunner:
         @staticmethod
         def run_query(pyliz_dir: PylizDir, ai_setting: AiSetting, prompt: str, media_path: str | None = None) -> str:
             query = AiQuery(ai_setting, prompt, media_path)
-            ai_result = AiRunner(pyliz_dir, query).run()
+            ai_result = AiRunner(pyliz_dir).run(query)
             if not ai_result.status:
                 raise ValueError(ai_result.error)
             logger.info(f"RunForMedia (pixel) result = {ai_result}")
