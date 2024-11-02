@@ -1,6 +1,7 @@
 import random
 import string
 from datetime import datetime
+from typing import TypeVar, List
 
 
 def convert_months_number_to_str(number: int) -> str:
@@ -28,3 +29,10 @@ def gen_random_string(length: int) -> str:
 
 def gen_timestamp_log_name(prefix: str, extension: str):
     return prefix + datetime.now().strftime("%Y%m%d_%H%M%S") + extension
+
+
+T = TypeVar('T')
+
+
+def contains_item(item: T, items: List[T]) -> bool:
+    return item in items

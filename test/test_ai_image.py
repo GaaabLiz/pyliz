@@ -55,6 +55,26 @@ class TestAiImage(unittest.TestCase):
         rich.print("end")
 
 
+    def test2(self):
+        pyliz_dir = PylizDir(".pyliztest")
+        image = os.getenv('LOCAL_IMAGE_FOR_TEST')
+        api_key = os.getenv('MISTRAL_API_KEY')
+        ai_image_setting = AiSetting(
+            model=AiModelList.PIXSTRAL,
+            source_type=AiSourceType.API_MISTRAL,
+            power=AiPower.MEDIUM,
+            api_key=api_key,
+        )
+        ai_text_setting = AiSetting(
+            model=AiModelList.OPEN_MISTRAL,
+            source_type=AiSourceType.API_MISTRAL,
+            power=AiPower.LOW,
+            api_key=api_key,
+        )
+        pixel_runner = AiPixelRunner(pyliz_dir, PixelRunnerMethod.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
+        media = pixel_runner.test()
+
+
 
 if __name__ == "__main__":
     unittest.main()
