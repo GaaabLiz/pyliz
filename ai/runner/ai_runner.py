@@ -1,8 +1,9 @@
 
 import os
 
-from ai.llm.controller import GeminiController
-from ai.llm.controller import MistralController
+from ai.llm.controller.gemini import GeminiController
+from ai.llm.controller import *
+from ai.llm.controller.mistral import MistralController
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType

@@ -2,6 +2,8 @@ import json
 import os
 from typing import Optional, List
 
+from ai.model.ai_payload_info import AiPayloadMediaInfo
+from model.fileType import FileType
 from util import fileutils
 
 
@@ -20,8 +22,12 @@ class LizMedia:
         self.size_mb = self.size_byte / (1024 * 1024)
 
         # type of media
-        self.is_image = fileutils.is_image_file(self.path)
-        self.is_video = fileutils.is_video_file(self.path)
+        if not fileutils.is_media_file(self.path):
+            raise ValueError(f"File {self.path} is not a media file.")
+        self.type = fileutils.get_file_type(self.path)
+        self.is_image = self.type == FileType.IMAGE
+        self.is_video = self.type == FileType.VIDEO
+        self.is_audio = self.type == FileType.AUDIO
 
         # ai info
         self.ai_ocr_text: Optional[List[str]] = None
@@ -37,6 +43,7 @@ class LizMedia:
         else:
             self.duration = None
             self.frame_rate = None
+
 
     def get_desc_plus_text(self):
         if self.ai_ocr_text is not None and len(self.ai_ocr_text) > 0:
@@ -68,3 +75,10 @@ class LizMedia:
 
     def to_json_only_ai(self):
         return json.dumps(self.to_dict_only_ai(), indent=4)
+
+    def apply_ai_info(self, ai_info: AiPayloadMediaInfo):
+        self.ai_ocr_text = ai_info.text
+        self.ai_file_name = ai_info.filename
+        self.ai_description = ai_info.description
+        self.ai_tags = ai_info.tags
+        self.ai_scanned = True

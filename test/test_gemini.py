@@ -1,9 +1,8 @@
 import unittest
 
-from ai.util.ai_runner import AiRunner
+from ai.runner.ai_runner import AiRunner
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
-from ai.prompt.ai_prompts import AiPrompt
 from ai.core.ai_setting import AiSetting, AiQuery
 from ai.core.ai_source_type import AiSourceType
 import sys

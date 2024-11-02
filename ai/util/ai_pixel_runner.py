@@ -7,7 +7,7 @@ from loguru import logger
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_setting import AiSetting, AiQuery
 from ai.prompt.ai_prompts import AiPrompt
-from ai.util.ai_runner import AiRunner
+from ai.runner.ai_runner import AiRunner
 from media.liz_media import LizMedia
 from model.operation import Operation
 from util import fileutils, datautils

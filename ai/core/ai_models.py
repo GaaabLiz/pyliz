@@ -1,9 +1,7 @@
-from ai.core.ai_method import AiMethod
 from ai.core.ai_power import AiPower
 from ai.core.ai_source import AiSource
 from ai.core.ai_source_type import AiSourceType
-from ai.core.hg_file import HgFile
-from model.file_type import FileType
+from ai.core.ai_file_type import AiFileType, HgFile
 
 
 class AiModels:
@@ -16,8 +14,8 @@ class AiModels:
     class Llava:
 
         # Local Models
-        llava_15_7b_mmproj_f16 = HgFile("mmproj-model-f16.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/mmproj-model-f16.gguf", FileType.HG_MMPROJ)
-        llava_15_7b_ggml_model_q4 = HgFile("ggml-model-q4_k.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/ggml-model-q4_k.gguf", FileType.HG_GGML)
+        llava_15_7b_mmproj_f16 = HgFile("mmproj-model-f16.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/mmproj-model-f16.gguf", AiFileType.HG_MMPROJ)
+        llava_15_7b_ggml_model_q4 = HgFile("ggml-model-q4_k.gguf", "https://huggingface.co/mys/ggml_llava-v1.5-7b/resolve/main/ggml-model-q4_k.gguf", AiFileType.HG_GGML)
         llava_15_7b_bundle = [llava_15_7b_mmproj_f16, llava_15_7b_ggml_model_q4]
         llava_15_7b_name = "llava157b"
 

@@ -1,6 +1,6 @@
 import unittest
 
-from ai.util.ai_runner import AiRunner
+from ai.runner.ai_runner import AiRunner
 from ai.core.ai_inputs import AiInputs
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower

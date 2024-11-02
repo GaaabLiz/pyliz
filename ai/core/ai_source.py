@@ -1,8 +1,6 @@
 from typing import List
 
-from ai.core.hg_file import HgFile
-from model.file_type import FileType
-from network import netutils
+from ai.core.ai_file_type import AiFileType, HgFile
 from util import unitutils
 
 
@@ -20,13 +18,13 @@ class AiSource:
 
     def get_ggml_file(self) -> HgFile:
         for hg_file in self.hg_files:
-            if hg_file.file_type == FileType.HG_GGML:
+            if hg_file.file_type == AiFileType.HG_GGML:
                 return hg_file
         raise Exception("No ggml file found in the source.")
 
     def get_mmproj_file(self) -> HgFile:
         for hg_file in self.hg_files:
-            if hg_file.file_type == FileType.HG_MMPROJ:
+            if hg_file.file_type == AiFileType.HG_MMPROJ:
                 return hg_file
         raise Exception("No mmproj file found in the source.")
 

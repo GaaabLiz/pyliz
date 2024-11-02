@@ -5,31 +5,66 @@ from datetime import datetime
 
 import requests
 
+from model.fileType import FileType
 from model.operation import Operation
+
+image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
+video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']
+audio_extensions = ['.mp3', '.wav', '.ogg', '.flac', '.wma', '.aac', '.m4a']
+text_extensions = ['.txt', '.doc', '.docx', '.pdf', '.odt', '.rtf', '.tex']
+
+
+def is_image_extension(extension: str) -> bool:
+    return extension in image_extensions
+
+
+def is_video_extension(extension: str) -> bool:
+    return extension in video_extensions
+
+
+def is_audio_extension(extension: str) -> bool:
+    return extension in audio_extensions
+
+
+def is_text_extension(extension: str) -> bool:
+    return extension in text_extensions
 
 
 def is_image_file(path: str) -> bool:
-    image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
-    return os.path.splitext(path)[1] in image_extensions
+    return is_image_extension(os.path.splitext(path)[1])
 
 
 def is_video_file(path: str) -> bool:
-    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']
-    return os.path.splitext(path)[1] in video_extensions
+    return is_video_extension(os.path.splitext(path)[1])
 
 
 def is_audio_file(path: str) -> bool:
-    audio_extensions = ['.mp3', '.wav', '.ogg', '.flac', '.wma', '.aac', '.m4a']
-    return os.path.splitext(path)[1] in audio_extensions
+    return is_audio_extension(os.path.splitext(path)[1])
 
 
 def is_text_file(path: str) -> bool:
-    text_extensions = ['.txt', '.doc', '.docx', '.pdf', '.odt', '.rtf', '.tex']
-    return os.path.splitext(path)[1] in text_extensions
+    return is_text_extension(os.path.splitext(path)[1])
 
 
 def is_image_or_video_file(path: str) -> bool:
     return is_image_file(path) or is_video_file(path)
+
+
+def is_media_file(path: str) -> bool:
+    return is_image_file(path) or is_video_file(path) or is_audio_file(path)
+
+
+def get_file_type(path: str) -> FileType:
+    if is_image_file(path):
+        return FileType.IMAGE
+    elif is_video_file(path):
+        return FileType.VIDEO
+    elif is_audio_file(path):
+        return FileType.AUDIO
+    elif is_text_file(path):
+        return FileType.TEXT
+    else:
+        raise ValueError("Unsupported file type")
 
 
 def is_file_dup_in_dir(path:str, file_name:str) -> bool:

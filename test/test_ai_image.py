@@ -2,6 +2,7 @@
 
 
 import os
+import tracemalloc
 import unittest
 
 import rich
@@ -15,6 +16,8 @@ import sys
 import os
 from dotenv import load_dotenv
 
+from ai.scanner.ai_image_scanner import AiImageScanningType
+from ai.scanner.ai_media_scanner import AiMediaScanner
 from ai.util.ai_pixel_runner import AiPixelRunner, PixelRunnerMethod
 from util import pylizLogging
 from util.pylizdir import PylizDir
@@ -31,6 +34,7 @@ class TestAiImage(unittest.TestCase):
 
 
     def test1(self):
+        tracemalloc.start()
         pyliz_dir = PylizDir(".pyliztest")
         image = os.getenv('LOCAL_IMAGE_FOR_TEST')
         api_key = os.getenv('MISTRAL_API_KEY')
@@ -46,11 +50,11 @@ class TestAiImage(unittest.TestCase):
             power=AiPower.LOW,
             api_key=api_key,
         )
-        pixel_runner = AiPixelRunner(pyliz_dir, PixelRunnerMethod.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
-        media = pixel_runner.scan(image)
+        scanner = AiMediaScanner(pyliz_dir)
+        media = scanner.scan_image(image, AiImageScanningType.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
         rich.print("----")
-        rich.print(media.payload.ai_description)
         rich.print(media.payload.ai_file_name)
+        #rich.print(media.payload.ai_description)
         rich.print("end")
 
 
@@ -71,7 +75,7 @@ class TestAiImage(unittest.TestCase):
             api_key=api_key,
         )
         pixel_runner = AiPixelRunner(pyliz_dir, PixelRunnerMethod.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
-        media = pixel_runner.test()
+        #media = pixel_runner.test()
 
 
 

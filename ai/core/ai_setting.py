@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_models import AiModels
@@ -6,6 +7,7 @@ from ai.core.ai_power import AiPower
 from ai.core.ai_source import AiSource
 from ai.core.ai_source_type import AiSourceType
 from ai.prompt.ai_prompts import AiPrompt
+from util import fileutils
 
 
 class AiSetting:
@@ -49,8 +51,31 @@ class AiSetting:
             raise ValueError("API Key is required for Mistral API.")
 
 
-@dataclass
+class AiQueryType(Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
+
+
+
 class AiQuery:
     setting: AiSetting
     prompt: str
     payload_path: str | None = None
+
+    def __init__(self, setting: AiSetting, prompt: str, payload_path: str | None = None):
+        self.setting = setting
+        self.prompt = prompt
+        self.payload_path = payload_path
+        self.query_type = None
+
+        if self.payload_path is not None:
+            if fileutils.is_image_file(self.payload_path):
+                self.query_type = AiQueryType.IMAGE
+            elif fileutils.is_video_file(self.payload_path):
+                self.query_type = AiQueryType.VIDEO
+            elif fileutils.is_audio_file(self.payload_path):
+                self.query_type = AiQueryType.AUDIO
+        else:
+            self.query_type = AiQueryType.TEXT
