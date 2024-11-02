@@ -1,14 +1,12 @@
 
 import os
 
-from ai.controller.gemini_controller import GeminiController
-from ai.controller.mistral_controller import MistralController
+from ai.llm.controller import GeminiController
+from ai.llm.controller import MistralController
 from ai.llm.local.llamacpp import LlamaCpp
-from ai.core.ai_setting import AiSetting, AiQuery
+from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
-from media.liz_media import LizMedia
 from model.operation import Operation
-from util.jsonUtils import JsonUtils
 from util.pylizdir import PylizDir
 
 
