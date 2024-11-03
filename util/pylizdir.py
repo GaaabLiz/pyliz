@@ -6,9 +6,11 @@ from util.cfgutils import Cfgini, CfgItem
 from dataclasses import dataclass
 
 
-class PylizDirFolderTemplate(Enum):
-    MODEL_FOLDER = "model"
-    AI_FOLDER = "ai"
+class PylizDirFoldersTemplate(Enum):
+    MODELS = "models"
+    AI = "ai"
+    TEMP = "temp"
+    LOGS = "logs"
 
 
 @dataclass
@@ -50,8 +52,13 @@ class PylizDir:
         self.__folders.append(PylizDirFolder(key, folder_name, folder_path))
         return folder_path
 
-    def add_template_folder(self, template_key: PylizDirFolderTemplate):
-        self.add_folder(template_key.value, template_key.value)
+    def add_template_folder(self, template_key: PylizDirFoldersTemplate, name: str = None):
+        folder_name = name if name is not None else template_key.value
+        self.add_folder(template_key.value, folder_name)
+
+    def add_all_template_folders(self):
+        for template_key in PylizDirFoldersTemplate:
+            self.add_template_folder(template_key)
 
     def add_folder_with_ini(self, key: str, folder_name: str, ini_section: str, ini_key: str):
         folder_path = self.add_folder(key, folder_name)
@@ -60,10 +67,10 @@ class PylizDir:
     def get_folder_path(self, key: str):
         for folder in self.__folders:
             if folder.key == key:
-                return folder.payload_path
+                return folder.path
         return None
 
-    def get_folder_template_path(self, template_key: PylizDirFolderTemplate):
+    def get_folder_template_path(self, template_key: PylizDirFoldersTemplate):
         return self.get_folder_path(template_key.value)
 
     def check_for_all_init(self):

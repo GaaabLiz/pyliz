@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 
 from util import pylizLogging
-from util.pylizdir import PylizDir
+from util.pylizdir import PylizDir, PylizDirFoldersTemplate
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -21,11 +21,11 @@ class TestWhisper(unittest.TestCase):
         load_dotenv()
         print("Setting up test...")
         pylizLogging.enable_logging("DEBUG", None, True)
-        self.pyliz_dir = None
+        self.pyliz_dir = PylizDir(".pyliztest")
+        self.pyliz_dir.add_all_template_folders()
 
 
     def test1(self):
-        self.pyliz_dir = PylizDir(".pyliztest")
         setting = AiSetting(
             model=AiModelList.WHISPER,
             source_type=AiSourceType.LOCAL_WHISPER,

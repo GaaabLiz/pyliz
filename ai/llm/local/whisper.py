@@ -6,7 +6,7 @@ import whisper
 from loguru import logger
 
 from media.video_helper import VideoUtils
-from network.ssl import ignore_context_ssl
+from network.ssl import ignore_context_ssl, setup2323
 from util import datautils
 
 
@@ -14,32 +14,41 @@ class Whisper:
 
 
     @staticmethod
-    def get_model_obj(model_name: str, model_path: str):
-        ignore_context_ssl()
+    def get_model_obj_from_lib(model_name: str, whisper_folder_path: str):
+
         # Imposta la directory personalizzata per i modelli
-        logger.debug(f"Setting WHISPER_CACHE_DIR to {model_path}")
-        os.environ["WHISPER_CACHE_DIR"] = model_path
+        logger.debug(f"Setting WHISPER_CACHE_DIR to {whisper_folder_path}")
+        os.environ["WHISPER_CACHE_DIR"] = whisper_folder_path
         # Carica il modello, che verrà scaricato se non già presente
         logger.debug(f"Loading Whisper model {model_name}")
-        modello = whisper.load_model(model_name)
+        modello = whisper.load_model(model_name, download_root=whisper_folder_path)
         return modello
 
     @staticmethod
+    def get_model_obj_from_hf():
+        model_name = "Orenguteng/Llama-3-8B-Lexi-Uncensored-GGUF"
+        model_file = "Lexi-Llama-3-8B-Uncensored_Q4_K_M.gguf"
+        model_path = hf_hub_download(model_name,
+                                     filename=model_file,
+                                     local_dir=path_install,
+                                     )
+
+    @staticmethod
     def transcribe(
+            temp_folder: str,
             model_name: str,
             video_path: str,
-            model_path: str,
+            whisper_folder_path: str,
     ) -> str:
-        ignore_context_ssl()
+        setup2323()
         audio_id = datautils.gen_random_string(10)
-        with tempfile.TemporaryDirectory() as temp_dir:
-            audio_path = f"{temp_dir}/audio-{audio_id}.wav"
+        audio_path = os.path.join(temp_folder, f"{audio_id}.wav")
         logger.debug(f"Extracting audio from video {video_path} to {audio_path}")
         VideoUtils.extract_audio(video_path, audio_path)
 
         # Scarica il modello di Whisper
         logger.debug(f"Loading Whisper model {model_name}")
-        modello = Whisper.get_model_obj(model_name, model_path)
+        modello = Whisper.get_model_obj_from_lib(model_name, whisper_folder_path)
 
         # Trascrive l'audio e restituisce il testo
         logger.debug(f"Transcribing audio {audio_path}")

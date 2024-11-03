@@ -10,7 +10,8 @@ from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from ai.llm.local.whisper import Whisper
 from model.operation import Operation
-from util.pylizdir import PylizDir
+from util import datautils
+from util.pylizdir import PylizDir, PylizDirFoldersTemplate
 
 
 class AiRunner:
@@ -21,6 +22,10 @@ class AiRunner:
         self.folder_ai = self.pyliz_dir.get_folder_path("ai")
         self.folder_logs = self.pyliz_dir.get_folder_path("logs")
         self.model_folder = self.pyliz_dir.get_folder_path("models")
+        self.temp_folder = self.pyliz_dir.get_folder_template_path(PylizDirFoldersTemplate.TEMP)
+        if not datautils.all_not_none(self.folder_ai, self.folder_logs, self.model_folder, self.temp_folder):
+            raise ValueError("Some folders are not set in PylizDir")
+
 
     def __handle_mistral(self) -> Operation[str]:
         controller = MistralController(self.query.setting.api_key)
@@ -37,7 +42,7 @@ class AiRunner:
         return controller.run(self.query)
 
     def __handle_whisper(self):
-        return WhisperController.run(self.query, self.model_folder)
+        return WhisperController.run(self.query, self.model_folder, self.temp_folder)
 
 
     def run(self, query: AiQuery) -> Operation[str]:
