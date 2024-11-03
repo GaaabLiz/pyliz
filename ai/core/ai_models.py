@@ -79,3 +79,15 @@ class AiModels:
         @staticmethod
         def get_flash() -> AiSource:
             return AiSource(model_name="gemini-1.5-flash")
+
+
+    class Whisper:
+
+        @staticmethod
+        def get_whisper(power: AiPower) -> AiSource:
+            if power == AiPower.LOW:
+                return AiSource(model_name="base")
+            elif power == AiPower.MEDIUM:
+                return AiSource(model_name="small")
+            elif power == AiPower.HIGH:
+                return AiSource(model_name="medium")

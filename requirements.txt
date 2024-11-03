@@ -40,3 +40,4 @@ huggingface-hub~=0.24.2
 mistralai~=1.1.0
 protobuf~=5.28.3
 loguru~=0.7.2
+ffmpeg-python~=0.2.0

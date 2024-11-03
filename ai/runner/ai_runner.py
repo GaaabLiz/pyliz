@@ -4,9 +4,11 @@ import os
 from ai.llm.controller.gemini import GeminiController
 from ai.llm.controller import *
 from ai.llm.controller.mistral import MistralController
+from ai.llm.controller.whisper import WhisperController
 from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
+from ai.llm.local.whisper import Whisper
 from model.operation import Operation
 from util.pylizdir import PylizDir
 
@@ -34,6 +36,9 @@ class AiRunner:
         controller = GeminiController(self.query.setting.api_key)
         return controller.run(self.query)
 
+    def __handle_whisper(self):
+        return WhisperController.run(self.query, self.model_folder)
+
 
     def run(self, query: AiQuery) -> Operation[str]:
         self.query = query
@@ -43,4 +48,6 @@ class AiRunner:
             return self.__handle_git_llama_cpp()
         if self.query.setting.source_type == AiSourceType.API_GEMINI:
             return self.__handle_gemini()
+        if self.query.setting.source_type == AiSourceType.LOCAL_WHISPER:
+            return self.__handle_whisper()
         raise NotImplementedError("Source type not implemented yet in AiRunner")

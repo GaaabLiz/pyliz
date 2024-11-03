@@ -38,6 +38,8 @@ class AiSetting:
             self.source = AiModels.Mistral.get_pixstral()
         elif self.model == AiModelList.GEMINI:
             self.source = AiModels.Gemini.get_flash()
+        elif self.model == AiModelList.WHISPER:
+            self.source = AiModels.Whisper.get_whisper(self.power)
         else:
             raise ValueError(f"Model not found: {self.model}.")
 
@@ -61,10 +63,10 @@ class AiQueryType(Enum):
 
 class AiQuery:
     setting: AiSetting
-    prompt: str
+    prompt: str | None
     payload_path: str | None = None
 
-    def __init__(self, setting: AiSetting, prompt: str, payload_path: str | None = None):
+    def __init__(self, setting: AiSetting, prompt: str | None, payload_path: str | None = None):
         self.setting = setting
         self.prompt = prompt
         self.payload_path = payload_path
