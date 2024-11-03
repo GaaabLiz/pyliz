@@ -1,7 +1,3 @@
-
-
-
-import os
 import tracemalloc
 import unittest
 
@@ -11,14 +7,13 @@ from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
 from ai.core.ai_setting import AiSetting
 from ai.core.ai_source_type import AiSourceType
-from ai.llm.remote.service.lmstudioliz import LmStudioLiz
 import sys
 import os
 from dotenv import load_dotenv
 
 from ai.scanner.ai_image_scanner import AiImageScanningType
 from ai.scanner.ai_media_scanner import AiMediaScanner
-from ai.util.ai_pixel_runner import AiPixelRunner, PixelRunnerMethod
+from old_code.ai_pixel_runner import AiPixelRunner, PixelRunnerMethod
 from util import pylizLogging
 from util.pylizdir import PylizDir
 
@@ -53,7 +48,7 @@ class TestAiImage(unittest.TestCase):
         scanner = AiMediaScanner(pyliz_dir)
         media = scanner.scan_image(image, AiImageScanningType.DOUBLE_QUERY_WITH_TEXT_GEN, ai_image_setting, ai_text_setting)
         rich.print("----")
-        rich.print(media.payload.ai_file_name)
+        #rich.print(media.payload.ai_file_name)
         #rich.print(media.payload.ai_description)
         rich.print("end")
 

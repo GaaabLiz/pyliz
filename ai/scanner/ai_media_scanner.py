@@ -33,3 +33,4 @@ class AiMediaScanner:
             return Operation(status=True, payload=media)
         except Exception as e:
             return Operation(status=False, error=str(e))
+
