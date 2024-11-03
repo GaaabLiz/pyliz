@@ -1,8 +1,14 @@
 import os
+from enum import Enum
 
 from util import pathutils
 from util.cfgutils import Cfgini, CfgItem
 from dataclasses import dataclass
+
+
+class PylizDirFolderTemplate(Enum):
+    MODEL_FOLDER = "model"
+    AI_FOLDER = "ai"
 
 
 @dataclass
@@ -31,15 +37,10 @@ class PylizDir:
         pathutils.check_path(self.__path, True)
         pathutils.check_path_dir(self.__path)
 
-    def create_ini(self, config_name: str, list_of_items: [CfgItem] = None):
-        self.__ini_path = os.path.join(self.__path, config_name)
-        self.__ini = Cfgini(self.__ini_path)
-        if not self.__ini.exists():
-            self.__ini.create(list_of_items)
-        self.__ini_initialized = True
-
     def get_path(self):
         return self.__path
+
+    # FOLDERS --------------------------------------------
 
     def add_folder(self, key: str, folder_name: str):
         folder_path = os.path.join(self.__path, folder_name)
@@ -49,10 +50,12 @@ class PylizDir:
         self.__folders.append(PylizDirFolder(key, folder_name, folder_path))
         return folder_path
 
+    def add_template_folder(self, template_key: PylizDirFolderTemplate):
+        self.add_folder(template_key.value, template_key.value)
+
     def add_folder_with_ini(self, key: str, folder_name: str, ini_section: str, ini_key: str):
         folder_path = self.add_folder(key, folder_name)
         self.set_ini_value(ini_section, ini_key, folder_path)
-
 
     def get_folder_path(self, key: str):
         for folder in self.__folders:
@@ -60,9 +63,21 @@ class PylizDir:
                 return folder.payload_path
         return None
 
+    def get_folder_template_path(self, template_key: PylizDirFolderTemplate):
+        return self.get_folder_path(template_key.value)
+
     def check_for_all_init(self):
         if not self.__ini.exists() or not self.__ini_initialized:
             raise Exception("PylizDirError: Configuration file not initialized or not found")
+
+    # INI --------------------------------------------
+
+    def create_ini(self, config_name: str, list_of_items: [CfgItem] = None):
+        self.__ini_path = os.path.join(self.__path, config_name)
+        self.__ini = Cfgini(self.__ini_path)
+        if not self.__ini.exists():
+            self.__ini.create(list_of_items)
+        self.__ini_initialized = True
 
     def get_ini_value(self, section, key, is_bool=False):
         self.check_for_all_init()
