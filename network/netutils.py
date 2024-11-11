@@ -1,4 +1,5 @@
 import logging
+import socket
 
 import requests
 
@@ -14,6 +15,19 @@ def test_with_head(url: str) -> bool:
         response = requests.head(url, timeout=5)
         return response.status_code < 400
     except requests.RequestException as e:
+        return False
+
+
+def is_internet_available() -> bool:
+    host = "8.8.8.8"
+    port = 53
+    timeout = 3
+    try:
+        socket.setdefaulttimeout(timeout)
+        # Tenta di connettersi al server DNS
+        socket.create_connection((host, port))
+        return True
+    except OSError:
         return False
 
 

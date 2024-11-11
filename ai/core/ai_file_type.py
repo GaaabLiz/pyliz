@@ -6,9 +6,10 @@ from network import netutils
 class AiFileType(Enum):
     HG_MMPROJ = "mmproj"
     HG_GGML = "ggml"
+    PT = "pt"
 
 
-class HgFile:
+class AiFile:
     def __init__(
             self,
             file_name: str,
@@ -21,3 +22,14 @@ class HgFile:
 
     def get_file_size_byte(self) -> int:
         return netutils.get_file_size_byte(self.url)
+
+
+class AiHgFile:
+    def __init__(
+            self,
+            repository: str,
+            file_name: str,
+    ):
+        self.repository = repository
+        self.file_name = file_name
+

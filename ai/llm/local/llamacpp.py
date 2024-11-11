@@ -83,8 +83,8 @@ class LlamaCpp:
             on_log: Callable[[str], None] = lambda x: None,
             on_progress: Callable[[int], None] = lambda x: None
     ):
-        on_log("LLava require " + str(len(source.hg_files)) + " files to download.")
-        for hg_file in source.hg_files:
+        on_log("LLava require " + str(len(source.ai_files)) + " files to download.")
+        for hg_file in source.ai_files:
             current_file = os.path.join(folder, hg_file.file_name)
             already_exist = os.path.exists(current_file)
             if already_exist:

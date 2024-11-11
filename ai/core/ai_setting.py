@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from ai.core.ai_dw_type import AiDownloadType
+from ai.core.ai_env import AiEnvType
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_models import AiModels
 from ai.core.ai_power import AiPower
@@ -17,6 +19,7 @@ class AiSetting:
             source_type: AiSourceType,
             power: AiPower,
             remote_url: str | None = None,
+            download_type: AiDownloadType | None = None,
             api_key: str | None = None,
     ):
         self.source: AiSource | None = None
@@ -25,11 +28,12 @@ class AiSetting:
         self.source_type = source_type
         self.remote_url = remote_url
         self.power = power
+        self.download_type = download_type
 
-        self.check()
-        self.setup()
+        self.setup_source()
 
-    def setup(self):
+
+    def setup_source(self):
         if self.model == AiModelList.LLAVA:
             self.source = AiModels.Llava.get_llava(self.power, self.source_type)
         elif self.model == AiModelList.OPEN_MISTRAL:
@@ -39,18 +43,11 @@ class AiSetting:
         elif self.model == AiModelList.GEMINI:
             self.source = AiModels.Gemini.get_flash()
         elif self.model == AiModelList.WHISPER:
-            self.source = AiModels.Whisper.get_whisper(self.power)
+            self.source = AiModels.Whisper.get_whisper(self.download_type, self.power)
         else:
             raise ValueError(f"Model not found: {self.model}.")
 
 
-    def check(self):
-        if self.source_type == AiSourceType.OLLAMA_SERVER and self.remote_url is None:
-            raise ValueError("Remote URL is required for Ollama Server.")
-        if self.source_type == AiSourceType.LMSTUDIO_SERVER and self.remote_url is None:
-            raise ValueError("Remote URL is required for LM Studio Server.")
-        if self.source_type == AiSourceType.API_MISTRAL and self.api_key is None:
-            raise ValueError("API Key is required for Mistral API.")
 
 
 class AiQueryType(Enum):
@@ -81,3 +78,7 @@ class AiQuery:
                 self.query_type = AiQueryType.AUDIO
         else:
             self.query_type = AiQueryType.TEXT
+
+
+    def check_requirements(self):
+        pass
