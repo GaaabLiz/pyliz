@@ -128,7 +128,7 @@ class AiModels:
                 return AiModels.Whisper.__get_model_lib_id(power)
             elif dw_type == AiDownloadType.HG:
                 return AiModels.Whisper.__get_hg_files(power)
-            elif dw_type == AiDownloadType.URL:
+            elif dw_type == AiDownloadType.WEB_FILES:
                 return AiModels.Whisper.__get_openai_urls(power)
             else:
                 raise Exception("No model found for the given power and method.")

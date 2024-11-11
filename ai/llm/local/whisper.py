@@ -24,14 +24,6 @@ class Whisper:
         modello = whisper.load_model(model_name, download_root=whisper_folder_path)
         return modello
 
-    @staticmethod
-    def get_model_obj_from_hf():
-        model_name = "Orenguteng/Llama-3-8B-Lexi-Uncensored-GGUF"
-        model_file = "Lexi-Llama-3-8B-Uncensored_Q4_K_M.gguf"
-        model_path = hf_hub_download(model_name,
-                                     filename=model_file,
-                                     local_dir=path_install,
-                                     )
 
     @staticmethod
     def transcribe(
@@ -40,7 +32,6 @@ class Whisper:
             video_path: str,
             whisper_folder_path: str,
     ) -> str:
-        setup2323()
         audio_id = datautils.gen_random_string(10)
         audio_path = os.path.join(temp_folder, f"{audio_id}.wav")
         logger.debug(f"Extracting audio from video {video_path} to {audio_path}")

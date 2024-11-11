@@ -18,6 +18,7 @@ class AiSource:
         self.ai_files = ai_files
         self.model_name = model_name
         self.env = env
+        self.hg_files = hg_files
         self.ai_dirs = ai_dirs
 
     def get_ggml_file(self) -> AiFile:
@@ -32,6 +33,11 @@ class AiSource:
                 return hg_file
         raise Exception("No mmproj file found in the source.")
 
+    def get_main_ai_file(self) -> AiFile:
+        if len(self.ai_files) == 1:
+            return self.ai_files[0]
+        raise Exception("More than one ai file found in the source.")
+
     def get_files_size_mb(self) -> float:
         total = 0.0
         for hg_file in self.ai_files:
@@ -40,5 +46,3 @@ class AiSource:
             total += size_mb
         return total
 
-    def is_remote(self) -> bool:
-        return self.url is not None

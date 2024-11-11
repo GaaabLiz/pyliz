@@ -1,5 +1,6 @@
 
 import os
+from tabnanny import check
 
 from loguru import logger
 
@@ -11,7 +12,7 @@ from ai.llm.local.llamacpp import LlamaCpp
 from ai.core.ai_setting import AiQuery
 from ai.core.ai_source_type import AiSourceType
 from ai.llm.local.whisper import Whisper
-from ai.util.ai_chkr import AiChecker
+from ai.util.ai_chkr import AiRunChecker
 from model.operation import Operation
 from util import datautils
 from util.pylizdir import PylizDir, PylizDirFoldersTemplate
@@ -52,11 +53,13 @@ class AiRunner:
     def run(self, query: AiQuery) -> Operation[str]:
         self.query = query
         try:
-            AiChecker.check_param_requirements(self.query)
-            AiChecker.check_source_requirements(self.query.setting, self.app_model_folder, self.app_folder_ai)
+            checker = AiRunChecker(self.query, self.app_model_folder, self.app_folder_ai)
+            checker.check_params()
+            checker.check_source()
         except Exception as e:
             logger.error(f"Error while checking requirements: {e}. Ai query aborted.")
             return Operation(status=False, error=str(e))
+        logger.info("Requirements checked. Proceeding with AI query...")
         if self.query.setting.source_type == AiSourceType.API_MISTRAL:
             return self.__handle_mistral()
         if self.query.setting.source_type == AiSourceType.LOCAL_LLAMACPP:

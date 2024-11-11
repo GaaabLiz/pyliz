@@ -4,6 +4,7 @@ import platform
 from datetime import datetime
 
 import requests
+from loguru import logger
 
 from model.fileType import FileType
 from model.operation import Operation
@@ -108,7 +109,7 @@ def download_file(url: str, destinazione: str, on_progress: callable) -> Operati
         percentuale = 0
 
         with open(destinazione, 'wb') as file:
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=1024):
                 if chunk:  # Filtra fuori i chunk vuoti
                     file.write(chunk)
                     scaricato += len(chunk)
@@ -118,6 +119,7 @@ def download_file(url: str, destinazione: str, on_progress: callable) -> Operati
                     if nuova_percentuale > percentuale:
                         percentuale = nuova_percentuale
                         on_progress(percentuale)
+        logger.trace(f"Download completed!")
         return Operation(status=True)
     except Exception as e:
         return Operation(status=False, error=str(e))

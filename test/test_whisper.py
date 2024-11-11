@@ -1,5 +1,6 @@
 import unittest
 
+from ai.core.ai_dw_type import AiDownloadType
 from ai.runner.ai_runner import AiRunner
 from ai.core.ai_model_list import AiModelList
 from ai.core.ai_power import AiPower
@@ -20,7 +21,7 @@ class TestWhisper(unittest.TestCase):
     def setUp(self):
         load_dotenv()
         print("Setting up test...")
-        pylizLogging.enable_logging("DEBUG", None, True)
+        pylizLogging.enable_logging("TRACE", None, True)
         self.pyliz_dir = PylizDir(".pyliztest")
         self.pyliz_dir.add_all_template_folders()
 
@@ -29,7 +30,8 @@ class TestWhisper(unittest.TestCase):
         setting = AiSetting(
             model=AiModelList.WHISPER,
             source_type=AiSourceType.LOCAL_WHISPER,
-            power=AiPower.MEDIUM
+            power=AiPower.MEDIUM,
+            download_type=AiDownloadType.WEB_FILES
         )
         query = AiQuery(setting=setting, prompt=None, payload_path=os.getenv("LOCAL_VIDEO_2_FOR_TEST"))
         result = AiRunner(self.pyliz_dir).run(query)
