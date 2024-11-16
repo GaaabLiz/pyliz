@@ -2,7 +2,6 @@ import json
 import os
 from typing import Optional, List
 
-from ai.model.ai_payload_info import AiPayloadMediaInfo
 from model.fileType import FileType
 from util import fileutils
 
@@ -76,9 +75,9 @@ class LizMedia:
     def to_json_only_ai(self):
         return json.dumps(self.to_dict_only_ai(), indent=4)
 
-    def apply_ai_info(self, ai_info: AiPayloadMediaInfo):
-        self.ai_ocr_text = ai_info.text
-        self.ai_file_name = ai_info.filename
-        self.ai_description = ai_info.description
-        self.ai_tags = ai_info.tags
-        self.ai_scanned = True
+    # def apply_ai_info(self, ai_info: AiPayloadMediaInfo):
+    #     self.ai_ocr_text = ai_info.text
+    #     self.ai_file_name = ai_info.filename
+    #     self.ai_description = ai_info.description
+    #     self.ai_tags = ai_info.tags
+    #     self.ai_scanned = True
