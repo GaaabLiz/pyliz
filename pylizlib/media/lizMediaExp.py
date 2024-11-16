@@ -1,5 +1,5 @@
-from media.liz_media import LizMedia
-from util import fileutils
+from pylizlib.media.liz_media import LizMedia
+from pylizlib.util import fileutils
 
 
 class LizMediaExporter:

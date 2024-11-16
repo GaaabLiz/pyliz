@@ -1,6 +1,6 @@
 from requests import Response
 
-from network.netrestype import NetResponseType
+from pylizlib.network.netrestype import NetResponseType
 
 
 class NetResponse:

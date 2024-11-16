@@ -1,9 +1,9 @@
 import base64
 
-from media.api.data.eagleapi import EAGLE_LOCALHOST_URL, EagleApi
-from media.api.dto.eagle_dto import EagleDto
+from pylizlib.media.api.data.eagleapi import EAGLE_LOCALHOST_URL, EagleApi
+from pylizlib.media.api.dto.eagle_dto import EagleDto
 from old_code.liz_image import LizImage
-from model.operation import Operation
+from pylizlib.model.operation import Operation
 
 
 class Eagleliz:

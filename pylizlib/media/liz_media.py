@@ -2,8 +2,8 @@ import json
 import os
 from typing import Optional, List
 
-from model.fileType import FileType
-from util import fileutils
+from pylizlib.model.fileType import FileType
+from pylizlib.util import fileutils
 
 
 class LizMedia:

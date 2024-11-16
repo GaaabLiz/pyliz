@@ -1,5 +1,5 @@
-from util import osutils, pathutils
-from util.loggiz import Loggiz
+from pylizlib.util import pathutils
+from pylizlib.util.loggiz import Loggiz
 
 
 class Easinit:

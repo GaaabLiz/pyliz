@@ -1,10 +1,9 @@
-import logging
 import socket
 
 import requests
 
-from network.netres import NetResponse
-from network.netrestype import NetResponseType
+from pylizlib.network.netres import NetResponse
+from pylizlib.network.netrestype import NetResponseType
 
 
 # logging.basicConfig(level=logging.DEBUG)

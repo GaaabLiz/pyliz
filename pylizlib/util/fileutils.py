@@ -6,8 +6,8 @@ from datetime import datetime
 import requests
 from loguru import logger
 
-from model.fileType import FileType
-from model.operation import Operation
+from pylizlib.model.fileType import FileType
+from pylizlib.model.operation import Operation
 
 image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
 video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']

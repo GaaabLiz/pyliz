@@ -1,7 +1,5 @@
 from enum import Enum
 
-from util import fileutils
-
 
 class FileType(Enum):
     IMAGE = "IMAGE"

@@ -1,4 +1,4 @@
-from network.netutils import exec_get, exec_post
+from pylizlib.network.netutils import exec_get, exec_post
 
 EAGLE_PORT = "41595"
 EAGLE_LOCALHOST_URL = "http://localhost:" + EAGLE_PORT
