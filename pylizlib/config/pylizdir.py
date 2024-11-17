@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from typing import List
 
 from pylizlib.os import pathutils
 from pylizlib.config.cfgutils import Cfgini, CfgItem
@@ -23,18 +24,18 @@ class PylizDirFolder:
 
 class PylizDir:
 
-    __path: str = None
-    __folder_name: str = None
-    __folders: [PylizDirFolder] = []
-    __ini: Cfgini = None
-    __ini_path: str = None
+    __path: str | None = None
+    __folder_name: str | None = None
+    __folders: List[PylizDirFolder] = []
+    __ini: Cfgini | None = None
+    __ini_path: str | None = None
     __ini_initialized = False
 
 
     def __init__(self, folder_name: str):
         # Settaggio path
         self.__folder_name = folder_name
-        self.__path = pathutils.get_app_home_dir(folder_name)
+        self.__path: str = pathutils.get_app_home_dir(folder_name)
         # Cartella pyliz
         pathutils.check_path(self.__path, True)
         pathutils.check_path_dir(self.__path)
@@ -52,7 +53,7 @@ class PylizDir:
         self.__folders.append(PylizDirFolder(key, folder_name, folder_path))
         return folder_path
 
-    def add_template_folder(self, template_key: PylizDirFoldersTemplate, name: str = None):
+    def add_template_folder(self, template_key: PylizDirFoldersTemplate, name: str | None = None):
         folder_name = name if name is not None else template_key.value
         self.add_folder(template_key.value, folder_name)
 
@@ -79,7 +80,7 @@ class PylizDir:
 
     # INI --------------------------------------------
 
-    def create_ini(self, config_name: str, list_of_items: [CfgItem] = None):
+    def create_ini(self, config_name: str, list_of_items: List[CfgItem] | None = None):
         self.__ini_path = os.path.join(self.__path, config_name)
         self.__ini = Cfgini(self.__ini_path)
         if not self.__ini.exists():
