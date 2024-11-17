@@ -3,7 +3,7 @@ import os
 from typing import Optional, List
 
 from pylizlib.model.fileType import FileType
-from pylizlib.util import fileutils
+from pylizlib.os import fileutils
 
 
 class LizMedia:
@@ -75,9 +75,12 @@ class LizMedia:
     def to_json_only_ai(self):
         return json.dumps(self.to_dict_only_ai(), indent=4)
 
-    # def apply_ai_info(self, ai_info: AiPayloadMediaInfo):
-    #     self.ai_ocr_text = ai_info.text
-    #     self.ai_file_name = ai_info.filename
-    #     self.ai_description = ai_info.description
-    #     self.ai_tags = ai_info.tags
-    #     self.ai_scanned = True
+
+class LizMediaExporter:
+
+    def __init__(self, media: LizMedia):
+        self.media = media
+
+    def export_to_json(self):
+        fileutils.write_json_to_file(self.media.path, self.media.file_name + ".json", self.media.to_json_only_ai())
+

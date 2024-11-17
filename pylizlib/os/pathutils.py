@@ -1,7 +1,7 @@
 import os
 from typing import Callable, List
 
-from pylizlib.util import fileutils
+from pylizlib.os import fileutils
 
 
 def get_home_dir():

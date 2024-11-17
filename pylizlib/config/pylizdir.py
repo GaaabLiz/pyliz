@@ -1,8 +1,8 @@
 import os
 from enum import Enum
 
-from pylizlib.util import pathutils
-from pylizlib.util.cfgutils import Cfgini, CfgItem
+from pylizlib.os import pathutils
+from pylizlib.config.cfgutils import Cfgini, CfgItem
 from dataclasses import dataclass
 
 
