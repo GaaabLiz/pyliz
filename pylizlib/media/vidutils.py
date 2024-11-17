@@ -1,7 +1,9 @@
 import os
+from typing import Tuple
 
 import cv2
 import ffmpeg
+import librosa
 import numpy as np
 from loguru import logger
 
@@ -14,6 +16,30 @@ class VideoUtils:
     def extract_audio(video_path, audio_path):
         # Estrae solo la traccia audio dal video
         ffmpeg.input(video_path).output(audio_path).run(overwrite_output=True)
+
+    @staticmethod
+    def _extract_audio_librosa(video_path: str, target_sampling_rate) -> Tuple[np.ndarray, int]:
+        """Extract audio from video file and return as numpy array with sampling rate using librosa"""
+        try:
+            # Load audio using librosa
+            raw_audio, original_sampling_rate = librosa.load(
+                video_path,
+                sr=target_sampling_rate,
+                mono=True
+            )
+
+            # Ensure float32 dtype and normalize
+            raw_audio = raw_audio.astype(np.float32)
+            if np.abs(raw_audio).max() > 1.0:
+                raw_audio = raw_audio / np.abs(raw_audio).max()
+
+            logger.debug(f"Raw audio shape: {raw_audio.shape}, dtype: {raw_audio.dtype}")
+
+            return raw_audio, original_sampling_rate
+
+        except Exception as e:
+            logger.error(f"Error extracting audio with librosa: {str(e)}")
+            raise
 
     @staticmethod
     def extract_frames(video_path, output_folder, difference_threshold=30):
