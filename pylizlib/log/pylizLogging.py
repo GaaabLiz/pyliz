@@ -27,7 +27,7 @@ def enable_logging(level="DEBUG", file_path=None, to_stdout=True):
         logger.add(
             lambda msg: print(msg, end=""),  # Stampare direttamente a stdout
             level=level,
-            format="{time} {level} {message}"
+            format="{time:HH:mm:ss} {level} {message}"
         )
 
     logger.info("Logging abilitato per la libreria.")
