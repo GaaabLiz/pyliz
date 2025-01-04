@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.1.8'
+VERSION = '0.1.9'
 DESCRIPTION = 'Personal python library for general purposes.'
 LONG_DESCRIPTION = 'A personal python library for general purposes.'
 
@@ -22,7 +22,7 @@ setup(
     long_description=long_description,
     packages=find_packages(),
     install_requires=[
-        "requests", "loguru",
+        "requests",
     ],
     keywords=['python', 'video', 'utilities'],
     classifiers=[
