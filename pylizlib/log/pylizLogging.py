@@ -1,22 +1,28 @@
-
-
-# log_config.py
+# pylizlib/log.py
 from loguru import logger as base_logger
 
-# Crea un logger specifico per A
+# Crea un logger specifico per PylizLib
 logger = base_logger.bind(library="PylizLib")
 
-# Disattiva tutti i log all'inizio
-logger.remove()
+# Mantieni una lista di ID delle destinazioni per rimuoverle
+_destinations = []
 
-
+# Disattiva tutti i log globali all'inizio
+base_logger.remove()
 
 def enable_logging(level="DEBUG", file_path=None, to_stdout=True):
-    """Abilita il logging con il livello e il percorso file opzionali per A."""
+    """Abilita il logging con il livello e il percorso file opzionali per PylizLib."""
+
+    global _destinations
+
+    # Rimuovi eventuali destinazioni già aggiunte
+    for dest in _destinations:
+        logger.remove(dest)
+    _destinations = []
 
     # Log su file
     if file_path:
-        logger.add(
+        dest_file = logger.add(
             file_path,
             level=level,
             format="{time} {level} {extra[library]} {message}",
@@ -24,21 +30,15 @@ def enable_logging(level="DEBUG", file_path=None, to_stdout=True):
             compression="zip",
             serialize=False
         )
+        _destinations.append(dest_file)
 
     # Log su stdout
     if to_stdout:
-        logger.add(
+        dest_stdout = logger.add(
             lambda msg: print(msg, end=""),  # Stampare direttamente a stdout
             level=level,
             format="{time:HH:mm:ss} {level} {extra[library]} {message}"
         )
+        _destinations.append(dest_stdout)
 
     logger.info("Logging abilitato per la libreria PylizLib.")
-
-
-def test_logging():
-    logger.debug("This is a debug message from PylizLib")
-    logger.info("This is an info message from PylizLib")
-    logger.warning("This is a warning message from PylizLib")
-    logger.error("This is an error message from PylizLib")
-    logger.critical("This is a critical message from PylizLib")
