@@ -23,9 +23,9 @@ def is_internet_available() -> bool:
     timeout = 3
     try:
         socket.setdefaulttimeout(timeout)
-        # Tenta di connettersi al server DNS
-        socket.create_connection((host, port))
-        return True
+        # Utilizza un blocco `with` per gestire automaticamente il socket
+        with socket.create_connection((host, port)):
+            return True
     except OSError:
         return False
 
