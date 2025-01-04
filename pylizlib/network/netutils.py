@@ -2,6 +2,7 @@ import socket
 
 import requests
 
+from pylizlib.log.pylizLogging import logger
 from pylizlib.network.netres import NetResponse
 from pylizlib.network.netrestype import NetResponseType
 
@@ -32,6 +33,7 @@ def is_internet_available() -> bool:
 
 def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
     try:
+        logger.debug("Executing GET request on URL: " + url)
         response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
