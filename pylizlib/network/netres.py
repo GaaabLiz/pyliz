@@ -1,5 +1,6 @@
 from requests import Response
 
+from pylizlib.log.pylizLogging import logger
 from pylizlib.network.netrestype import NetResponseType
 
 
@@ -11,6 +12,8 @@ class NetResponse:
             response_type: NetResponseType,
             exception=None
     ):
+        self.has_json_header = None
+        self.json = None
         self.response = response
         self.hasResponse = self.response is not None
         if self.hasResponse:
@@ -20,8 +23,15 @@ class NetResponse:
             self.code = None
         self.type = response_type
         self.exception = exception
-        if self.hasResponse and self.code == 200:
-            self.json = self.response.json()
+        if self.hasResponse:
+            self.has_json_header = "application/json" in self.response.headers.get("Content-Type", "")
+            if self.has_json_header:
+                self.json = self.response.json()
+        self.__log()
+
+
+    def __log(self):
+        logger.trace(f"NetResponse: code={self.code} | type={self.type} | jsonHeader={self.has_json_header}")
 
     def __str__(self):
         return ""
