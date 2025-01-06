@@ -33,7 +33,7 @@ def is_internet_available() -> bool:
 
 def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
     try:
-        logger.debug("Executing GET request on URL: " + url)
+        logger.trace("Executing GET request on URL: " + url)
         response = requests.get(url, allow_redirects=True)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
@@ -53,6 +53,7 @@ def exec_post(
         verify_bool: bool,
 ) -> NetResponse:
     try:
+        logger.trace("Executing POST request on URL: " + url)
         response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
