@@ -23,3 +23,16 @@ class JsonUtils:
         except JSONDecodeError:
             return False
 
+    @staticmethod
+    def clean_json_apici(json_string):
+        # Rimuovi il prefisso '''json
+        if json_string.startswith("```json"):
+            json_string = json_string[len("```json"):]
+        # Rimuovi il suffisso ''' se presente
+        if json_string.endswith("```"):
+            json_string = json_string[:-len("```")]
+        # Elimina eventuali spazi bianchi in eccesso
+        json_string = json_string.strip()
+        # Carica il JSON
+        return json_string
+
