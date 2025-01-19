@@ -136,6 +136,24 @@ def count_pathsub_dirs(path):
     return count
 
 
+def get_filename(path):
+    """
+    Get the filename from a path
+    :param path: path to get the filename from
+    :return: the filename from the path
+    """
+    return os.path.basename(path)
+
+
+def get_filename_no_ext(path):
+    """
+    Get the filename without the extension from a path
+    :param path: path to get the filename without the extension from
+    :return: the filename without the extension from the path
+    """
+    return os.path.splitext(os.path.basename(path))[0]
+
+
 def count_pathsub_elements(path):
     """
     Count the number of files and directories in a path including subdirectories

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import platform
@@ -136,3 +137,12 @@ def write_json_to_file(path, filename, content):
     # Scrive il contenuto JSON nel file
     with open(file_path, 'w') as json_file:
         json.dump(content, json_file, indent=4)
+
+
+def gen_file_hash(path):
+    sha256_hash = hashlib.sha256()
+    # Leggi il file a blocchi per evitare problemi con file di grandi dimensioni
+    with open(path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
