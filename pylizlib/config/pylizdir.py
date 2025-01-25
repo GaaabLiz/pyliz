@@ -12,6 +12,7 @@ class PylizDirFoldersTemplate(Enum):
     AI = "ai"
     TEMP = "temp"
     LOGS = "logs"
+    RESULTS = "results"
 
 
 @dataclass
@@ -71,8 +72,13 @@ class PylizDir:
                 return folder.path
         return None
 
-    def get_folder_template_path(self, template_key: PylizDirFoldersTemplate):
-        return self.get_folder_path(template_key.value)
+    def get_folder_template_path(self, template_key: PylizDirFoldersTemplate, add_if_not_exist: bool = False):
+        path = self.get_folder_path(template_key.value)
+        if path is None and add_if_not_exist:
+            return self.add_template_folder(template_key)
+        else:
+            return path
+
 
     def check_for_all_init(self):
         if not self.__ini.exists() or not self.__ini_initialized:
