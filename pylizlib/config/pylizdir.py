@@ -34,6 +34,10 @@ class PylizDir:
 
 
     def __init__(self, folder_name: str):
+        """
+        Constructor for PylizDir class.
+        :param folder_name: Full name of the folder.
+        """
         # Settaggio path
         self.__folder_name = folder_name
         self.__path: str = pathutils.get_app_home_dir(folder_name)

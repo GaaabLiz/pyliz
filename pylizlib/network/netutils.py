@@ -1,13 +1,12 @@
 import socket
 
 import requests
+from loguru import logger
 
-from pylizlib.log.pylizLogging import logger
 from pylizlib.network.netres import NetResponse
 from pylizlib.network.netrestype import NetResponseType
 
 
-# logging.basicConfig(level=logging.DEBUG)
 
 
 def test_with_head(url: str) -> bool:
