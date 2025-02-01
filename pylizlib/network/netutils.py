@@ -1,4 +1,5 @@
 import socket
+from typing import Mapping
 
 import requests
 from loguru import logger
@@ -6,6 +7,8 @@ from loguru import logger
 from pylizlib.network.netres import NetResponse
 from pylizlib.network.netrestype import NetResponseType
 
+
+HEADER_ONLY_CONTENT_JSON = {"Content-Type": "application/json"}
 
 
 
@@ -30,10 +33,14 @@ def is_internet_available() -> bool:
         return False
 
 
-def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
+def exec_get(
+        url: str,
+        headers: Mapping[str, str | bytes | None] | None = None,
+        sec_timeout: int | None = 10
+) -> NetResponse:
     try:
         logger.trace("Executing GET request on URL: " + url)
-        response = requests.get(url, allow_redirects=True)
+        response = requests.get(url, allow_redirects=True, headers=headers, timeout=sec_timeout)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
@@ -49,11 +56,12 @@ def exec_get(url: str, sec_timeout: int | None = 10) -> NetResponse:
 def exec_post(
         url: str,
         payload,
-        verify_bool: bool,
+        headers: Mapping[str, str | bytes | None] | None = None,
+        verify_bool: bool = False,
 ) -> NetResponse:
     try:
         logger.trace("Executing POST request on URL: " + url)
-        response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True)
+        response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
