@@ -4,6 +4,7 @@ gitdb==4.0.11
 GitPython==3.1.43
 idna==3.10
 loguru==0.7.2
+python-dotenv==1.0.1
 requests==2.32.3
 setuptools==75.5.0
 smmap==5.0.1
