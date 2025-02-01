@@ -20,3 +20,6 @@ export:
 
 upload:
 	twine upload dist/*
+
+docs:
+	pdoc -o docs -d markdown pylizlib
