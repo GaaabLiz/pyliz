@@ -1,5 +1,5 @@
 import os
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from pylizlib.os import fileutils
 
@@ -217,3 +217,42 @@ def dir_contains_video(path: str):
     return len(files) > 0
 
 
+def dir_contains(directory: str, names: list[str], at_least_one: bool = False) -> bool:
+    """
+    Check if a directory contains a list of folders/files.
+    :param directory: path to the directory to check
+    :param names: list of folder/files names to check
+    :param at_least_one: boolean flag to check if at least one of the folders is present
+    :return: True if the directory contains all (or at least one of) the folders/files, False otherwise
+    """
+    check_path_dir(directory)
+    found = 0
+    for folder_name in names:
+        current = os.path.join(directory, folder_name)
+        if os.path.exists(current):
+            found += 1
+    if at_least_one:
+        return found > 0
+    return found == len(names)
+
+
+def get_folders_from(directory) -> list[str]:
+    """
+    Get a list of folders paths from a path
+    :param directory: path to get the folders from
+    :return: list of folders paths from the path
+    """
+    return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
+
+
+def get_file_from(directory, extension: Optional[str] = None) -> list[str]:
+    """
+    Get a list of file paths from a path
+    :param directory: path to get the files from
+    :param extension: optional extension to filter the files
+    :return: list of file paths from the path
+    """
+    db = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+    if extension is not None:
+        return [f for f in db if f.endswith(extension)]
+    return db
