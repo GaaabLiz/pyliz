@@ -1,5 +1,5 @@
 import os
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, LiteralString
 
 from pylizlib.os import fileutils
 
@@ -236,23 +236,40 @@ def dir_contains(directory: str, names: list[str], at_least_one: bool = False) -
     return found == len(names)
 
 
-def get_folders_from(directory) -> list[str]:
+def get_folders_from(
+        directory,
+        recursive: bool = False
+) -> list[ LiteralString | str | bytes]:
     """
     Get a list of folders paths from a path
     :param directory: path to get the folders from
+    :param recursive: boolean flag to scan the directory recursively
     :return: list of folders paths from the path
     """
+    if recursive:
+        return [os.path.join(root, d) for root, dirs, files in os.walk(directory) for d in dirs]
     return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
 
-def get_file_from(directory, extension: Optional[str] = None) -> list[str]:
+def get_files_from(
+        directory,
+        recursive:bool = False,
+        extension: Optional[str] = None
+) -> list[ LiteralString | str | bytes]:
     """
     Get a list of file paths from a path
     :param directory: path to get the files from
+    :param recursive: boolean flag to scan the directory recursively
     :param extension: optional extension to filter the files
     :return: list of file paths from the path
     """
-    db = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+    db = []
+    if recursive:
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                db.append(os.path.join(root, file))
+    else:
+        db = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     if extension is not None:
         return [f for f in db if f.endswith(extension)]
     return db
