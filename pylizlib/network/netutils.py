@@ -17,6 +17,7 @@ def test_with_head(url: str) -> bool:
         response = requests.head(url, timeout=5)
         return response.status_code < 400
     except requests.RequestException as e:
+        logger.error("Error while testing URL: " + url + " - " + str(e))
         return False
 
 

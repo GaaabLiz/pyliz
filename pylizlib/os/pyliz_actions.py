@@ -1,7 +1,6 @@
 import os
 import subprocess
 from abc import ABC
-from collections.abc import Sequence
 from typing import Callable
 
 from git import Repo
@@ -9,7 +8,7 @@ from git import Repo
 from pylizlib.data import datautils
 from pylizlib.model.pyliz_script import PylizBaseAction
 from pylizlib.os import pathutils, osutils
-from pylizlib.os.pathutils import check_path_dir, check_path
+from pylizlib.os.pathutils import check_path
 
 
 class ActionGitClone(PylizBaseAction, ABC):
