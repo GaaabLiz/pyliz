@@ -78,6 +78,15 @@
             <li>
                     <a class="function" href="#dir_contains_video">dir_contains_video</a>
             </li>
+            <li>
+                    <a class="function" href="#dir_contains">dir_contains</a>
+            </li>
+            <li>
+                    <a class="function" href="#get_folders_from">get_folders_from</a>
+            </li>
+            <li>
+                    <a class="function" href="#get_files_from">get_files_from</a>
+            </li>
     </ul>
 
 
@@ -100,7 +109,7 @@
                         <label class="view-source-button" for="mod-pathutils-view-source"><span>View Source</span></label>
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">List</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">LiteralString</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a>
 </span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">pylizlib.os</span><span class="w"> </span><span class="kn">import</span> <span class="n">fileutils</span>
 </span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a>
@@ -316,6 +325,64 @@
 </span><span id="L-215"><a href="#L-215"><span class="linenos">215</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="L-216"><a href="#L-216"><span class="linenos">216</span></a>    <span class="n">files</span> <span class="o">=</span> <span class="n">scan_directory_match_bool</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">fileutils</span><span class="o">.</span><span class="n">is_video_file</span><span class="p">)</span>
 </span><span id="L-217"><a href="#L-217"><span class="linenos">217</span></a>    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+</span><span id="L-218"><a href="#L-218"><span class="linenos">218</span></a>
+</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a>
+</span><span id="L-220"><a href="#L-220"><span class="linenos">220</span></a><span class="k">def</span><span class="w"> </span><span class="nf">dir_contains</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">at_least_one</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+</span><span id="L-221"><a href="#L-221"><span class="linenos">221</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-222"><a href="#L-222"><span class="linenos">222</span></a><span class="sd">    Check if a directory contains a list of folders/files.</span>
+</span><span id="L-223"><a href="#L-223"><span class="linenos">223</span></a><span class="sd">    :param directory: path to the directory to check</span>
+</span><span id="L-224"><a href="#L-224"><span class="linenos">224</span></a><span class="sd">    :param names: list of folder/files names to check</span>
+</span><span id="L-225"><a href="#L-225"><span class="linenos">225</span></a><span class="sd">    :param at_least_one: boolean flag to check if at least one of the folders is present</span>
+</span><span id="L-226"><a href="#L-226"><span class="linenos">226</span></a><span class="sd">    :return: True if the directory contains all (or at least one of) the folders/files, False otherwise</span>
+</span><span id="L-227"><a href="#L-227"><span class="linenos">227</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-228"><a href="#L-228"><span class="linenos">228</span></a>    <span class="n">check_path_dir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+</span><span id="L-229"><a href="#L-229"><span class="linenos">229</span></a>    <span class="n">found</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="L-230"><a href="#L-230"><span class="linenos">230</span></a>    <span class="k">for</span> <span class="n">folder_name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+</span><span id="L-231"><a href="#L-231"><span class="linenos">231</span></a>        <span class="n">current</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">folder_name</span><span class="p">)</span>
+</span><span id="L-232"><a href="#L-232"><span class="linenos">232</span></a>        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">current</span><span class="p">):</span>
+</span><span id="L-233"><a href="#L-233"><span class="linenos">233</span></a>            <span class="n">found</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="L-234"><a href="#L-234"><span class="linenos">234</span></a>    <span class="k">if</span> <span class="n">at_least_one</span><span class="p">:</span>
+</span><span id="L-235"><a href="#L-235"><span class="linenos">235</span></a>        <span class="k">return</span> <span class="n">found</span> <span class="o">&gt;</span> <span class="mi">0</span>
+</span><span id="L-236"><a href="#L-236"><span class="linenos">236</span></a>    <span class="k">return</span> <span class="n">found</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span>
+</span><span id="L-237"><a href="#L-237"><span class="linenos">237</span></a>
+</span><span id="L-238"><a href="#L-238"><span class="linenos">238</span></a>
+</span><span id="L-239"><a href="#L-239"><span class="linenos">239</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_folders_from</span><span class="p">(</span>
+</span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a>        <span class="n">directory</span><span class="p">,</span>
+</span><span id="L-241"><a href="#L-241"><span class="linenos">241</span></a>        <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="L-242"><a href="#L-242"><span class="linenos">242</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span> <span class="n">LiteralString</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bytes</span><span class="p">]:</span>
+</span><span id="L-243"><a href="#L-243"><span class="linenos">243</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-244"><a href="#L-244"><span class="linenos">244</span></a><span class="sd">    Get a list of folders paths from a path</span>
+</span><span id="L-245"><a href="#L-245"><span class="linenos">245</span></a><span class="sd">    :param directory: path to get the folders from</span>
+</span><span id="L-246"><a href="#L-246"><span class="linenos">246</span></a><span class="sd">    :param recursive: boolean flag to scan the directory recursively</span>
+</span><span id="L-247"><a href="#L-247"><span class="linenos">247</span></a><span class="sd">    :return: list of folders paths from the path</span>
+</span><span id="L-248"><a href="#L-248"><span class="linenos">248</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-249"><a href="#L-249"><span class="linenos">249</span></a>    <span class="k">if</span> <span class="n">recursive</span><span class="p">:</span>
+</span><span id="L-250"><a href="#L-250"><span class="linenos">250</span></a>        <span class="k">return</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">dirs</span><span class="p">,</span> <span class="n">files</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">dirs</span><span class="p">]</span>
+</span><span id="L-251"><a href="#L-251"><span class="linenos">251</span></a>    <span class="k">return</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">d</span><span class="p">))]</span>
+</span><span id="L-252"><a href="#L-252"><span class="linenos">252</span></a>
+</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a>
+</span><span id="L-254"><a href="#L-254"><span class="linenos">254</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_files_from</span><span class="p">(</span>
+</span><span id="L-255"><a href="#L-255"><span class="linenos">255</span></a>        <span class="n">directory</span><span class="p">,</span>
+</span><span id="L-256"><a href="#L-256"><span class="linenos">256</span></a>        <span class="n">recursive</span><span class="p">:</span><span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="L-257"><a href="#L-257"><span class="linenos">257</span></a>        <span class="n">extension</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="L-258"><a href="#L-258"><span class="linenos">258</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span> <span class="n">LiteralString</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bytes</span><span class="p">]:</span>
+</span><span id="L-259"><a href="#L-259"><span class="linenos">259</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-260"><a href="#L-260"><span class="linenos">260</span></a><span class="sd">    Get a list of file paths from a path</span>
+</span><span id="L-261"><a href="#L-261"><span class="linenos">261</span></a><span class="sd">    :param directory: path to get the files from</span>
+</span><span id="L-262"><a href="#L-262"><span class="linenos">262</span></a><span class="sd">    :param recursive: boolean flag to scan the directory recursively</span>
+</span><span id="L-263"><a href="#L-263"><span class="linenos">263</span></a><span class="sd">    :param extension: optional extension to filter the files</span>
+</span><span id="L-264"><a href="#L-264"><span class="linenos">264</span></a><span class="sd">    :return: list of file paths from the path</span>
+</span><span id="L-265"><a href="#L-265"><span class="linenos">265</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-266"><a href="#L-266"><span class="linenos">266</span></a>    <span class="n">db</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="L-267"><a href="#L-267"><span class="linenos">267</span></a>    <span class="k">if</span> <span class="n">recursive</span><span class="p">:</span>
+</span><span id="L-268"><a href="#L-268"><span class="linenos">268</span></a>        <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">dirs</span><span class="p">,</span> <span class="n">files</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
+</span><span id="L-269"><a href="#L-269"><span class="linenos">269</span></a>            <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+</span><span id="L-270"><a href="#L-270"><span class="linenos">270</span></a>                <span class="n">db</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">file</span><span class="p">))</span>
+</span><span id="L-271"><a href="#L-271"><span class="linenos">271</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-272"><a href="#L-272"><span class="linenos">272</span></a>        <span class="n">db</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">f</span><span class="p">))]</span>
+</span><span id="L-273"><a href="#L-273"><span class="linenos">273</span></a>    <span class="k">if</span> <span class="n">extension</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-274"><a href="#L-274"><span class="linenos">274</span></a>        <span class="k">return</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">extension</span><span class="p">)]</span>
+</span><span id="L-275"><a href="#L-275"><span class="linenos">275</span></a>    <span class="k">return</span> <span class="n">db</span>
 </span></pre></div>
 
 
@@ -849,6 +916,126 @@ If any of the conditions is not met, an exception is raised
             <div class="docstring"><p>Check if a directory contains a video file
 :param path: path to the directory to check
 :return: True if the directory contains a video file, False otherwise</p>
+</div>
+
+
+                </section>
+                <section id="dir_contains">
+                            <input id="dir_contains-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">dir_contains</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">directory</span><span class="p">:</span> <span class="nb">str</span>, </span><span class="param"><span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>, </span><span class="param"><span class="n">at_least_one</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></span><span class="return-annotation">) -> <span class="nb">bool</span>:</span></span>
+
+                <label class="view-source-button" for="dir_contains-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#dir_contains"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="dir_contains-221"><a href="#dir_contains-221"><span class="linenos">221</span></a><span class="k">def</span><span class="w"> </span><span class="nf">dir_contains</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">at_least_one</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+</span><span id="dir_contains-222"><a href="#dir_contains-222"><span class="linenos">222</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="dir_contains-223"><a href="#dir_contains-223"><span class="linenos">223</span></a><span class="sd">    Check if a directory contains a list of folders/files.</span>
+</span><span id="dir_contains-224"><a href="#dir_contains-224"><span class="linenos">224</span></a><span class="sd">    :param directory: path to the directory to check</span>
+</span><span id="dir_contains-225"><a href="#dir_contains-225"><span class="linenos">225</span></a><span class="sd">    :param names: list of folder/files names to check</span>
+</span><span id="dir_contains-226"><a href="#dir_contains-226"><span class="linenos">226</span></a><span class="sd">    :param at_least_one: boolean flag to check if at least one of the folders is present</span>
+</span><span id="dir_contains-227"><a href="#dir_contains-227"><span class="linenos">227</span></a><span class="sd">    :return: True if the directory contains all (or at least one of) the folders/files, False otherwise</span>
+</span><span id="dir_contains-228"><a href="#dir_contains-228"><span class="linenos">228</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="dir_contains-229"><a href="#dir_contains-229"><span class="linenos">229</span></a>    <span class="n">check_path_dir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+</span><span id="dir_contains-230"><a href="#dir_contains-230"><span class="linenos">230</span></a>    <span class="n">found</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="dir_contains-231"><a href="#dir_contains-231"><span class="linenos">231</span></a>    <span class="k">for</span> <span class="n">folder_name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+</span><span id="dir_contains-232"><a href="#dir_contains-232"><span class="linenos">232</span></a>        <span class="n">current</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">folder_name</span><span class="p">)</span>
+</span><span id="dir_contains-233"><a href="#dir_contains-233"><span class="linenos">233</span></a>        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">current</span><span class="p">):</span>
+</span><span id="dir_contains-234"><a href="#dir_contains-234"><span class="linenos">234</span></a>            <span class="n">found</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="dir_contains-235"><a href="#dir_contains-235"><span class="linenos">235</span></a>    <span class="k">if</span> <span class="n">at_least_one</span><span class="p">:</span>
+</span><span id="dir_contains-236"><a href="#dir_contains-236"><span class="linenos">236</span></a>        <span class="k">return</span> <span class="n">found</span> <span class="o">&gt;</span> <span class="mi">0</span>
+</span><span id="dir_contains-237"><a href="#dir_contains-237"><span class="linenos">237</span></a>    <span class="k">return</span> <span class="n">found</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Check if a directory contains a list of folders/files.
+:param directory: path to the directory to check
+:param names: list of folder/files names to check
+:param at_least_one: boolean flag to check if at least one of the folders is present
+:return: True if the directory contains all (or at least one of) the folders/files, False otherwise</p>
+</div>
+
+
+                </section>
+                <section id="get_folders_from">
+                            <input id="get_folders_from-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">get_folders_from</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">directory</span>,</span><span class="param">	<span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></span><span class="return-annotation">) -> <span class="nb">list</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">LiteralString</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]]</span>:</span></span>
+
+                <label class="view-source-button" for="get_folders_from-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#get_folders_from"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_folders_from-240"><a href="#get_folders_from-240"><span class="linenos">240</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_folders_from</span><span class="p">(</span>
+</span><span id="get_folders_from-241"><a href="#get_folders_from-241"><span class="linenos">241</span></a>        <span class="n">directory</span><span class="p">,</span>
+</span><span id="get_folders_from-242"><a href="#get_folders_from-242"><span class="linenos">242</span></a>        <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="get_folders_from-243"><a href="#get_folders_from-243"><span class="linenos">243</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span> <span class="n">LiteralString</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bytes</span><span class="p">]:</span>
+</span><span id="get_folders_from-244"><a href="#get_folders_from-244"><span class="linenos">244</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="get_folders_from-245"><a href="#get_folders_from-245"><span class="linenos">245</span></a><span class="sd">    Get a list of folders paths from a path</span>
+</span><span id="get_folders_from-246"><a href="#get_folders_from-246"><span class="linenos">246</span></a><span class="sd">    :param directory: path to get the folders from</span>
+</span><span id="get_folders_from-247"><a href="#get_folders_from-247"><span class="linenos">247</span></a><span class="sd">    :param recursive: boolean flag to scan the directory recursively</span>
+</span><span id="get_folders_from-248"><a href="#get_folders_from-248"><span class="linenos">248</span></a><span class="sd">    :return: list of folders paths from the path</span>
+</span><span id="get_folders_from-249"><a href="#get_folders_from-249"><span class="linenos">249</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="get_folders_from-250"><a href="#get_folders_from-250"><span class="linenos">250</span></a>    <span class="k">if</span> <span class="n">recursive</span><span class="p">:</span>
+</span><span id="get_folders_from-251"><a href="#get_folders_from-251"><span class="linenos">251</span></a>        <span class="k">return</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">dirs</span><span class="p">,</span> <span class="n">files</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">dirs</span><span class="p">]</span>
+</span><span id="get_folders_from-252"><a href="#get_folders_from-252"><span class="linenos">252</span></a>    <span class="k">return</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">d</span><span class="p">))]</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Get a list of folders paths from a path
+:param directory: path to get the folders from
+:param recursive: boolean flag to scan the directory recursively
+:return: list of folders paths from the path</p>
+</div>
+
+
+                </section>
+                <section id="get_files_from">
+                            <input id="get_files_from-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">get_files_from</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">directory</span>,</span><span class="param">	<span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">extension</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></span><span class="return-annotation">) -> <span class="nb">list</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">LiteralString</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]]</span>:</span></span>
+
+                <label class="view-source-button" for="get_files_from-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#get_files_from"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_files_from-255"><a href="#get_files_from-255"><span class="linenos">255</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_files_from</span><span class="p">(</span>
+</span><span id="get_files_from-256"><a href="#get_files_from-256"><span class="linenos">256</span></a>        <span class="n">directory</span><span class="p">,</span>
+</span><span id="get_files_from-257"><a href="#get_files_from-257"><span class="linenos">257</span></a>        <span class="n">recursive</span><span class="p">:</span><span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="get_files_from-258"><a href="#get_files_from-258"><span class="linenos">258</span></a>        <span class="n">extension</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="get_files_from-259"><a href="#get_files_from-259"><span class="linenos">259</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span> <span class="n">LiteralString</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bytes</span><span class="p">]:</span>
+</span><span id="get_files_from-260"><a href="#get_files_from-260"><span class="linenos">260</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="get_files_from-261"><a href="#get_files_from-261"><span class="linenos">261</span></a><span class="sd">    Get a list of file paths from a path</span>
+</span><span id="get_files_from-262"><a href="#get_files_from-262"><span class="linenos">262</span></a><span class="sd">    :param directory: path to get the files from</span>
+</span><span id="get_files_from-263"><a href="#get_files_from-263"><span class="linenos">263</span></a><span class="sd">    :param recursive: boolean flag to scan the directory recursively</span>
+</span><span id="get_files_from-264"><a href="#get_files_from-264"><span class="linenos">264</span></a><span class="sd">    :param extension: optional extension to filter the files</span>
+</span><span id="get_files_from-265"><a href="#get_files_from-265"><span class="linenos">265</span></a><span class="sd">    :return: list of file paths from the path</span>
+</span><span id="get_files_from-266"><a href="#get_files_from-266"><span class="linenos">266</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="get_files_from-267"><a href="#get_files_from-267"><span class="linenos">267</span></a>    <span class="n">db</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="get_files_from-268"><a href="#get_files_from-268"><span class="linenos">268</span></a>    <span class="k">if</span> <span class="n">recursive</span><span class="p">:</span>
+</span><span id="get_files_from-269"><a href="#get_files_from-269"><span class="linenos">269</span></a>        <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">dirs</span><span class="p">,</span> <span class="n">files</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
+</span><span id="get_files_from-270"><a href="#get_files_from-270"><span class="linenos">270</span></a>            <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+</span><span id="get_files_from-271"><a href="#get_files_from-271"><span class="linenos">271</span></a>                <span class="n">db</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">file</span><span class="p">))</span>
+</span><span id="get_files_from-272"><a href="#get_files_from-272"><span class="linenos">272</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="get_files_from-273"><a href="#get_files_from-273"><span class="linenos">273</span></a>        <span class="n">db</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">f</span><span class="p">))]</span>
+</span><span id="get_files_from-274"><a href="#get_files_from-274"><span class="linenos">274</span></a>    <span class="k">if</span> <span class="n">extension</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="get_files_from-275"><a href="#get_files_from-275"><span class="linenos">275</span></a>        <span class="k">return</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">extension</span><span class="p">)]</span>
+</span><span id="get_files_from-276"><a href="#get_files_from-276"><span class="linenos">276</span></a>    <span class="k">return</span> <span class="n">db</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Get a list of file paths from a path
+:param directory: path to get the files from
+:param recursive: boolean flag to scan the directory recursively
+:param extension: optional extension to filter the files
+:return: list of file paths from the path</p>
 </div>
 
 

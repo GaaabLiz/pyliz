@@ -4,7 +4,17 @@ from typing import List
 
 
 class CfgItem:
+    """
+    A class to represent a configuration item.
+    """
+
     def __init__(self, section: str, key: str, value: str | bool):
+        """
+        Constructor for the CfgItem class.
+        :param section: The section of the configuration item.
+        :param key: The key of the configuration item.
+        :param value: The value of the configuration item.
+        """
         self.section = section
         self.key = key
         self.value = value
