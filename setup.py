@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.1.25'
+VERSION = '0.1.27'
 DESCRIPTION = 'Python utility library.'
 LONG_DESCRIPTION = 'A general purpose library for Python containing various utilities.'
 
@@ -26,7 +26,7 @@ setup(
         "loguru",
         "GitPython",
     ],
-    keywords=['python', 'video', 'utilities'],
+    keywords=['python', 'configuration', 'utilities'],
     classifiers=[
         "Development Status :: 1 - Planning",
         "Intended Audience :: Developers",
