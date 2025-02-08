@@ -2,6 +2,8 @@ import os
 from enum import Enum
 from typing import List
 
+from loguru import logger
+
 from pylizlib.os import pathutils
 from pylizlib.config.cfgutils import Cfgini, CfgItem
 from dataclasses import dataclass
@@ -76,13 +78,12 @@ class PylizDir:
                 return folder.path
         return None
 
-    def get_folder_template_path(self, template_key: PylizDirFoldersTemplate, add_if_not_exist: bool = False):
+    def get_folder_template_path(self, template_key: PylizDirFoldersTemplate, add_if_not_exist: bool = True):
         path = self.get_folder_path(template_key.value)
         if path is None and add_if_not_exist:
             return self.add_template_folder(template_key)
         else:
             return path
-
 
     def check_for_all_init(self):
         if not self.__ini.exists() or not self.__ini_initialized:
@@ -104,3 +105,19 @@ class PylizDir:
     def set_ini_value(self, section, key, value):
         self.check_for_all_init()
         self.__ini.write(section, key, value)
+
+    def get_ini_path(self):
+        if self.__ini_initialized:
+            return self.__ini_path
+        else:
+            return None
+
+    def delete_ini(self):
+        if self.__ini_initialized and os.path.exists(self.__ini_path):
+            os.remove(self.__ini_path)
+            self.__ini_initialized = False
+            self.__ini = None
+            self.__ini_path = None
+        else:
+            logger.warning("INI file not initialized. Nothing to delete.")
+
