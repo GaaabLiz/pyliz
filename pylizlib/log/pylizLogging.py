@@ -7,18 +7,18 @@ from pylizlib.os import pathutils
 
 LOGGER_PYLIZ_LIB_NAME = "PylizLib"
 
-path_log = os.path.join(pathutils.get_app_home_dir(".pyliz"), "logs")
-pathutils.check_path(path_log, True)
-path_log_file = os.path.join(path_log, "pylizlib.log")
-
-config = {
-    "handlers": [
-        {"sink": sys.stdout, "format": "{time:HH:mm:ss} [{level}]: {message}", "level": "TRACE"},
-        {"sink": path_log_file, "serialize": True, "level": "TRACE"},
-    ]
-}
-
-logger.configure(**config)
+# path_log = os.path.join(pathutils.get_app_home_dir(".pyliz"), "logs")
+# pathutils.check_path(path_log, True)
+# path_log_file = os.path.join(path_log, "pylizlib.log")
+#
+# config = {
+#     "handlers": [
+#         {"sink": sys.stdout, "format": "{time:HH:mm:ss} [{level}]: {message}", "level": "TRACE"},
+#         {"sink": path_log_file, "serialize": True, "level": "TRACE"},
+#     ]
+# }
+#
+# logger.configure(**config)
 logger.disable(LOGGER_PYLIZ_LIB_NAME)
 
 
