@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Callable, List, Optional, LiteralString
 
 from pylizlib.os import fileutils
@@ -273,3 +274,44 @@ def get_files_from(
     if extension is not None:
         return [f for f in db if f.endswith(extension)]
     return db
+
+
+def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
+    """
+    Get a list of Path items from a Path.
+    :param path: Path to get the items from.
+    :param recursive: Whether to list items recursively.
+    :return: List of Path items from the path.
+    """
+    items = []
+
+    with os.scandir(path) as entries:
+        for entry in entries:
+            try:
+                entry_path = Path(entry.path)
+                items.append(entry_path)
+
+                if recursive and entry.is_dir():
+                    items.extend(get_path_items(entry_path, recursive=True))
+            except PermissionError:
+                continue
+
+    return items
+
+
+def path_match_items(path: Path, path_list: list[str]):
+    """
+    Check the number and percentage of items in a path that match a list of strings paths.
+    :param path: Path to check.
+    :param path_list: List of strings paths to match.
+    :return: Tuple containing the number of items matched and percentage of items matched.
+    """
+    items_path = get_path_items(path, recursive=True)
+    items_path_relative = [str(p.relative_to(path)) for p in items_path]
+
+    set1, set2 = set(items_path_relative), set(path_list)
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    perc = (intersection / union) * 100 if union > 0 else 100
+
+    return intersection, perc
