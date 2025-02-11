@@ -1,5 +1,7 @@
 import argparse
 
+from pylizlib.os.pathMatcher import PathMatcher
+
 
 def hello(args):
     """Saluta l'utente"""
@@ -10,6 +12,11 @@ def add(args):
     """Somma due numeri"""
     result = args.a + args.b
     print(f"Risultato: {result}")
+
+def exp_file_list(args):
+    matcher = PathMatcher()
+    matcher.load_path(args.input, args.recursive)
+    matcher.export_file_list(args.output, args.fileName)
 
 
 def main():
@@ -27,6 +34,14 @@ def main():
     parser_add.add_argument("a", type=int, help="Primo numero")
     parser_add.add_argument("b", type=int, help="Secondo numero")
     parser_add.set_defaults(func=add)
+
+    # Comando 'expFileList'
+    parser_add = subparsers.add_parser("expFileList", help="Export the list of files relative a selected path in txt file")
+    parser_add.add_argument("input", type=str, help="Input path to scan")
+    parser_add.add_argument("output", type=str, help="Output path where to save the file")
+    parser_add.add_argument("fileName", type=str, help="Name of the file to save")
+    parser_add.add_argument("recursive", action="store_true", help="Enable recursive scan")
+    parser_add.set_defaults(func=exp_file_list)
 
     # Parsing degli argomenti
     args = parser.parse_args()
