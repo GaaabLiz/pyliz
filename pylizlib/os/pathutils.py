@@ -299,19 +299,19 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
     return items
 
 
-def path_match_items(path: Path, path_list: list[str]):
-    """
-    Check the number and percentage of items in a path that match a list of strings paths.
-    :param path: Path to check.
-    :param path_list: List of strings paths to match.
-    :return: Tuple containing the number of items matched and percentage of items matched.
-    """
-    items_path = get_path_items(path, recursive=True)
-    items_path_relative = [str(p.relative_to(path)) for p in items_path]
-
-    set1, set2 = set(items_path_relative), set(path_list)
-    intersection = len(set1 & set2)
-    union = len(set1 | set2)
-    perc = (intersection / union) * 100 if union > 0 else 100
-
-    return intersection, perc
+# def path_match_items(path: Path, path_list: list[str]):
+#     """
+#     Check the number and percentage of items in a path that match a list of strings paths.
+#     :param path: Path to check.
+#     :param path_list: List of strings paths to match.
+#     :return: Tuple containing the number of items matched and percentage of items matched.
+#     """
+#     items_path = get_path_items(path, recursive=True)
+#     items_path_relative = [str(p.relative_to(path)) for p in items_path]
+#
+#     set1, set2 = set(items_path_relative), set(path_list)
+#     intersection = len(set1 & set2)
+#     union = len(set1 | set2)
+#     perc = (intersection / union) * 100 if union > 0 else 100
+#
+#     return intersection, perc

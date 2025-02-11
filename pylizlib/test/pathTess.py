@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from pylizlib.os import pathutils
+from pylizlib.os.pathMatcher import PathMatcher
 
 
 class PathTests(unittest.TestCase):
@@ -14,11 +15,11 @@ class PathTests(unittest.TestCase):
 
     def test_dir_matcher(self):
         home_dir = Path(pathutils.get_home_dir())
-        elenco = [
-            str(".android\cache\sdkbin-1_75698f08-sys-img2-3_xml")
-        ]
-        num, perc = pathutils.path_match_items(home_dir, elenco)
-        print(f"Num: {num}, Perc: {perc}")
+        dir_1 = "A:\Models"
+        matcher = PathMatcher()
+        matcher.load_path(Path(dir_1), True)
+        matcher.log_all()
+        matcher.export_file_list(Path(r"C:\Users\Gabriele\Downloads"))
 
 if __name__ == '__main__':
     unittest.main()
