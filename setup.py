@@ -25,6 +25,7 @@ setup(
         "requests",
         "loguru",
         "GitPython",
+        "rich"
     ],
     entry_points={
         "console_scripts": [

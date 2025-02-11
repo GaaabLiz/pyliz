@@ -1,5 +1,6 @@
 import argparse
 
+from pylizlib.config.cfgutils import CfgPath
 from pylizlib.os.pathMatcher import PathMatcher
 
 
@@ -17,6 +18,10 @@ def exp_file_list(args):
     matcher = PathMatcher()
     matcher.load_path(args.input, args.recursive)
     matcher.export_file_list(args.output, args.fileName)
+
+def ini_dup(args):
+    cfg = CfgPath(args.input)
+    cfg.check_duplicates(args.keys, args.sections)
 
 
 def main():
@@ -42,6 +47,13 @@ def main():
     parser_add.add_argument("fileName", type=str, help="Name of the file to save")
     parser_add.add_argument("recursive", action="store_true", help="Enable recursive scan")
     parser_add.set_defaults(func=exp_file_list)
+
+    # Comando 'iniDup'
+    parser_add = subparsers.add_parser("iniDup", help="Find duplicate keys/sections inside ini files")
+    parser_add.add_argument("input", type=str, help="Input path to scan")
+    parser_add.add_argument("sections", action="store_true", help="Enable search for duplicate sections")
+    parser_add.add_argument("keys", action="store_true", help="Enable search for duplicate keys")
+    parser_add.set_defaults(func=ini_dup)
 
     # Parsing degli argomenti
     args = parser.parse_args()

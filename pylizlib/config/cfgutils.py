@@ -1,6 +1,10 @@
 import configparser
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import List
+
+import rich
 
 
 class CfgItem:
@@ -77,5 +81,30 @@ class Cfgini:
         with open(self.path, 'w') as configfile:
             self.config.write(configfile)
 
+
+@dataclass
+class CfgPath:
+    path: Path
+
+    def __check_ini(self, path, keys: bool = False, sections: bool = True):
+        config = configparser.ConfigParser()
+        config.read(path)
+        if sections:
+            rich.print(f"Sections in {path}:")
+            for section in config.sections():
+                rich.print(f"  - [magenta]{section}[/magenta]")
+
+    def __find_ini_files(self, directory: str, keys: bool = False, sections: bool = True):
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.ini'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        self.__check_ini(file_path, keys, sections)
+                    except Exception as e:
+                        rich.print(f"[red]Error processing {file_path}[/red]: {e}")
+
+    def check_duplicates(self, keys: bool = False, sections: bool = True):
+        self.__find_ini_files(str(self.path), keys, sections)
 
 
