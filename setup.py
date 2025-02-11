@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.1.28'
+VERSION = '0.1.29'
 DESCRIPTION = 'Python utility library.'
 LONG_DESCRIPTION = 'A general purpose library for Python containing various utilities.'
 
@@ -26,6 +26,11 @@ setup(
         "loguru",
         "GitPython",
     ],
+    entry_points={
+        "console_scripts": [
+            "pyliz=pylizlib.cli:main",
+        ],
+    },
     keywords=['python', 'configuration', 'utilities'],
     classifiers=[
         "Development Status :: 1 - Planning",
