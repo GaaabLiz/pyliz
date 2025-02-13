@@ -1,15 +1,16 @@
 import unittest
 
-
-
+import pylizlib.log.pylizLogging
+from pylizlib.log.pylizLogging import logger, LOGGER_PYLIZ_LIB_NAME
 from pylizlib.model.pyliz_script import PylizScript
 from pylizlib.os.pyliz_actions import ActionTest, ActionExecCli
 
 
 class TestScripts(unittest.TestCase):
 
-    def setUp(self):
-        pass
+    def testLog(self):
+        pylizlib.log.pylizLogging.disable_logging()
+        logger.error("This is an error message from PylizLib.")
 
     def test1(self):
         script = PylizScript("test1")
