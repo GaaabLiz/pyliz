@@ -28,8 +28,8 @@ class PathMatcher:
         with open(file_path, "r") as file:
             return self.match_with_list([line.strip() for line in file.readlines()])
 
-    def export_file_list(self, save_file_path: Path):
-        with open(save_file_path.joinpath("output.txt"), "w+") as file:
+    def export_file_list(self, save_file_path: Path, name: str = "output.txt"):
+        with open(save_file_path.joinpath(name), "w+") as file:
             for item in self.working_path_items_rel:
                 file.write(f"{item}\n")
 
