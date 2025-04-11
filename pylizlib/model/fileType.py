@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class FileType(Enum):
+    ANY = "ANY"
     IMAGE = "IMAGE"
     TEXT = "TEXT"
     VIDEO = "VIDEO"
