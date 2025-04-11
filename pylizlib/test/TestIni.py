@@ -1,12 +1,12 @@
 import unittest
 
-from pylizlib.config.pylizdir import PylizDir
+from pylizlib.config.pylizapp import PylizApp
 
 
 class TestScripts(unittest.TestCase):
 
     def setUp(self):
-        self.dir = PylizDir(".pyliz")
+        self.dir = PylizApp(".pyliz")
 
     def test1(self):
         self.dir.create_ini("test.ini", [])

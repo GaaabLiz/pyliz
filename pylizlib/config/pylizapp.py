@@ -25,7 +25,7 @@ class PylizDirFolder:
 
 
 
-class PylizDir:
+class PylizApp:
 
     __path: str | None = None
     __folder_name: str | None = None
@@ -33,9 +33,11 @@ class PylizDir:
     __ini: Cfgini | None = None
     __ini_path: str | None = None
     __ini_initialized = False
+    __app_name: str | None = None
+    __app_version: str | None = None
 
 
-    def __init__(self, folder_name: str):
+    def __init__(self, app_name: str, app_version: str, folder_name: str):
         """
         Constructor for PylizDir class.
         :param folder_name: Full name of the folder.
@@ -43,6 +45,8 @@ class PylizDir:
         # Settaggio path
         self.__folder_name = folder_name
         self.__path: str = pathutils.get_app_home_dir(folder_name)
+        self.__app_name = app_name
+        self.__app_version = app_version
         # Cartella pyliz
         pathutils.check_path(self.__path, True)
         pathutils.check_path_dir(self.__path)

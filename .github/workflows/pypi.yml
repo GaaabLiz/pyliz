@@ -3,7 +3,7 @@ name: Publish Python Package
 on:
   push:
     branches:
-      - main  # O il branch su cui vuoi attivare il workflow
+      - main
 
 jobs:
   publish:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.x  # Scegli la versione di Python che preferisci
+          python-version: 3.x
 
       - name: Install dependencies
         run: |
