@@ -2,7 +2,7 @@ import socket
 from typing import Mapping
 
 import requests
-from loguru import logger
+from pylizlib.log.pylizLogger import logger
 
 from pylizlib.network.netres import NetResponse
 from pylizlib.network.netrestype import NetResponseType
