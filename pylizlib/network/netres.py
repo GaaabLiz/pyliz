@@ -1,4 +1,4 @@
-from loguru import logger
+from pylizlib.log.pylizLogger import logger
 from requests import Response
 
 from pylizlib.network.netrestype import NetResponseType

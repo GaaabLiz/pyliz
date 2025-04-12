@@ -5,7 +5,7 @@ import platform
 from datetime import datetime
 
 import requests
-from loguru import logger
+from pylizlib.log.pylizLogger import logger
 
 from pylizlib.model.fileType import FileType
 from pylizlib.model.operation import Operation

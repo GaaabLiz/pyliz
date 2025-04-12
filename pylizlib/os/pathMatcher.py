@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from loguru import logger
+from pylizlib.log.pylizLogger import logger
 
 from pylizlib.os import pathutils
 

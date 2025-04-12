@@ -2,7 +2,7 @@ import os
 from enum import Enum
 from typing import List
 
-from loguru import logger
+from pylizlib.log.pylizLogger import logger
 
 from pylizlib.os import pathutils
 from pylizlib.config.cfgutils import Cfgini, CfgItem
@@ -27,37 +27,34 @@ class PylizDirFolder:
 
 class PylizApp:
 
-    __path: str | None = None
-    __folder_name: str | None = None
     __folders: List[PylizDirFolder] = []
     __ini: Cfgini | None = None
     __ini_path: str | None = None
     __ini_initialized = False
-    __app_name: str | None = None
-    __app_version: str | None = None
 
 
-    def __init__(self, app_name: str, app_version: str, folder_name: str):
+    def __init__(self, app_name: str, app_version: str, folder_name: str | None = None):
         """
-        Constructor for PylizDir class.
+        Constructor for PylizApp class.
         :param folder_name: Full name of the folder.
         """
         # Settaggio path
-        self.__folder_name = folder_name
-        self.__path: str = pathutils.get_app_home_dir(folder_name)
-        self.__app_name = app_name
-        self.__app_version = app_version
+        app_folder_name = folder_name if folder_name is not None else app_name
+        self.path: str = pathutils.get_app_home_dir(app_folder_name)
         # Cartella pyliz
-        pathutils.check_path(self.__path, True)
-        pathutils.check_path_dir(self.__path)
+        pathutils.check_path(self.path, True)
+        pathutils.check_path_dir(self.path)
+        # Settaggio variabili
+        self.app_name = app_name
+        self.app_version = app_version
 
     def get_path(self):
-        return self.__path
+        return self.path
 
     # FOLDERS --------------------------------------------
 
     def add_folder(self, key: str, folder_name: str):
-        folder_path = os.path.join(self.__path, folder_name)
+        folder_path = os.path.join(self.path, folder_name)
         pathutils.create_path(folder_path)
         pathutils.check_path(folder_path, True)
         pathutils.check_path_dir(folder_path)
@@ -96,7 +93,7 @@ class PylizApp:
     # INI --------------------------------------------
 
     def create_ini(self, config_name: str, list_of_items: List[CfgItem] | None = None):
-        self.__ini_path = os.path.join(self.__path, config_name)
+        self.__ini_path = os.path.join(self.path, config_name)
         self.__ini = Cfgini(self.__ini_path)
         if not self.__ini.exists():
             self.__ini.create(list_of_items)
