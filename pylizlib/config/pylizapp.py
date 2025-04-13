@@ -33,7 +33,7 @@ class PylizApp:
     __ini_initialized = False
 
 
-    def __init__(self, app_name: str, app_version: str, folder_name: str | None = None):
+    def __init__(self, app_name: str, app_version: str | None = None, folder_name: str | None = None):
         """
         Constructor for PylizApp class.
         :param folder_name: Full name of the folder.
@@ -45,8 +45,8 @@ class PylizApp:
         pathutils.check_path(self.path, True)
         pathutils.check_path_dir(self.path)
         # Settaggio variabili
-        self.app_name = app_name
-        self.app_version = app_version
+        self.name = app_name
+        self.version = app_version
 
     def get_path(self):
         return self.path
