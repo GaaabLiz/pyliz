@@ -6,6 +6,8 @@ from typing import List
 
 import rich
 
+from pylizlib.log.pylizLogger import logger
+
 
 class CfgItem:
     """
@@ -48,25 +50,24 @@ class Cfgini:
         try:
             with open(self.path, 'w') as configfile:
                 self.config.write(configfile)
-            # print("Configuration file created in: ", self.path)
         except Exception as e:
-            print("Error while creating configuration file: ", e)
+            logger.error("Error while creating configuration file: ", e)
 
     def read(self, section, key, is_bool=False):
         self.config = configparser.ConfigParser()
         self.config.read(self.path)
         if not self.config.has_section(section):
-            print(f"Attenzione: La sezione '{section}' non esiste nel file INI.")
+            logger.warning(f"Attenzione: La sezione '{section}' non esiste nel file INI.")
             return None
         if not self.config.has_option(section, key):
-            print(f"Attenzione: La chiave '{key}' non esiste nella sezione '{section}'.")
+            logger.warning(f"Attenzione: La chiave '{key}' non esiste nella sezione '{section}'.")
             return None
         try:
             if is_bool:
                 return self.config.getboolean(section, key)
             return self.config.get(section, key)
         except configparser.Error as e:
-            print(f"Errore durante la lettura di '{key}' in '{section}': {e}")
+            logger.error(f"Errore durante la lettura di '{key}' in '{section}': {e}")
             return None
 
     def write(self, section, key, value: str | bool):
