@@ -8,3 +8,9 @@ class OsType(Enum):
     ANDROID = "android"
     IOS = "ios"
     UNKNOWN = "unknown"
+
+
+class OsTheme(Enum):
+    LIGHT = "light"
+    DARK = "dark"
+    UNKNOWN = "unknown"
