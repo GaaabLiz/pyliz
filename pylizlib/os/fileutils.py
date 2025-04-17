@@ -5,10 +5,10 @@ import platform
 from datetime import datetime
 
 import requests
-from pylizlib.log.pylizLogger import logger
 
-from pylizlib.model.fileType import FileType
-from pylizlib.model.operation import Operation
+from pylizlib.domain.fileType import FileType
+from pylizlib.domain.operation import Operation
+from pylizlib.log.pylizLogger import logger
 
 image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
 video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']

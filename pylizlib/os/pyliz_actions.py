@@ -6,7 +6,7 @@ from typing import Callable
 
 
 from pylizlib.data import datautils
-from pylizlib.model.pyliz_script import PylizBaseAction
+from pylizlib.domain.pyliz_script import PylizBaseAction
 from pylizlib.os import pathutils, osutils
 from pylizlib.os.pathutils import check_path
 
