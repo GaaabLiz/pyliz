@@ -3,7 +3,7 @@ import subprocess
 from abc import ABC
 from typing import Callable
 
-from git import Repo
+
 
 from pylizlib.data import datautils
 from pylizlib.model.pyliz_script import PylizBaseAction
@@ -36,7 +36,7 @@ class ActionGitClone(PylizBaseAction, ABC):
         else:
             self.on_log("Repo not installed. Proceeding...")
             pathutils.check_path(self.install_dir, True)
-        Repo.clone_from(self.repo, self.install_dir)
+        # Repo.clone_from(self.repo, self.install_dir)
         self.on_log("Done.")
 
     def reset(self):
