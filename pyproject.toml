@@ -16,5 +16,6 @@ pyliz = "pylizlib.cli:main"
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["pylizlib"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pylizlib*"]
