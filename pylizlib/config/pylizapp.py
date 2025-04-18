@@ -32,8 +32,16 @@ class PylizApp:
     __ini_path: str | None = None
     __ini_initialized = False
 
+    language_version: str | None = None
 
-    def __init__(self, app_name: str, app_version: str | None = None, folder_name: str | None = None):
+
+    def __init__(
+            self,
+            app_name: str,
+            app_version: str | None = None,
+            folder_name: str | None = None,
+            author: str = "Unknown"
+    ):
         """
         Constructor for PylizApp class.
         :param folder_name: Full name of the folder.
@@ -47,6 +55,7 @@ class PylizApp:
         # Settaggio variabili
         self.name = app_name
         self.version = app_version
+        self.author = author
 
     def get_path(self):
         return self.path
