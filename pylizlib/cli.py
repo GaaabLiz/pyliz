@@ -1,66 +1,44 @@
-import argparse
+from pathlib import Path
+
+import typer
 
 from pylizlib.config.cfgutils import CfgPath
+from pylizlib.config.pytoml import PyProjectToml
 from pylizlib.os.pathMatcher import PathMatcher
 
-
-def hello(args):
-    """Saluta l'utente"""
-    print(f"Ciao, {args.name}!")
+app = typer.Typer(help="General utility scripts.")
 
 
-def add(args):
-    """Somma due numeri"""
-    result = args.a + args.b
-    print(f"Risultato: {result}")
-
-def exp_file_list(args):
+@app.command("expFileList")
+def exp_file_list(
+        input: Path = typer.Argument(..., help="Input path to scan"),
+        output: Path = typer.Argument(..., help="Output path where to save the file"),
+        file_name: str = typer.Argument(..., help="Name of the file to save"),
+        recursive: bool = typer.Option(False, "--recursive", help="Enable recursive scan"),
+):
     matcher = PathMatcher()
-    matcher.load_path(args.input, args.recursive)
-    matcher.export_file_list(args.output, args.fileName)
-
-def ini_dup(args):
-    cfg = CfgPath(args.input)
-    cfg.check_duplicates(args.keys, args.sections)
+    matcher.load_path(input, recursive)
+    matcher.export_file_list(output, file_name)
 
 
-def main():
-    parser = argparse.ArgumentParser(prog="pyliz", description="Un CLI con più comandi")
-
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    # Comando 'hello'
-    parser_hello = subparsers.add_parser("hello", help="Saluta un utente")
-    parser_hello.add_argument("--name", type=str, default="Mondo", help="Il nome da salutare")
-    parser_hello.set_defaults(func=hello)
-
-    # Comando 'add'
-    parser_add = subparsers.add_parser("add", help="Somma due numeri")
-    parser_add.add_argument("a", type=int, help="Primo numero")
-    parser_add.add_argument("b", type=int, help="Secondo numero")
-    parser_add.set_defaults(func=add)
-
-    # Comando 'expFileList'
-    parser_add = subparsers.add_parser("expFileList", help="Export the list of files relative a selected path in txt file")
-    parser_add.add_argument("input", type=str, help="Input path to scan")
-    parser_add.add_argument("output", type=str, help="Output path where to save the file")
-    parser_add.add_argument("fileName", type=str, help="Name of the file to save")
-    parser_add.add_argument("recursive", action="store_true", help="Enable recursive scan")
-    parser_add.set_defaults(func=exp_file_list)
-
-    # Comando 'iniDup'
-    parser_add = subparsers.add_parser("iniDup", help="Find duplicate keys/sections inside ini files")
-    parser_add.add_argument("input", type=str, help="Input path to scan")
-    parser_add.add_argument("sections", action="store_true", help="Enable search for duplicate sections")
-    parser_add.add_argument("keys", action="store_true", help="Enable search for duplicate keys")
-    parser_add.set_defaults(func=ini_dup)
-
-    # Parsing degli argomenti
-    args = parser.parse_args()
-
-    # Esegui la funzione corrispondente al comando scelto
-    args.func(args)
+@app.command("iniDup")
+def ini_dup(
+        input: Path = typer.Argument(..., help="Input path to scan"),
+        sections: bool = typer.Option(False, "--sections", help="Enable search for duplicate sections"),
+        keys: bool = typer.Option(False, "--keys", help="Enable search for duplicate keys"),
+):
+    cfg = CfgPath(input)
+    cfg.check_duplicates(keys, sections)
 
 
-if __name__ == "__main__":
-    main()
+@app.command("gen-project-py")
+def gen_project_py(
+        pyproject_path: Path = typer.Argument(..., help="Path to the pyproject.toml file"),
+        py_file: Path = typer.Argument(..., help="Path to the Python file to update"),
+):
+    try:
+        toml = PyProjectToml(pyproject_path)
+        toml.gen_project_py(py_file)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
