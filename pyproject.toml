@@ -1,10 +1,11 @@
 [project]
 name = "pylizlib"
-version = "0.1.45"
+version = "0.1.46"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "python-dotenv>=1.1.0",
     "requests>=2.32.3",
     "rich>=14.0.0",
     "typer>=0.15.2",
