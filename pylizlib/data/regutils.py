@@ -1,4 +1,7 @@
 import re
+from urllib.parse import urlparse
+
+import typer
 
 
 def is_valid_url(url: str):
@@ -18,3 +21,9 @@ def is_valid_url(url: str):
     else:
         return False
 
+
+def validate_url(url: str, error_msg: str = "The URL is not valid.") -> str:
+    result = urlparse(url)
+    if not (result.scheme and result.netloc):
+        raise typer.BadParameter(error_msg)
+    return url

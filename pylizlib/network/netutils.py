@@ -21,6 +21,19 @@ def test_with_head(url: str) -> bool:
         return False
 
 
+def is_endpoint_reachable(url: str) -> bool:
+    """Controlla se un endpoint risponde correttamente con HTTP 200."""
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except requests.RequestException as e:
+        logger.error("Error while testing URL: " + url + " - " + str(e))
+        return False
+
+
 def is_internet_available() -> bool:
     host = "8.8.8.8"
     port = 53
