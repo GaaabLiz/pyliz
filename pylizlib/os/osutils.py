@@ -2,6 +2,9 @@ import os
 import shutil
 import subprocess
 import platform
+from pathlib import Path
+
+import psutil
 
 
 def get_folder_size_mb(path) -> float:
@@ -119,3 +122,119 @@ def is_os_unix() -> bool:
     """
     current_os = platform.system()
     return current_os in ["Linux", "Darwin"]
+
+def is_os_windows() -> bool:
+    """
+    Check if the operating system is Windows
+    :return: True if the operating system is Windows, False otherwise
+    """
+    current_os = platform.system()
+    return current_os == "Windows"
+
+def is_software_installed(exe_path: str) -> bool:
+    """
+    Check if a software is installed by checking if the executable file exists
+    :param exe_path: The path of the executable file
+    :return: True if the software is installed, False otherwise
+    """
+    return os.path.isfile(exe_path) and os.access(exe_path, os.X_OK)
+
+
+
+class WindowsOsUtils:
+
+    @staticmethod
+    def is_exe_running(exe_path: Path) -> bool:
+        """
+        Check if an executable is running
+        :param exe_path: The path of the executable file
+        :return: True if the executable is running, False otherwise
+        """
+        exe_path = os.path.abspath(exe_path.__str__())  # normalize
+        for proc in psutil.process_iter(['exe', 'name']):
+            try:
+                if proc.info['exe'] and os.path.abspath(proc.info['exe']) == exe_path:
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return False
+
+    @staticmethod
+    def get_windows_exe_version(exe_path: str) -> str:
+        import win32api
+        try:
+            info = win32api.GetFileVersionInfo(exe_path, "\\")
+            # Le chiavi di versione sono memorizzate come tuple
+            # Prima otteniamo la lingua e il codice di pagina
+            lang, codepage = win32api.GetFileVersionInfo(exe_path, "\\VarFileInfo\\Translation")[0]
+            str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
+            version = win32api.GetFileVersionInfo(exe_path, str_info_path)
+            return version
+        except Exception as e:
+            return f"N/A"
+
+    def get_service_executable_path(service_name: str) -> str | None:
+        """
+        Get the executable path of a Windows service
+        :param service_name: The name of the service
+        :return: The executable path of the service or None if not found
+        """
+        import winreg
+        try:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                 rf"SYSTEM\CurrentControlSet\Services\{service_name}")
+            image_path, _ = winreg.QueryValueEx(key, "ImagePath")
+            winreg.CloseKey(key)
+            # Rimuove eventuali argomenti e prende solo il percorso
+            image_path = image_path.strip()
+            if image_path.startswith('"'):
+                # Prende il contenuto tra le virgolette
+                image_path = image_path.split('"')[1]
+            else:
+                # Prende la prima parte fino al primo spazio (se non ci sono virgolette)
+                parts = image_path.split(' ')
+                # Ricostruisce il percorso se contiene spazi e termina con .exe
+                exe_parts = []
+                for part in parts:
+                    exe_parts.append(part)
+                    if part.lower().endswith('.exe'):
+                        break
+                image_path = ' '.join(exe_parts)
+            return image_path
+        except Exception:
+            return None
+
+
+    def is_service_running(service_name: str) -> bool:
+        """
+        Check if a Windows service is running
+        :param service_name: The name of the service
+        :return: True if the service is running, False otherwise
+        """
+        import win32service
+        import win32serviceutil
+        try:
+            status = win32serviceutil.QueryServiceStatus(service_name)[1]
+            return status == win32service.SERVICE_RUNNING
+        except Exception:
+            return False
+
+    def get_service_version(service_name: str) -> str | None:
+        """
+        Get the version of a Windows service by checking the version of its executable
+        :param service_name: The name of the service
+        :return: The version of the service or None if not found
+        """
+        import win32api
+        path = WindowsOsUtils.get_service_executable_path(service_name)
+        if path is None:
+            return None
+        try:
+            # Funzione per ottenere versione dal file binario
+            info = win32api.GetFileVersionInfo(path, '\\')
+            ms = info['FileVersionMS']
+            ls = info['FileVersionLS']
+            version = f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+            return version
+        except Exception:
+            return "N/A"
