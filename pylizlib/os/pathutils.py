@@ -1,7 +1,10 @@
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Callable, List, Optional, LiteralString
 
+from pylizlib.data import datautils
 from pylizlib.os import fileutils
 
 
@@ -297,6 +300,25 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
                 continue
 
     return items
+
+
+def clear_or_move_to_temp(path: Path, temp_path: Path, move_to_temp: bool):
+    """
+    Clear a directory or move it to a temporary location.
+    :param path: Path to the directory to clear or move.
+    :param temp_path: Path to the temporary directory.
+    :param move_to_temp: Whether to move the directory to a temporary location instead of deleting it.
+    :return: None
+    """
+    if not move_to_temp:
+        shutil.rmtree(path.__str__())
+    else:
+        temp_dir = tempfile.gettempdir()
+        atom_temp_dir = os.path.join(temp_dir, temp_path.__str__())
+        os.makedirs(atom_temp_dir, exist_ok=True)
+        dest_name = os.path.basename(path.__str__() + "_" + datautils.gen_random_string(10))
+        dest_path = os.path.join(atom_temp_dir, dest_name)
+        shutil.move(path, dest_path)
 
 
 # def path_match_items(path: Path, path_list: list[str]):

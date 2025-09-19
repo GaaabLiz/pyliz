@@ -1,3 +1,4 @@
+import getpass
 import os
 import shutil
 import subprocess
@@ -5,6 +6,9 @@ import platform
 from pathlib import Path
 
 import psutil
+
+
+PATH_DEFAULT_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 
 def get_folder_size_mb(path) -> float:
@@ -131,14 +135,21 @@ def is_os_windows() -> bool:
     current_os = platform.system()
     return current_os == "Windows"
 
-def is_software_installed(exe_path: str) -> bool:
+def is_software_installed(exe_path: Path) -> bool:
     """
     Check if a software is installed by checking if the executable file exists
     :param exe_path: The path of the executable file
     :return: True if the software is installed, False otherwise
     """
-    return os.path.isfile(exe_path) and os.access(exe_path, os.X_OK)
+    return os.path.isfile(exe_path.__str__()) and os.access(exe_path.__str__(), os.X_OK)
 
+
+def get_system_username() -> str:
+    """
+    Get the current system username
+    :return: The current system username
+    """
+    return getpass.getuser()
 
 
 class WindowsOsUtils:
@@ -160,15 +171,15 @@ class WindowsOsUtils:
         return False
 
     @staticmethod
-    def get_windows_exe_version(exe_path: str) -> str:
+    def get_windows_exe_version(exe_path: Path) -> str:
         import win32api
         try:
-            info = win32api.GetFileVersionInfo(exe_path, "\\")
+            info = win32api.GetFileVersionInfo(exe_path.__str__(), "\\")
             # Le chiavi di versione sono memorizzate come tuple
             # Prima otteniamo la lingua e il codice di pagina
-            lang, codepage = win32api.GetFileVersionInfo(exe_path, "\\VarFileInfo\\Translation")[0]
+            lang, codepage = win32api.GetFileVersionInfo(exe_path.__str__(), "\\VarFileInfo\\Translation")[0]
             str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
-            version = win32api.GetFileVersionInfo(exe_path, str_info_path)
+            version = win32api.GetFileVersionInfo(exe_path.__str__(), str_info_path)
             return version
         except Exception as e:
             return f"N/A"
