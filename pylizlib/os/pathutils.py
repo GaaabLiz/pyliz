@@ -1,7 +1,9 @@
 import os
+import shutil
 from pathlib import Path
 from typing import Callable, List, Optional, LiteralString
 
+from pylizlib.log.pylizLogger import logger
 from pylizlib.os import fileutils
 
 
@@ -315,3 +317,24 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
 #     perc = (intersection / union) * 100 if union > 0 else 100
 #
 #     return intersection, perc
+
+
+def copy_with_unique_names(paths: list[Path], master_dir: Path):
+    master_dir.mkdir(parents=True, exist_ok=True)
+
+    for src in paths:
+        dest = master_dir / src.name
+        counter = 2
+
+        # controlla se il file/cartella esiste già e aggiunge suffisso se necessario
+        while dest.exists():
+            dest = master_dir / f"{src.stem}({counter}){src.suffix}"
+            counter += 1
+
+        # copia file o cartella
+        if src.is_file():
+            shutil.copy2(src, dest)
+        elif src.is_dir():
+            shutil.copytree(src, dest)
+        else:
+            logger.error(f"Attenzione: {src} non è né file né directory. Ignorato.")
