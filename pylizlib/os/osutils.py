@@ -181,8 +181,8 @@ class WindowsOsUtils:
             str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
             version = win32api.GetFileVersionInfo(exe_path.__str__(), str_info_path)
             return version
-        except Exception as e:
-            return f"N/A"
+        except Exception:
+            return "N/A"
 
     def get_service_executable_path(service_name: str) -> str | None:
         """

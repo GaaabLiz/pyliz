@@ -1,5 +1,3 @@
-import logging
-import os
 import unittest
 
 from pylizlib.handler.progress import ProgressHandler

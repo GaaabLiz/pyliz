@@ -120,7 +120,7 @@ def download_file(url: str, destinazione: str, on_progress: callable) -> Operati
                     if nuova_percentuale > percentuale:
                         percentuale = nuova_percentuale
                         on_progress(percentuale)
-        logger.trace(f"Download completed!")
+        logger.trace("Download completed!")
         return Operation(status=True)
     except Exception as e:
         return Operation(status=False, error=str(e))
