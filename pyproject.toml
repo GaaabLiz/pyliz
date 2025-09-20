@@ -1,6 +1,6 @@
 [project]
 name = "pylizlib"
-version = "0.2.0"
+version = "0.3.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,7 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
-pyliz = "pylizlib.cli:app"
+pyliz = "pylizlib.core.cli:app"
+qtliz = "pylizlib.qt.cli:app"
 
 [project.optional-dependencies]
 qt = [
