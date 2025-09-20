@@ -1,7 +1,6 @@
 import unittest
 
-
-from pylizlib.model.pyliz_script import PylizScript
+from pylizlib.domain.pyliz_script import PylizScript
 from pylizlib.os.pyliz_actions import ActionTest, ActionExecCli
 
 

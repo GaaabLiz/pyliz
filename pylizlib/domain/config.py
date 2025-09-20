@@ -7,7 +7,7 @@ class ConfigItem:
     name: str
     section: str
     is_bool: bool = False
-    default: str | bool | None = None
+    default: int | str | bool | None = None
     values: list[str] | None = None
     min_value: str | None = None
     max_value: str | None = None

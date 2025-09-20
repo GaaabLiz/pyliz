@@ -37,6 +37,9 @@ class Cfgini:
     def create(self, items: List[CfgItem] | None = None):
         self.config = configparser.ConfigParser()
         list_of_sections = set()
+        
+        if items is None:
+            return
 
         for item in items:
             list_of_sections.add(item.section)

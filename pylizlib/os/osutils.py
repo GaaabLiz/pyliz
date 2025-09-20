@@ -161,10 +161,10 @@ class WindowsOsUtils:
         :param exe_path: The path of the executable file
         :return: True if the executable is running, False otherwise
         """
-        exe_path = os.path.abspath(exe_path.__str__())  # normalize
+        exe_path_str = os.path.abspath(exe_path.__str__())  # normalize
         for proc in psutil.process_iter(['exe', 'name']):
             try:
-                if proc.info['exe'] and os.path.abspath(proc.info['exe']) == exe_path:
+                if proc.info['exe'] and os.path.abspath(proc.info['exe']) == exe_path_str:
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
