@@ -2,9 +2,9 @@ from pathlib import Path
 
 import typer
 
-from pylizlib.config.cfgutils import CfgPath
-from pylizlib.config.pytoml import PyProjectToml
-from pylizlib.os.pathMatcher import PathMatcher
+from pylizlib.core.app.configini import CfgPath
+from pylizlib.core.app.pytoml import PyProjectToml
+from pylizlib.core.os.path import PathMatcher
 
 app = typer.Typer(help="General utility scripts.")
 

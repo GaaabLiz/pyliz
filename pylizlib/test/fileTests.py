@@ -1,12 +1,12 @@
 import os
 import unittest
 
-from pylizlib.config.pylizapp import PylizApp
-from pylizlib.data.jsonUtils import JsonUtils
+from pylizlib.core.app.pylizapp import PylizApp
+from pylizlib.core.data import JsonUtils
 from dotenv import load_dotenv
 
-from pylizlib.log.pylizLogger import logger
-from pylizlib.os import fileutils
+from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os import file
 
 
 class TestFiles(unittest.TestCase):

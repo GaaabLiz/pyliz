@@ -1,7 +1,7 @@
 import argparse
 
-from pylizlib.config.cfgutils import CfgPath
-from pylizlib.os.pathMatcher import PathMatcher
+from pylizlib.core.app.configini import CfgPath
+from pylizlib.core.os.path import PathMatcher
 
 
 def hello(args):

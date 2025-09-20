@@ -1,8 +1,8 @@
 import unittest
 from pathlib import Path
 
-from pylizlib.os import pathutils
-from pylizlib.os.pathMatcher import PathMatcher
+from pylizlib.core.os import path
+from pylizlib.core.os import PathMatcher
 
 
 class PathTests(unittest.TestCase):

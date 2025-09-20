@@ -1,7 +1,7 @@
 import unittest
 
-from pylizlib.domain.pyliz_script import PylizScript
-from pylizlib.os.pyliz_actions import ActionTest, ActionExecCli
+from pylizlib.core.temp.pylizscript import PylizScript
+from pylizlib.core.os import ActionTest, ActionExecCli
 
 
 class TestScripts(unittest.TestCase):

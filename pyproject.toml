@@ -20,6 +20,14 @@ pyliz = "pylizlib.cli:app"
 qt = [
     "pyside6>=6.9.2",
 ]
+media = [
+    "ffmpeg-python>=0.2.0",
+    "numpy>=2.3.3",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.3.0",
+    "pydantic>=2.11.9",
+    "sd-parsers>=0.6",
+]
 
 [build-system]
 requires = ["setuptools", "wheel"]

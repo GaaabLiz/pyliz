@@ -1,6 +1,6 @@
 import unittest
 
-from pylizlib.handler.progress import ProgressHandler
+from pylizlib.core.handler.progress import ProgressHandler
 
 
 class TestProgress(unittest.TestCase):

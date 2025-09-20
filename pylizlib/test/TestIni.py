@@ -1,6 +1,6 @@
 import unittest
 
-from pylizlib.config.pylizapp import PylizApp
+from pylizlib.core.app.pylizapp import PylizApp
 
 
 class TestScripts(unittest.TestCase):
