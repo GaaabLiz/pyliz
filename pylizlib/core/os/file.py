@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import platform
@@ -6,8 +5,8 @@ from datetime import datetime
 
 import requests
 
-from pylizlib.core.domain import FileType
-from pylizlib.core.domain import Operation
+from pylizlib.core.domain.operation import Operation
+from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
 
 image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']

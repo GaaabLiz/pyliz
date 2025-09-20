@@ -1,20 +1,19 @@
 import unittest
 from pathlib import Path
 
-from pylizlib.core.os import path
-from pylizlib.core.os import PathMatcher
+from pylizlib.core.os.path import get_home_dir, get_path_items, PathMatcher
 
 
 class PathTests(unittest.TestCase):
 
     def test_list_files(self):
-        home_dir = Path(pathutils.get_home_dir())
-        elenco = pathutils.get_path_items(home_dir, True)
+        home_dir = Path(get_home_dir())
+        elenco = get_path_items(home_dir, True)
         for item in elenco:
             print(item)
 
     def test_dir_matcher(self):
-        home_dir = Path(pathutils.get_home_dir())
+        home_dir = Path(get_home_dir())
         dir_1 = "A:\Models"
         matcher = PathMatcher()
         matcher.load_path(Path(dir_1), True)

@@ -6,7 +6,6 @@ from typing import Callable, List, Optional, LiteralString
 
 from pylizlib.core.data import gen
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os import file
 
 
 def get_home_dir():

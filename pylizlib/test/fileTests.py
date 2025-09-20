@@ -2,11 +2,11 @@ import os
 import unittest
 
 from pylizlib.core.app.pylizapp import PylizApp
-from pylizlib.core.data import JsonUtils
 from dotenv import load_dotenv
 
+from pylizlib.core.data.gen import gen_file_hash
+from pylizlib.core.data.json import JsonUtils
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os import file
 
 
 class TestFiles(unittest.TestCase):
@@ -24,7 +24,7 @@ class TestFiles(unittest.TestCase):
         load_dotenv()
         path = os.getenv("LOCAL_IMAGE_FOR_TEST")
         print(path)
-        print(fileutils.gen_file_hash(path))
+        print(gen_file_hash(path))
 
 if __name__ == '__main__':
     unittest.main()

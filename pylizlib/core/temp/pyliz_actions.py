@@ -3,9 +3,8 @@ import subprocess
 from abc import ABC
 from typing import Callable
 
-from pylizlib.core.data import datautils, gen
+from pylizlib.core.data import gen
 from pylizlib.core.temp.pylizscript import PylizBaseAction
-from pylizlib.core.os import path, utils
 from pylizlib.core.os.path import check_path
 
 

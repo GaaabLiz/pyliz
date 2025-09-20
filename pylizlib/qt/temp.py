@@ -1,5 +1,4 @@
-from PySide6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
-import sys
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout
 
 class SimpleWidget(QWidget):
     def __init__(self):
