@@ -1,6 +1,6 @@
 [project]
 name = "pylizlib"
-version = "0.1.54"
+version = "0.1.55"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,11 @@ dependencies = [
 
 [project.scripts]
 pyliz = "pylizlib.cli:app"
+
+[project.optional-dependencies]
+qt = [
+    "pyside6>=6.9.2",
+]
 
 [build-system]
 requires = ["setuptools", "wheel"]
