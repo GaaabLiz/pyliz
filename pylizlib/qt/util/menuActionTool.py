@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QSize, QPoint
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QAction, QActionGroup, Qt, QIcon
 from PySide6.QtWidgets import QToolBar, QDockWidget, QPushButton, QToolButton, QMenu
 

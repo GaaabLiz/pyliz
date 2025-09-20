@@ -1,10 +1,9 @@
 from typing import Any, Callable
 
-from PySide6.QtWidgets import QLabel, QCheckBox, QComboBox, QGroupBox, QFormLayout, QSizePolicy, QSpinBox
+from PySide6.QtWidgets import QGroupBox, QFormLayout, QSizePolicy
 
 from pylizlib.core.app.pylizapp import PylizApp
-from pylizlib.qt.domain.preference import PreferenceItemPath, PreferenceConfigData, PreferenceTypes
-from pylizlib.qt.widget.data import PathLineSelector
+from pylizlib.qt.domain.preference import PreferenceConfigData, PreferenceTypes
 
 
 # def create_prf_path(item: ConfigIniItem, app: PylizApp) -> PreferenceItemPath:

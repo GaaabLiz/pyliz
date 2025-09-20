@@ -23,7 +23,7 @@ def gen_qrc(
             raise typer.Exit(code=1)
 
     typer.echo(f"QRC generation in: {qrc_path}")
-    typer.echo(f"Folder resources:")
+    typer.echo("Folder resources:")
     for path in res_dir:
         typer.echo(f" - {path}")
     exec_gen_qrc(qrc_path, res_dir)
