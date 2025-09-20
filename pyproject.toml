@@ -1,6 +1,6 @@
 [project]
 name = "pylizlib"
-version = "0.3.0"
+version = "0.3.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -28,6 +28,9 @@ media = [
     "pillow>=11.3.0",
     "pydantic>=2.11.9",
     "sd-parsers>=0.6",
+]
+qtfw = [
+    "pyqt6-fluent-widgets>=1.8.7",
 ]
 
 [build-system]
