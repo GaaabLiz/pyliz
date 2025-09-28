@@ -4,6 +4,7 @@ from typing import List
 
 from pylizlib.core.app.configini import IniManager, IniItem
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os import path as pathutils
 
 from dataclasses import dataclass
 

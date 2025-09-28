@@ -42,3 +42,13 @@ def gen_project_py(
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+
+@app.command("temp")
+def temp():
+    typer.echo("This is a temporary command.")
+
+
+if __name__ == "__main__":
+    app()
