@@ -1,0 +1,58 @@
+name: Build and Release Exe
+
+on:
+  push:
+    tags:
+      - '*'
+
+
+jobs:
+
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install uv and create virtual environment
+      run: |
+        python -m pip install --upgrade pip
+        pip install uv
+        uv venv .venv
+
+    - name: Activate uv environment and install dependencies from lock
+      shell: pwsh
+      run: |
+        uv sync
+
+    - name: Build executable with PyInstaller (Directory mode)
+      run: |
+        uv run pyinstaller --onefile --windowed --icon=resources/logo.ico pylizlib/core/cli.py
+
+    - name: Create GitHub release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.KEY_1 }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body: ${{ steps.build_changelog.outputs.changelog }}
+        draft: false
+        prerelease: false
+
+    - name: Upload setup.exe to release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.KEY_1 }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./Output/setup.exe
+        asset_name: atomdev-${{ github.ref_name }}-setup.exe
+        asset_content_type: application/octet-stream
