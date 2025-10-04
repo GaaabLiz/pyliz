@@ -1,4 +1,5 @@
 import os
+import random
 import shutil
 import tempfile
 from pathlib import Path
@@ -321,6 +322,14 @@ def clear_or_move_to_temp(path: Path, temp_path: Path, move_to_temp: bool):
         shutil.move(path, dest_path)
 
 
+def random_subfolder(path: Path) -> Path:
+    subdirs = [p for p in path.iterdir() if p.is_dir()]
+    if not subdirs:
+        return None  # o lancia un'eccezione, a seconda delle esigenze
+    return random.choice(subdirs)
+
+
+
 # def path_match_items(path: Path, path_list: list[str]):
 #     """
 #     Check the number and percentage of items in a path that match a list of strings paths.
@@ -371,3 +380,6 @@ class PathMatcher:
         logger.trace(f"Working path: {self.working_path}")
         for item in self.working_path_items_rel:
             print(item)
+
+
+
