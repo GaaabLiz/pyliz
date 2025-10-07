@@ -10,28 +10,28 @@ from typing import ClassVar, Any, TypeVar, Protocol, Generic, Optional
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp
 
-S = TypeVar("S")
+# S = TypeVar("S")
 
 
-class CatalogueInterface(ABC, Generic[S]):
-
-    def __init__(self, path_catalogue: Path):
-        self.__setup_catalogue(path_catalogue)
-
-    def __setup_catalogue(self, path_catalogue: Path):
-        path_catalogue.mkdir(parents=True, exist_ok=True)
-        self.path_catalogue = path_catalogue
-
-    def update_catalogue_path(self, new_path: Path):
-        self.__setup_catalogue(new_path)
-
-    @abstractmethod
-    def add(self, data: S) -> S:
-        pass
-
-    @abstractmethod
-    def get_all(self) -> list[S]:
-        pass
+# class CatalogueInterface(ABC, Generic[S]):
+#
+#     def __init__(self, path_catalogue: Path):
+#         self.__setup_catalogue(path_catalogue)
+#
+#     def __setup_catalogue(self, path_catalogue: Path):
+#         path_catalogue.mkdir(parents=True, exist_ok=True)
+#         self.path_catalogue = path_catalogue
+#
+#     def update_catalogue_path(self, new_path: Path):
+#         self.__setup_catalogue(new_path)
+#
+#     @abstractmethod
+#     def add(self, data: S) -> S:
+#         pass
+#
+#     @abstractmethod
+#     def get_all(self) -> list[S]:
+#         pass
 
 
 @dataclass
@@ -261,25 +261,33 @@ class SnapshotManager:
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_modified", datetime.now().isoformat())
         self.snapshot.date_modified = datetime.now()
 
+    def install_directory(self, path_directory: Path):
+        if not path_directory.exists() or not path_directory.is_dir():
+            raise ValueError(f"The provided path {path_directory} is not a valid directory.")
+        new_dir = SnapDirAssociation(
+            index=SnapDirAssociation.next_index(),
+            original_path=path_directory.as_posix(),
+            folder_id=gen_random_string(4)
+        )
+        new_dir.copy_install_to(self.path_snapshot)
+        self.snapshot.directories.append(new_dir)
+        self.__save_json()
+
+    def uninstall_directory(self, folder_id: str):
+        dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
+        if dir_to_remove:
+            dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
+            if dir_path.exists():
+                clear_or_move_to_temp(dir_path)
+            self.snapshot.directories.remove(dir_to_remove)
+            self.__save_json()
+
     def update_from_actions_list(self, edits: list[SnapEditAction]):
         for edit in edits:
             if edit.action_type == SnapEditType.ADD_DIR:
-                # Aggiungi una nuova directory (new_data contiene il path della directory da aggiungere)
-                new_dir = SnapDirAssociation(
-                    index=SnapDirAssociation.next_index(),
-                    original_path=edit.new_data,
-                    folder_id=gen_random_string(4)
-                )
-                new_dir.copy_install_to(self.path_snapshot)
-                self.snapshot.directories.append(new_dir)
+                self.install_directory(Path(edit.new_data))
             elif edit.action_type == SnapEditType.REMOVE_DIR:
-                # Rimuovi una directory (new_data contiene il folder_id della directory da rimuovere)
-                dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == edit.new_data), None)
-                if dir_to_remove:
-                    dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
-                    if dir_path.exists():
-                        clear_or_move_to_temp(dir_path)
-                    self.snapshot.directories.remove(dir_to_remove)
+                self.uninstall_directory(edit.new_data)
 
 
 
@@ -317,5 +325,6 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
+        snap_manager.update_from_actions_list(edits)
 
 
