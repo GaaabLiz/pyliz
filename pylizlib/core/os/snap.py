@@ -5,23 +5,32 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import ClassVar, Any, TypeVar, Protocol, Generic
+from typing import ClassVar, Any, TypeVar, Protocol, Generic, Optional
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.os.path import random_subfolder
-
+from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp
 
 S = TypeVar("S")
 
 
 class CatalogueInterface(ABC, Generic[S]):
 
+    def __init__(self, path_catalogue: Path):
+        self.__setup_catalogue(path_catalogue)
+
+    def __setup_catalogue(self, path_catalogue: Path):
+        path_catalogue.mkdir(parents=True, exist_ok=True)
+        self.path_catalogue = path_catalogue
+
+    def update_catalogue_path(self, new_path: Path):
+        self.__setup_catalogue(new_path)
+
     @abstractmethod
-    def add(self, path_catalogue: Path, data: S) -> S:
+    def add(self, data: S) -> S:
         pass
 
     @abstractmethod
-    def get_all(self, path_catalogue: Path) -> list[S]:
+    def get_all(self) -> list[S]:
         pass
 
 
@@ -69,6 +78,17 @@ class SnapDirAssociation:
                 shutil.copy2(src_path, dst_path)
 
 
+class SnapEditType(Enum):
+    ADD_DIR = "Add"
+    REMOVE_DIR = "Remove"
+    UPDATE_DATA = "Update"
+
+
+@dataclass
+class SnapEditAction:
+    action_type: SnapEditType
+    timestamp: datetime = datetime.now()
+    new_data: str = ""
 
 
 @dataclass
@@ -76,13 +96,14 @@ class Snapshot:
     id: str
     name: str
     desc: str
-    author: str
+    author: str = field(default="UnknownUser")
     directories: list[SnapDirAssociation] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     date_created: datetime = datetime.now()
     date_modified: datetime | None = None
     date_last_used: datetime | None = None
     date_last_modified: datetime | None = None
+    data: dict[str, str] = field(default_factory=dict)
 
     @property
     def folder_name(self) -> str:
@@ -91,6 +112,27 @@ class Snapshot:
     @classmethod
     def get_json_name(cls):
         return "snapshot.json"
+
+
+    def add_data_item(self, key: str, value: str) -> None:
+        """Aggiunge un elemento al dizionario."""
+        self.data[key] = value
+
+    def remove_data_item(self, key: str) -> Optional[str]:
+        """Rimuove un elemento dal dizionario e restituisce il valore rimosso."""
+        return self.data.pop(key, None)
+
+    def has_data_item(self, key: str) -> bool:
+        """Verifica se una chiave esiste nel dizionario."""
+        return key in self.data
+
+    def get_data_tem(self, key: str, default: str = "") -> str:
+        """Ottiene un valore dal dizionario con un default."""
+        return self.data.get(key, default)
+
+    def clear_all_data(self) -> None:
+        """Pulisce tutti gli elementi del dizionario."""
+        self.data.clear()
 
 
 
@@ -129,6 +171,33 @@ class Snapshot:
     def save_json(self, path_catalogue: Path):
         path_snapshot_json = self.__get_snap_json_path(path_catalogue)
         SnapshotSerializer.to_json(self, path_snapshot_json)
+
+    def __update_json_data_fields(self, path_catalogue: Path):
+        path_snapshot_json = self.__get_snap_json_path(path_catalogue)
+        SnapshotSerializer.update_field(path_snapshot_json, "data", self.data)
+        SnapshotSerializer.update_field(path_snapshot_json, "date_last_modified", datetime.now().isoformat())
+        self.date_last_modified = datetime.now()
+
+    def __update_json_base_fields(self, path_catalogue: Path):
+        path_snapshot_json = self.__get_snap_json_path(path_catalogue)
+        SnapshotSerializer.update_field(path_snapshot_json, "name", self.name)
+        SnapshotSerializer.update_field(path_snapshot_json, "desc", self.desc)
+        SnapshotSerializer.update_field(path_snapshot_json, "author", self.author)
+        SnapshotSerializer.update_field(path_snapshot_json, "tags", self.tags)
+        SnapshotSerializer.update_field(path_snapshot_json, "date_modified", datetime.now().isoformat())
+        self.date_modified = datetime.now()
+
+    def clear_snapshot(self, path_catalogue: Path):
+        path_snapshot = self.__get_snap_path(path_catalogue)
+        clear_or_move_to_temp(path_snapshot)
+
+    def update(self, path_catalogue: Path):
+        path_snapshot = self.__get_snap_path(path_catalogue)
+        if not path_snapshot.exists():
+            raise FileNotFoundError(f"The snapshot directory {path_snapshot} does not exist.")
+        self.__update_json_base_fields(path_catalogue)
+        self.__update_json_data_fields(path_catalogue)
+
 
     def create(self, path_catalogue: Path):
         path_snapshot = self.__get_snap_path(path_catalogue)
@@ -174,24 +243,43 @@ class SnapshotSerializer:
 
         return Snapshot(**data)
 
+    @classmethod
+    def update_field(cls, filepath: Path, field_name: str, new_value):
+        # Leggi dati esistenti dal file JSON
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+
+        # Aggiorna solo il campo specificato
+        data[field_name] = new_value
+
+        # Serializza di nuovo il file con i convertitori per datetime e enum se necessario
+        json_str = json.dumps(data, default=cls._converter, indent=4)
+        filepath.write_text(json_str, encoding="utf-8")
+
 
 
 class SnapshotCatalogue(CatalogueInterface[Snapshot]):
 
-    def add(self, path_catalogue: Path, data: S) -> S:
-        snapshot: Snapshot = data
-        path_catalogue.mkdir(parents=True, exist_ok=True)
-        snapshot.create(path_catalogue)
+    def __init__(self, path_catalogue: Path):
+        super().__init__(path_catalogue)
 
-    def get_all(self, path_catalogue: Path) -> list[S]:
-        path_catalogue.mkdir(parents=True, exist_ok=True)
+    def add(self, data: S) -> S:
+        snapshot: Snapshot = data
+        snapshot.create(self.path_catalogue)
+
+    def get_all(self) -> list[S]:
         snapshots: list[Snapshot] = []
-        for current_dir in path_catalogue.iterdir():
+        for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():
                 snap = Snapshot.get_snapshot_from_path(current_dir)
                 if snap is not None:
                     snapshots.append(snap)
         return snapshots
+
+    def remove(self, snapshot: Snapshot) -> None:
+        snapshot.clear_snapshot(self.path_catalogue)
+
+    def update(self, snapshot: Snapshot) -> None:
+        snapshot.update(self.path_catalogue)
 
 
     #
