@@ -303,7 +303,7 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
     return items
 
 
-def clear_or_move_to_temp(path: Path, temp_path: Path, move_to_temp: bool):
+def clear_or_move_to_temp(path: Path, temp_path: Path | None = None, move_to_temp: bool = False):
     """
     Clear a directory or move it to a temporary location.
     :param path: Path to the directory to clear or move.
@@ -314,6 +314,9 @@ def clear_or_move_to_temp(path: Path, temp_path: Path, move_to_temp: bool):
     if not move_to_temp:
         shutil.rmtree(path.__str__())
     else:
+        if temp_path is None:
+            logger.error("Temp path cannot be None")
+            return
         temp_dir = tempfile.gettempdir()
         atom_temp_dir = os.path.join(temp_dir, temp_path.__str__())
         os.makedirs(atom_temp_dir, exist_ok=True)
@@ -328,6 +331,32 @@ def random_subfolder(path: Path) -> Path:
         return None  # o lancia un'eccezione, a seconda delle esigenze
     return random.choice(subdirs)
 
+
+def clear_folder_contents(path: Path):
+    """
+    Clear all contents of a folder without deleting the folder itself.
+    :param path: Path to the folder to clear.
+    :return: None
+    """
+    if not path.is_dir():
+        raise NotADirectoryError(f"The provided path {path} is not a directory.")
+    for item in path.iterdir():
+        try:
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        except Exception as e:
+            logger.error(f"Error deleting {item}: {e}")
+
+
+def count_items(dir_path: Path) -> int:
+    """
+    Restituisce il numero di file e sottodirectory in dir_path.
+    """
+    if not dir_path.is_dir():
+        raise ValueError(f"{dir_path!r} non è una directory valida")
+    return sum(1 for _ in dir_path.iterdir())
 
 
 # def path_match_items(path: Path, path_list: list[str]):
