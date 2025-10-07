@@ -81,7 +81,6 @@ class SnapDirAssociation:
 class SnapEditType(Enum):
     ADD_DIR = "Add"
     REMOVE_DIR = "Remove"
-    UPDATE_DATA = "Update"
 
 
 @dataclass
@@ -89,6 +88,7 @@ class SnapEditAction:
     action_type: SnapEditType
     timestamp: datetime = datetime.now()
     new_data: str = ""
+
 
 
 @dataclass
@@ -108,11 +108,6 @@ class Snapshot:
     @property
     def folder_name(self) -> str:
         return self.id + "-" + self.name
-
-    @classmethod
-    def get_json_name(cls):
-        return "snapshot.json"
-
 
     def add_data_item(self, key: str, value: str) -> None:
         """Aggiunge un elemento al dizionario."""
@@ -136,8 +131,19 @@ class Snapshot:
 
 
 
+
+
+
+
+
+
+
+
+
+class SnapshotUtils:
+
     @staticmethod
-    def gen_random(source_folder_for_choices: Path, id_length: int = 10, ) -> 'Snapshot':
+    def gen_random(source_folder_for_choices: Path, id_length: int = 10, ) -> Snapshot:
         dirs = SnapDirAssociation.gen_random_list(3, source_folder_for_choices)
         return Snapshot(
             id=gen_random_string(id_length),
@@ -149,67 +155,22 @@ class Snapshot:
         )
 
     @staticmethod
-    def get_snapshot_from_path(path_snapshot: Path) -> 'Snapshot | None':
+    def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
         if path_snapshot.is_file():
             raise ValueError(f"The provided path {path_snapshot} is not a directory.")
         if not path_snapshot.exists():
             raise FileNotFoundError(f"The provided path {path_snapshot} does not exist.")
-        path_snapshot_json = path_snapshot.joinpath(Snapshot.get_json_name())
+        path_snapshot_json = path_snapshot.joinpath(json_filename)
         if not path_snapshot_json.is_file():
             raise FileNotFoundError(f"No snapshot.json file found in {path_snapshot}.")
         return SnapshotSerializer.from_json(path_snapshot_json)
 
 
-    def __get_snap_path(self, path_catalogue: Path):
-        path_snapshot = path_catalogue.joinpath(self.folder_name)
-        path_snapshot.mkdir(parents=True, exist_ok=True)
-        return path_snapshot
-
-    def __get_snap_json_path(self, path_catalogue: Path):
-        return self.__get_snap_path(path_catalogue).joinpath(self.get_json_name())
-
-    def save_json(self, path_catalogue: Path):
-        path_snapshot_json = self.__get_snap_json_path(path_catalogue)
-        SnapshotSerializer.to_json(self, path_snapshot_json)
-
-    def __update_json_data_fields(self, path_catalogue: Path):
-        path_snapshot_json = self.__get_snap_json_path(path_catalogue)
-        SnapshotSerializer.update_field(path_snapshot_json, "data", self.data)
-        SnapshotSerializer.update_field(path_snapshot_json, "date_last_modified", datetime.now().isoformat())
-        self.date_last_modified = datetime.now()
-
-    def __update_json_base_fields(self, path_catalogue: Path):
-        path_snapshot_json = self.__get_snap_json_path(path_catalogue)
-        SnapshotSerializer.update_field(path_snapshot_json, "name", self.name)
-        SnapshotSerializer.update_field(path_snapshot_json, "desc", self.desc)
-        SnapshotSerializer.update_field(path_snapshot_json, "author", self.author)
-        SnapshotSerializer.update_field(path_snapshot_json, "tags", self.tags)
-        SnapshotSerializer.update_field(path_snapshot_json, "date_modified", datetime.now().isoformat())
-        self.date_modified = datetime.now()
-
-    def clear_snapshot(self, path_catalogue: Path):
-        path_snapshot = self.__get_snap_path(path_catalogue)
-        clear_or_move_to_temp(path_snapshot)
-
-    def update(self, path_catalogue: Path):
-        path_snapshot = self.__get_snap_path(path_catalogue)
-        if not path_snapshot.exists():
-            raise FileNotFoundError(f"The snapshot directory {path_snapshot} does not exist.")
-        self.__update_json_base_fields(path_catalogue)
-        self.__update_json_data_fields(path_catalogue)
-
-
-    def create(self, path_catalogue: Path):
-        path_snapshot = self.__get_snap_path(path_catalogue)
-        for snap_dir in self.directories:
-            snap_dir.copy_install_to(path_snapshot)
-        self.save_json(path_catalogue)
 
 
 
 
 class SnapshotSerializer:
-
 
     @staticmethod
     def _converter(o):
@@ -257,48 +218,104 @@ class SnapshotSerializer:
 
 
 
-class SnapshotCatalogue(CatalogueInterface[Snapshot]):
+class SnapshotManager:
 
-    def __init__(self, path_catalogue: Path):
-        super().__init__(path_catalogue)
+    def __init__(
+            self,
+            snapshot: Snapshot,
+            catalogue_path: Path,
+            json_filename: str = "snapshot.json"
+    ):
+        self.snapshot = snapshot
+        self.json_filename = json_filename
+        self.path_catalogue = catalogue_path
+        self.path_snapshot = self.path_catalogue.joinpath(self.snapshot.folder_name)
+        self.path_snapshot_json = self.path_snapshot.joinpath(self.json_filename)
 
-    def add(self, data: S) -> S:
-        snapshot: Snapshot = data
-        snapshot.create(self.path_catalogue)
 
-    def get_all(self) -> list[S]:
+    def __save_json(self):
+        SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
+
+    def create(self):
+        if self.path_snapshot.exists():
+            clear_folder_contents(self.path_snapshot)
+        self.path_snapshot.mkdir(parents=True, exist_ok=True)
+        for snap_dir in self.snapshot.directories:
+            snap_dir.copy_install_to(self.path_snapshot)
+        self.__save_json()
+
+    def delete(self):
+        if self.path_snapshot.exists():
+            clear_or_move_to_temp(self.path_snapshot)
+
+    def update_json_data_fields(self):
+        SnapshotSerializer.update_field(self.path_snapshot_json, "data", self.snapshot.data)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_modified", datetime.now().isoformat())
+        self.snapshot.date_last_modified = datetime.now()
+
+    def update_json_base_fields(self):
+        SnapshotSerializer.update_field(self.path_snapshot_json, "name", self.snapshot.name)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "desc", self.snapshot.desc)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "author", self.snapshot.author)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "tags", self.snapshot.tags)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "date_modified", datetime.now().isoformat())
+        self.snapshot.date_modified = datetime.now()
+
+    def update_from_actions_list(self, edits: list[SnapEditAction]):
+        for edit in edits:
+            if edit.action_type == SnapEditType.ADD_DIR:
+                # Aggiungi una nuova directory (new_data contiene il path della directory da aggiungere)
+                new_dir = SnapDirAssociation(
+                    index=SnapDirAssociation.next_index(),
+                    original_path=edit.new_data,
+                    folder_id=gen_random_string(4)
+                )
+                new_dir.copy_install_to(self.path_snapshot)
+                self.snapshot.directories.append(new_dir)
+            elif edit.action_type == SnapEditType.REMOVE_DIR:
+                # Rimuovi una directory (new_data contiene il folder_id della directory da rimuovere)
+                dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == edit.new_data), None)
+                if dir_to_remove:
+                    dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
+                    if dir_path.exists():
+                        clear_or_move_to_temp(dir_path)
+                    self.snapshot.directories.remove(dir_to_remove)
+
+
+
+class SnapshotCatalogue:
+
+    def __init__(
+            self,
+            path_catalogue: Path,
+            snapshot_json_filename: str = "snapshot.json"
+    ):
+        self.path_catalogue = path_catalogue
+        self.snapshot_json_filename = snapshot_json_filename
+
+        self.path_catalogue.mkdir(parents=True, exist_ok=True)
+
+
+    def add(self, snap: Snapshot):
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager.create()
+
+    def delete(self, snap: Snapshot):
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager.delete()
+
+    def get_all(self) -> list[Snapshot]:
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():
-                snap = Snapshot.get_snapshot_from_path(current_dir)
+                snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.snapshot_json_filename)
                 if snap is not None:
                     snapshots.append(snap)
         return snapshots
 
-    def remove(self, snapshot: Snapshot) -> None:
-        snapshot.clear_snapshot(self.path_catalogue)
+    def update_snapshot(self, snap: Snapshot, edits: list[SnapEditAction]):
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager.update_json_base_fields()
+        snap_manager.update_json_data_fields()
 
-    def update(self, snapshot: Snapshot) -> None:
-        snapshot.update(self.path_catalogue)
 
-
-    #
-    # @staticmethod
-    # def duplicate(path_catalogue: Path, snapshot: Snapshot) -> Snapshot:
-    #     path_catalogue.mkdir(parents=True, exist_ok=True)
-    #     pass
-    #
-    # @staticmethod
-    # def get_all(path_catalogue: Path) -> list[Snapshot]:
-    #     path_catalogue.mkdir(parents=True, exist_ok=True)
-    #     snapshots: list[Snapshot] = []
-    #     for current_dir in path_catalogue.iterdir():
-    #         if current_dir.is_dir():
-    #             snap = Snapshot.get_snapshot_from_path(current_dir)
-    #             if snap is not None:
-    #                 snapshots.append(snap)
-    #     return snapshots
-    #
-    # @staticmethod
-    # def install_attached_dirs(path_catalogue: Path, snapshot: Snapshot) -> None:
-    #     pass
