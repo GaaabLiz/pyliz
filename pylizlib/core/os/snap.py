@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import ClassVar, Any, TypeVar, Protocol, Generic, Optional
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp
+from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp, duplicate_directory
+
 
 # S = TypeVar("S")
 
@@ -87,7 +88,8 @@ class SnapEditType(Enum):
 class SnapEditAction:
     action_type: SnapEditType
     timestamp: datetime = datetime.now()
-    new_data: str = ""
+    new_path: str = ""
+    folder_id_to_remove: str = ""
 
 
 
@@ -161,9 +163,6 @@ class SnapshotUtils:
             tags=["example", "test"]
         )
 
-    @staticmethod
-    def gen_random_snap_edits(source_folder_for_choices: Path) -> list[SnapEditAction]:
-        edits = []
 
     @staticmethod
     def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
@@ -176,7 +175,13 @@ class SnapshotUtils:
             raise FileNotFoundError(f"No snapshot.json file found in {path_snapshot}.")
         return SnapshotSerializer.from_json(path_snapshot_json)
 
+    @staticmethod
+    def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
+        return catalogue_path.joinpath(folder_name)
 
+    @staticmethod
+    def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
+        return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(json_filename)
 
 
 
@@ -240,9 +245,8 @@ class SnapshotManager:
         self.snapshot = snapshot
         self.json_filename = json_filename
         self.path_catalogue = catalogue_path
-        self.path_snapshot = self.path_catalogue.joinpath(self.snapshot.folder_name)
-        self.path_snapshot_json = self.path_snapshot.joinpath(self.json_filename)
-
+        self.path_snapshot = SnapshotUtils.get_snapshot_path(self.snapshot.folder_name, self.path_catalogue)
+        self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.json_filename)
 
     def __save_json(self):
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
@@ -272,19 +276,19 @@ class SnapshotManager:
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_modified", datetime.now().isoformat())
         self.snapshot.date_modified = datetime.now()
 
-    def install_directory(self, path_directory: Path):
-        if not path_directory.exists() or not path_directory.is_dir():
-            raise ValueError(f"The provided path {path_directory} is not a valid directory.")
+    def install_directory(self, destination_path: Path):
+        if not destination_path.exists() or not destination_path.is_dir():
+            raise ValueError(f"The provided path {destination_path} is not a valid directory.")
         new_dir = SnapDirAssociation(
             index=SnapDirAssociation.next_index(),
-            original_path=path_directory.as_posix(),
+            original_path=destination_path.as_posix(),
             folder_id=gen_random_string(4)
         )
         new_dir.copy_install_to(self.path_snapshot)
         self.snapshot.directories.append(new_dir)
         self.__save_json()
 
-    def uninstall_directory(self, folder_id: str):
+    def uninstall_directory_by_folder_id(self, folder_id: str):
         dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
             dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
@@ -296,10 +300,21 @@ class SnapshotManager:
     def update_from_actions_list(self, edits: list[SnapEditAction]):
         for edit in edits:
             if edit.action_type == SnapEditType.ADD_DIR:
-                self.install_directory(Path(edit.new_data))
+                self.install_directory(Path(edit.new_path))
             elif edit.action_type == SnapEditType.REMOVE_DIR:
-                self.uninstall_directory(edit.new_data)
+                self.uninstall_directory_by_folder_id(edit.folder_id_to_remove)
 
+    def duplicate(self):
+        if not self.path_snapshot.exists():
+            raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
+        new_snap = self.snapshot
+        new_snap.id = gen_random_string(10)
+        new_snap.name = self.snapshot.name + " Copy"
+        new_snap.date_created = datetime.now()
+        new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
+        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.json_filename)
+        duplicate_directory(self.path_snapshot, new_snap_path, "")
+        SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
 
 class SnapshotCatalogue:
@@ -344,5 +359,14 @@ class SnapshotCatalogue:
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
+
+    def duplicate_by_id(self, snap_id: str):
+        snap = self.get_by_id(snap_id)
+        if snap is None:
+            raise ValueError(f"No snapshot found with ID {snap_id}")
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager.duplicate()
+
+
 
 

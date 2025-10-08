@@ -16,12 +16,15 @@ catalogue.add(snap)
 
 list_snaps = catalogue.get_all()
 
-snap_found = catalogue.get_by_id(snap.id)
-snap_found.add_data_item("ExtraField3", "ExtraValue3")
-snap_found.edit_data_item("ExtraField2", "ExtraValue2-Edited")
-snap_found.desc = "Snapshot Edited"
-snap_edit_new_dir = SnapEditAction(new_data=random_subfolder(path_temp).__str__(), action_type=SnapEditType.ADD_DIR)
-catalogue.update_snapshot(snap_found, [snap_edit_new_dir])
+# snap_found = catalogue.get_by_id(snap.id)
+# snap_found.add_data_item("ExtraField3", "ExtraValue3")
+# snap_found.edit_data_item("ExtraField2", "ExtraValue2-Edited")
+# snap_found.desc = "Snapshot Edited"
+# snap_edit_new_dir = SnapEditAction(new_path=random_subfolder(path_temp).__str__(), action_type=SnapEditType.ADD_DIR)
+# catalogue.update_snapshot(snap_found, [snap_edit_new_dir])
+
+
+catalogue.duplicate_by_id(snap.id)
 
 
 print(list_snaps)
