@@ -7,6 +7,7 @@ from typing import Callable, List, Optional, LiteralString
 
 from pylizlib.core.data import gen
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.file import is_video_file, is_image_file
 
 
 def get_home_dir():
@@ -208,7 +209,7 @@ def dir_contains_image(path: str):
     :param path: path to the directory to check
     :return: True if the directory contains an image file, False otherwise
     """
-    files = scan_directory_match_bool(path, fileutils.is_image_file)
+    files = scan_directory_match_bool(path, is_image_file)
     return len(files) > 0
 
 
@@ -218,7 +219,7 @@ def dir_contains_video(path: str):
     :param path: path to the directory to check
     :return: True if the directory contains a video file, False otherwise
     """
-    files = scan_directory_match_bool(path, fileutils.is_video_file)
+    files = scan_directory_match_bool(path, is_video_file)
     return len(files) > 0
 
 
@@ -359,6 +360,33 @@ def count_items(dir_path: Path) -> int:
     return sum(1 for _ in dir_path.iterdir())
 
 
+def duplicate_directory(
+        src_dir: Path,
+        dest_dir: Path | None = None,
+        copy_suffix: str = "_copy"
+) -> Path:
+    """
+    Duplica la directory src_dir in dest_dir e ritorna il Path della copia.
+
+    Se dest_dir è None, crea una directory fratello di src_dir
+    con nome src_dir.name + copy_suffix.
+    """
+    if not src_dir.is_dir():
+        raise ValueError(f"{src_dir!r} non è una directory valida")
+
+    # Se non specificato, costruisce dest_dir affiancata a src_dir
+    if dest_dir is None:
+        dest_dir = src_dir.with_name(src_dir.name + copy_suffix)
+
+    # Assicura che la destinazione non esista già
+    if dest_dir.exists():
+        raise FileExistsError(f"{dest_dir!r} esiste già")
+
+    # Copia ricorsivamente la directory
+    shutil.copytree(src_dir, dest_dir)
+    return dest_dir
+
+
 # def path_match_items(path: Path, path_list: list[str]):
 #     """
 #     Check the number and percentage of items in a path that match a list of strings paths.
@@ -386,7 +414,7 @@ class PathMatcher:
 
     def load_path(self, path: Path, recursive: bool = False):
         self.working_path = path
-        self.working_path_items = pathutils.get_path_items(path, recursive)
+        self.working_path_items = get_path_items(path, recursive)
         self.working_path_items_rel = [str(p.relative_to(self.working_path)) for p in self.working_path_items]
 
     def match_with_list(self, path_str_list: list[str]):
