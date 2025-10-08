@@ -316,6 +316,12 @@ class SnapshotManager:
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
+    def install(self):
+        for dir_assoc in self.snapshot.directories:
+            dir_assoc.copy_install_to(Path(dir_assoc.original_path))
+        self.snapshot.date_last_used = datetime.now()
+        SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
+
 
 class SnapshotCatalogue:
 
@@ -366,6 +372,10 @@ class SnapshotCatalogue:
             raise ValueError(f"No snapshot found with ID {snap_id}")
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
         snap_manager.duplicate()
+
+    def install(self, snap: Snapshot):
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager.install()
 
 
 
