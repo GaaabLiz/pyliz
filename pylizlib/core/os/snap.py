@@ -129,6 +129,13 @@ class Snapshot:
         """Pulisce tutti gli elementi del dizionario."""
         self.data.clear()
 
+    def edit_data_item(self, key: str, new_value: str) -> None:
+        """Modifica il valore di un elemento esistente nel dizionario."""
+        if key in self.data:
+            self.data[key] = new_value
+        else:
+            raise KeyError(f"Key '{key}' not found in data.")
+
 
 
 
@@ -143,7 +150,7 @@ class Snapshot:
 class SnapshotUtils:
 
     @staticmethod
-    def gen_random(source_folder_for_choices: Path, id_length: int = 10, ) -> Snapshot:
+    def gen_random_snap(source_folder_for_choices: Path, id_length: int = 10, ) -> Snapshot:
         dirs = SnapDirAssociation.gen_random_list(3, source_folder_for_choices)
         return Snapshot(
             id=gen_random_string(id_length),
@@ -153,6 +160,10 @@ class SnapshotUtils:
             directories=dirs,
             tags=["example", "test"]
         )
+
+    @staticmethod
+    def gen_random_snap_edits(source_folder_for_choices: Path) -> list[SnapEditAction]:
+        edits = []
 
     @staticmethod
     def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
@@ -320,6 +331,13 @@ class SnapshotCatalogue:
                 if snap is not None:
                     snapshots.append(snap)
         return snapshots
+
+    def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
+        all_snaps = self.get_all()
+        for snap in all_snaps:
+            if snap.id == snap_id:
+                return snap
+        return None
 
     def update_snapshot(self, snap: Snapshot, edits: list[SnapEditAction]):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
