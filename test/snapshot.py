@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from pylizlib.core.os.path import random_subfolder
-from pylizlib.core.os.snap import Snapshot, SnapshotCatalogue, SnapshotUtils, SnapEditAction, SnapEditType
+from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotUtils
 
 path_catalogue = Path("/Users/gabliz/Documents/Test/Dev Tests")
 path_temp = Path("/Users/gabliz/Documents/Test/eagleTest/test.library/images")
