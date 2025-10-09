@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - '*'
-  create:
-    tags:
-      - '*'
 
 permissions:
   contents: write
@@ -96,7 +93,6 @@ jobs:
           uv sync --all-groups
           uv add --group dev pyinstaller
           uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-linux pylizlib/core/cli.py
-          mv dist/pyliz-${{ github.ref_name }}-linux dist/pyliz-${{ github.ref_name }}-linux
           if [ -f "pylizlib/qt/cli.py" ]; then
             uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-linux pylizlib/qt/cli.py
           fi
