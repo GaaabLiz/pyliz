@@ -46,6 +46,7 @@ include = ["pylizlib*"]
 
 [dependency-groups]
 dev = [
+    "git-cliff>=2.10.1",
     "pdoc>=15.0.4",
     "pyinstaller>=6.16.0",
     "ruff>=0.13.1",

@@ -35,15 +35,10 @@ jobs:
         run: uv python install 3.12
 
       - name: Install git-cliff for changelog generation
-        run: |
-          uv add --dev git-cliff
+        run: uv add --dev git-cliff
 
       - name: Generate changelog
-        run: |
-          cat > cliff.toml << 'EOF'
-          … (config git-cliff) …
-          EOF
-          git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
+        run: uv run git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
 
       - name: Commit and push changelog
         run: |
