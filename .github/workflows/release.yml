@@ -1,0 +1,191 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger quando viene pushato un tag che inizia con 'v'
+
+permissions:
+  contents: write
+  id-token: write  # Necessario per trusted publishing su PyPI
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi  # Environment configurato per PyPI publishing
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necessario per accedere a tutta la history per il changelog
+          
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+          
+      - name: Set up Python
+        run: uv python install 3.12
+        
+      - name: Install git-cliff for changelog generation
+        run: |
+          curl -sSL https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-$(uname -m)-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin git-cliff
+
+      - name: Generate changelog
+        run: |
+          # Crea il file di configurazione per git-cliff
+          cat > cliff.toml << 'EOF'
+          [changelog]
+          header = """
+          # Changelog
+          
+          Tutte le modifiche notevoli a questo progetto saranno documentate in questo file.
+          
+          Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+          e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+          
+          """
+          body = """
+          {% if version %}\
+              ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+          {% else %}\
+              ## [unreleased]
+          {% endif %}\
+          {% for group, commits in commits | group_by(attribute="group") %}
+              ### {{ group | striptags | trim | upper_first }}
+              {% for commit in commits %}
+                  - {% if commit.scope %}**{{commit.scope}}**: {% endif %}{{ commit.message | upper_first }}\
+              {% endfor %}
+          {% endfor %}
+          
+          """
+          footer = ""
+          postprocessors = [
+            { pattern = '\$REPO', replace = "https://github.com/your-username/your-repo" },
+          ]
+          
+          [git]
+          conventional_commits = true
+          filter_unconventional = true
+          split_commits = false
+          commit_preprocessors = []
+          commit_parsers = [
+              { message = "^feat", group = "🚀 Features"},
+              { message = "^fix", group = "🐛 Bug Fixes"},
+              { message = "^doc", group = "📚 Documentation"},
+              { message = "^perf", group = "⚡ Performance"},
+              { message = "^refactor", group = "♻️ Refactor"},
+              { message = "^style", group = "🎨 Styling"},
+              { message = "^test", group = "🧪 Testing"},
+              { message = "^chore\\(release\\): prepare for", skip = true},
+              { message = "^chore", group = "⚙️ Miscellaneous Tasks"},
+              { body = ".*security", group = "🛡️ Security"},
+              { message = "^revert", group = "◀️ Revert"},
+          ]
+          protect_breaking_commits = false
+          filter_commits = false
+          tag_pattern = "v[0-9]*"
+          skip_tags = "v0.1.0-beta.1"
+          ignore_tags = ""
+          topo_order = false
+          sort_commits = "oldest"
+          EOF
+          
+          # Genera il changelog per il tag corrente
+          git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
+          
+      - name: Commit and push changelog
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update changelog for ${GITHUB_REF#refs/tags/}"
+            git push origin HEAD:main
+          else
+            echo "No changes to changelog"
+          fi
+          
+      - name: Install dependencies and build package
+        run: |
+          uv sync --all-groups
+          uv build
+          
+      - name: Publish to PyPI
+        run: |
+          uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          
+      - name: Build executable with PyInstaller
+        run: |
+          # Installa pyinstaller se non è già installato
+          uv add --group dev pyinstaller
+          
+          # Crea l'eseguibile usando il comando principale del progetto
+          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }} pylizlib/core/cli.py
+          
+          # Rinomina per includere la versione
+          mv dist/pyliz-${{ github.ref_name }} dist/pyliz-${{ github.ref_name }}-linux
+          
+          # Crea anche l'eseguibile per l'interfaccia Qt se necessario
+          if [ -f "pylizlib/qt/cli.py" ]; then
+            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }} pylizlib/qt/cli.py
+            mv dist/qtliz-${{ github.ref_name }} dist/qtliz-${{ github.ref_name }}-linux
+          fi
+          
+      - name: Extract changelog for release
+        id: changelog
+        run: |
+          # Estrae solo la sezione del changelog per questa release
+          version=${GITHUB_REF#refs/tags/}
+          sed -n "/## \[${version#v}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+          echo "changelog_content<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            dist/pyliz-*
+            dist/qtliz-*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job separato per Windows executable (opzionale)
+  windows-exe:
+    runs-on: windows-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+          
+      - name: Set up Python
+        run: uv python install 3.12
+        
+      - name: Install dependencies and build Windows executable
+        run: |
+          uv sync --all-groups
+          uv add --group dev pyinstaller
+          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-windows.exe pylizlib/core/cli.py
+          
+      - name: Upload Windows executable to existing release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pyliz-${{ github.ref_name }}-windows.exe
+          append_body: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
