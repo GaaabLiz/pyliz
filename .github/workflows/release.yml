@@ -120,24 +120,18 @@ jobs:
           uv add --group dev pyinstaller
           uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-windows.exe pylizlib/core/cli.py
 
-  release:
-    name: Create GitHub Release & Publish
+  create-release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
     needs:
       - build-macos
       - build-linux
       - build-windows
-    environment: pypi
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Publish to PyPI
-        run: uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -152,3 +146,28 @@ jobs:
             dist/pyliz-*-windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: create-release
+    environment: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Publish to PyPI
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
