@@ -4,8 +4,8 @@ from typing import Any
 
 from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QPushButton
 
-from qtlizlib.handler.operation import OperationRunner, RunnerInteraction
-from qtlizlib.helper.operation import OperationDevDebug
+from pylizlib.qt.handler.operation import OperationRunner, RunnerInteraction
+from pylizlib.qt.helper.operation import OperationDevDebug
 
 logging.basicConfig(
     level=logging.DEBUG,  # o DEBUG, WARNING, ERROR, CRITICAL

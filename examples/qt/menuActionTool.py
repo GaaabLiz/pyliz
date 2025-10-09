@@ -5,11 +5,11 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QWidget, QVBoxLayout, QPushButton
 
-from qtlizlib.domain.menuActionTool import ActionItem, ActionGroupItem, InstanceData, InstanceInstallSetting, \
-    ToolbarWidgetType, ToolbarItem
-from qtlizlib.domain.theme import AppTheme
-from qtlizlib.handler.menuAction import ToolbarHandler, MenuMasterHandler
-
+from pylizlib.qt.domain.menuActionTool import ActionItem, InstanceData, InstanceInstallSetting, ToolbarWidgetType, \
+    ActionGroupItem, ToolbarItem
+from pylizlib.qt.domain.theme import AppTheme
+from pylizlib.qt.handler.menuAction import MenuMasterHandler
+from pylizlib.qt.handler.menuActionToolbar import ToolbarHandler
 
 logging.basicConfig(
     level=logging.DEBUG,  # o DEBUG, WARNING, ERROR, CRITICAL
