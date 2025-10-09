@@ -36,8 +36,7 @@ jobs:
 
       - name: Install git-cliff for changelog generation
         run: |
-          curl -sSL https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-$(uname -m)-unknown-linux-gnu.tar.gz \
-            | tar xz -C /usr/local/bin git-cliff
+          uv add --dev git-cliff
 
       - name: Generate changelog
         run: |
