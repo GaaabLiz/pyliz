@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 import cv2
 import numpy as np
+from numpy import floating
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.media.domain.video import Frame, FrameOptions, SceneType
@@ -76,7 +77,7 @@ class DynamicFrameSelector(FrameSelector):
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         return scene_changes
 
-    def _calculate_frame_difference(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+    def _calculate_frame_difference(self, frame1: np.ndarray, frame2: np.ndarray) -> floating[Any]:
         """Calculate the difference between two frames"""
         gray1 = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
         gray2 = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)

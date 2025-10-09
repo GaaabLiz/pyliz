@@ -21,5 +21,8 @@ export:
 upload:
 	twine upload dist/*
 
-docs:
+docs-gen:
 	pdoc -o docs -d markdown pylizlib
+
+sync:
+	uv sync --all-extras

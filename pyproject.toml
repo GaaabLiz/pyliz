@@ -46,6 +46,7 @@ include = ["pylizlib*"]
 
 [dependency-groups]
 dev = [
+    "pdoc>=15.0.4",
     "pyinstaller>=6.16.0",
     "ruff>=0.13.1",
     "ty>=0.0.1a21",

@@ -63,35 +63,35 @@ def create_prf_group_box_form_layout(name: str, parent: Any) -> tuple:
     return group_box, form_layout
 
 
-def add_ui_to_form_layout(
-        data: PreferenceConfigData,
-        layout: QFormLayout,
-        app: PylizApp,
-        on_change: Callable[[ConfigIniItem, str | None, bool | None], None],
-) -> None:
-    match data.type:
-        case PreferenceTypes.PATH:
-            element = create_prf_path(data.config, app)
-            element.widget.setText(element.getter())
-            element.widget.get_text_changed().connect(element.setter)
-            element.widget.get_text_changed().connect(lambda text: on_change(data.config, text, None))
-            layout.addRow(element.label, element.widget)
-        case PreferenceTypes.CHECK:
-            element = create_prf_checkbox(data.config, app)
-            element.widget.setChecked(element.getter())
-            element.widget.stateChanged.connect(lambda state: element.setter(bool(state)))
-            element.widget.stateChanged.connect(lambda state: on_change(data.config, None, bool(state)))
-            layout.addRow(element.label, element.widget)
-            pass
-        case PreferenceTypes.COMBO:
-            element = create_prf_combo_box(data.config, app)
-            element.widget.setCurrentText(element.getter())
-            element.widget.currentTextChanged.connect(element.setter)
-            element.widget.currentTextChanged.connect(lambda text: on_change(data.config, text, None))
-            layout.addRow(element.label, element.widget)
-        case PreferenceTypes.SPINBOX:
-            element = create_prf_spin_box(data.config, app)
-            element.widget.setValue(element.getter())
-            element.widget.valueChanged.connect(element.setter)
-            element.widget.valueChanged.connect(lambda value: on_change(data.config, str(value), None))
-            layout.addRow(element.label, element.widget)
+# def add_ui_to_form_layout(
+#         data: PreferenceConfigData,
+#         layout: QFormLayout,
+#         app: PylizApp,
+#         on_change: Callable[[ConfigIniItem, str | None, bool | None], None],
+# ) -> None:
+#     match data.type:
+#         case PreferenceTypes.PATH:
+#             element = create_prf_path(data.config, app)
+#             element.widget.setText(element.getter())
+#             element.widget.get_text_changed().connect(element.setter)
+#             element.widget.get_text_changed().connect(lambda text: on_change(data.config, text, None))
+#             layout.addRow(element.label, element.widget)
+#         case PreferenceTypes.CHECK:
+#             element = create_prf_checkbox(data.config, app)
+#             element.widget.setChecked(element.getter())
+#             element.widget.stateChanged.connect(lambda state: element.setter(bool(state)))
+#             element.widget.stateChanged.connect(lambda state: on_change(data.config, None, bool(state)))
+#             layout.addRow(element.label, element.widget)
+#             pass
+#         case PreferenceTypes.COMBO:
+#             element = create_prf_combo_box(data.config, app)
+#             element.widget.setCurrentText(element.getter())
+#             element.widget.currentTextChanged.connect(element.setter)
+#             element.widget.currentTextChanged.connect(lambda text: on_change(data.config, text, None))
+#             layout.addRow(element.label, element.widget)
+#         case PreferenceTypes.SPINBOX:
+#             element = create_prf_spin_box(data.config, app)
+#             element.widget.setValue(element.getter())
+#             element.widget.valueChanged.connect(element.setter)
+#             element.widget.valueChanged.connect(lambda value: on_change(data.config, str(value), None))
+#             layout.addRow(element.label, element.widget)
