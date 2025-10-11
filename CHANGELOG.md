@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.11] - 2025-10-09
+## [0.3.15] - 2025-10-11
 
 ### Bump
 
@@ -15,6 +15,20 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 ### ⚙️ Miscellaneous Tasks
 
 - Add changelog configuration and git-cliff dependency
+- Rename pypi.yml for consistency
+- Rename test files for consistency
+- Rename test files for consistency
+- Refactor release workflow to include changelog generation and streamline build steps
+- Update release workflow to install uv and set up Python 3.12
+- Bump version to 0.3.13 in pyproject.toml and uv.lock
+- Clean up release workflow by removing unused tag creation step. Delete mv command.
+- Restructure release workflow to separate GitHub release and PyPI publishing steps
+- Restructure release workflow to separate GitHub release and PyPI publishing steps
+- Bump version to 0.3.15 and update release workflow for improved changelog generation
+
+### 📚 Documentation
+
+- Update changelog for 0.3.11
 ## [0.3.8] - 2025-10-09
 
 ### Bump
