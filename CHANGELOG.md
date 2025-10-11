@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.15] - 2025-10-11
+## [0.3.17] - 2025-10-11
 
 ### Bump
 
@@ -25,10 +25,12 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Restructure release workflow to separate GitHub release and PyPI publishing steps
 - Restructure release workflow to separate GitHub release and PyPI publishing steps
 - Bump version to 0.3.15 and update release workflow for improved changelog generation
+- Bump version to 0.3.17 and update release workflow for Linux and macOS builds
 
 ### 📚 Documentation
 
 - Update changelog for 0.3.11
+- Update changelog for 0.3.15
 ## [0.3.8] - 2025-10-09
 
 ### Bump
