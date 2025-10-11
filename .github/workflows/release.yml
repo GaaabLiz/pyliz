@@ -2,6 +2,11 @@ name: Build and Release
 
 on:
   push:
+    # Trigger per i push di tag via git
+    tags:
+      - '*'
+  create:
+    # Trigger per i tag creati su GitHub (UI o API)
     tags:
       - '*'
 
@@ -10,11 +15,10 @@ permissions:
   id-token: write
 
 jobs:
-  changelog:
-    name: Generate Changelog
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      changelog_path: ${{ steps.extract.outputs.changelog_content }}
+    environment: pypi
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,77 +34,69 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Install uv and git-cliff
-        run: |
-          uv add --dev git-cliff
+      - name: Install git-cliff for changelog generation
+        run: uv add --dev git-cliff
 
-      - name: Generate CHANGELOG.md
-        run: |
-          uv run git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
+      - name: Generate changelog
+        run: uv run git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
 
-      - name: Extract release notes
-        id: extract
+      - name: Commit and push changelog
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update changelog for ${GITHUB_REF#refs/tags/}"
+            git push origin HEAD:main
+          else
+            echo "No changes to changelog"
+          fi
+
+      - name: Install dependencies and build package
+        run: |
+          uv sync --all-groups
+          uv build
+
+      - name: Publish to PyPI
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Build executable with PyInstaller
+        run: |
+          uv add --group dev pyinstaller
+          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }} pylizlib/core/cli.py
+          mv dist/pyliz-${{ github.ref_name }} dist/pyliz-${{ github.ref_name }}-linux
+          if [ -f "pylizlib/qt/cli.py" ]; then
+            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }} pylizlib/qt/cli.py
+            mv dist/qtliz-${{ github.ref_name }} dist/qtliz-${{ github.ref_name }}-linux
+          fi
+
+      - name: Extract changelog for release
+        id: changelog
         run: |
           version=${GITHUB_REF#refs/tags/}
           sed -n "/## \[${version#v}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
-          echo "::set-output name=changelog_content::$(cat release_notes.md)"
+          echo "changelog_content<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-  build-macos:
-    name: Build macOS Executable
-    runs-on: macos-latest
-    needs: changelog
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          version: "latest"
-          enable-cache: true
+          name: Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            dist/pyliz-*
+            dist/qtliz-*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies and build macOS executable
-        run: |
-          uv sync --all-groups
-          uv add --group dev pyinstaller
-          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-macos pylizlib/core/cli.py
-          if [ -f "pylizlib/qt/cli.py" ]; then
-            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-macos pylizlib/qt/cli.py
-          fi
-
-  build-linux:
-    name: Build Linux Executable
-    runs-on: ubuntu-latest
-    needs: changelog
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies and build Linux executables
-        run: |
-          uv sync --all-groups
-          uv add --group dev pyinstaller
-          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-linux pylizlib/core/cli.py
-          if [ -f "pylizlib/qt/cli.py" ]; then
-            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-linux pylizlib/qt/cli.py
-          fi
-
-  build-windows:
-    name: Build Windows Executable
+  windows-exe:
     runs-on: windows-latest
-    needs: changelog
+    needs: release
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,54 +116,10 @@ jobs:
           uv add --group dev pyinstaller
           uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-windows.exe pylizlib/core/cli.py
 
-  create-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs:
-      - build-macos
-      - build-linux
-      - build-windows
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Create GitHub Release
+      - name: Upload Windows executable to existing release
         uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{ github.ref_name }}
-          body: ${{ needs.changelog.outputs.changelog_path }}
-          files: |
-            dist/pyliz-*-macos
-            dist/qtliz-*-macos
-            dist/pyliz-*-linux
-            dist/qtliz-*-linux
-            dist/pyliz-*-windows.exe
+          files: dist/pyliz-${{ github.ref_name }}-windows.exe
+          append_body: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-pypi:
-    name: Publish to PyPI
-    runs-on: ubuntu-latest
-    needs: create-release
-    environment: pypi
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Publish to PyPI
-        run: uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
