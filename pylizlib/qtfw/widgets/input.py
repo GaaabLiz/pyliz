@@ -1,6 +1,7 @@
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QColor
 from PySide6.QtCore import Qt, Signal, QSize, QPoint
-from qfluentwidgets import ComboBox, CheckableMenu, MenuIndicatorType
+from qfluentwidgets import ComboBox, CheckableMenu, MenuIndicatorType, SubtitleLabel, LineEdit, CaptionLabel, \
+    MessageBoxBase
 
 
 class MultiSelectionComboBox(ComboBox):
@@ -152,3 +153,40 @@ class MultiSelectionComboBox(ComboBox):
 
         # Use the existing setCheckedIndexes method
         self.setCheckedIndexes(indexes_to_check)
+
+
+
+class LineEditMessageBox(MessageBoxBase):
+    """ Custom message box """
+
+    def __init__(self,
+                 title: str,
+                 placeholder: str,
+                 text_yes: str = 'Yes',
+                 text_no: str = 'No',
+                 error_label: str = "Invalid.",
+                 parent=None
+                 ):
+        super().__init__(parent)
+        self.titleLabel = SubtitleLabel(title, self)
+        self.line_edit = LineEdit(self)
+
+        self.line_edit.setPlaceholderText(placeholder)
+        self.line_edit.setClearButtonEnabled(True)
+
+        self.warningLabel = CaptionLabel(error_label, parent)
+        self.warningLabel.setTextColor("#cf1010", QColor(255, 28, 32))
+
+        # add widget to view layout
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addWidget(self.line_edit)
+        self.viewLayout.addWidget(self.warningLabel)
+        self.warningLabel.hide()
+
+        # change the text of button
+        self.yesButton.setText(text_yes)
+        self.cancelButton.setText(text_no)
+
+        self.widget.setMinimumWidth(350)
+
+        # self.hideYesButton()
