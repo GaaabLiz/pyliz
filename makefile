@@ -31,6 +31,7 @@ QT_COMMAND_GEN_RES := pyside6-rcc
 
 # Rule to create a virtual environment and install dependencies
 install-env:
+	uv sync
 	uv sync --all-extras
 
 
