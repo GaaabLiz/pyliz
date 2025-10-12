@@ -1,11 +1,14 @@
 from enum import Enum
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFileDialog, QWidget
-from qfluentwidgets import qconfig, Dialog, ConfigItem, FluentIcon, PushButton, ExpandSettingCard
+from PySide6.QtWidgets import QFileDialog, QWidget, QHBoxLayout
+from qfluentwidgets import qconfig, Dialog, ConfigItem, FluentIcon, PushButton, ExpandSettingCard, \
+    GroupHeaderCardWidget, BodyLabel
 from qfluentwidgets.components.settings.folder_list_setting_card import FolderItem
 
+from pylizlib.qtfw.domain.sw import SoftwareData
 from pylizlib.qtfw.widgets.data import FileItem
+from pylizlib.qtfw.widgets.input import LineEditMessageBox
 
 
 class MasterListSettingCard(ExpandSettingCard):
@@ -140,3 +143,66 @@ class MasterListSettingCard(ExpandSettingCard):
         self._adjustViewSize()
         qconfig.set(self.configItem, self.items)
         self.item_changed.emit(self.items)
+
+
+class SoftwareListStatusGroupCard(GroupHeaderCardWidget):
+
+    class SoftwareDataWidget(QWidget):
+
+        def __init__(self, parent: QWidget, data: SoftwareData):
+            super().__init__(parent)
+            self.data = data
+
+            self.label_installed = BodyLabel( self)
+            self.label_running = BodyLabel(self)
+            self.label_version = BodyLabel(self)
+
+            self.label_version.setToolTip("Versione di " + self.data.path.name)
+
+            layout = QHBoxLayout(self)
+            layout.addWidget(self.label_installed, 0, Qt.AlignmentFlag.AlignRight)
+            layout.addWidget(self.label_running, 0, Qt.AlignmentFlag.AlignRight)
+            layout.addWidget(self.label_version, 0, Qt.AlignmentFlag.AlignRight)
+
+        def update_data(self):
+            self.label_version.setText(self.data.version)
+
+            if self.data.installed:
+                self.label_installed.setText("✅")
+                self.label_installed.setToolTip("Installato")
+            else:
+                self.label_installed.setText("🚫")
+                self.label_installed.setToolTip("Non trovato")
+
+            if self.data.running:
+                self.label_running.setText("🟢")
+                self.label_running.setToolTip("In esecuzione")
+            else:
+                self.label_running.setText("🔴")
+                self.label_running.setToolTip("Non in esecuzione")
+
+    def __init__(self, title:str, parent=None):
+        super().__init__(parent)
+        self.setTitle(title)
+        self.setBorderRadius(8)
+        self.software_data: list[SoftwareData] = []
+        self.groups = {}
+
+    def add_software_data(self, data: SoftwareData):
+        widget = SoftwareListStatusGroupCard.SoftwareDataWidget(self, data)
+        self.addGroup(data.icon, data.path.name, data.path.__str__(), widget)
+        self.groups[data.path.name] = widget
+        self.software_data.append(data)
+
+    def update_all(self):
+        for data in self.software_data:
+            self.groups[data.path.name].update_data()
+
+    def clear_all_data(self):
+        # Rimuove tutti i widget dei gruppi salvati e pulisce la struttura dati
+        for group_name, widget in self.groups.items():
+            # Rimuove il widget dal layout o dal QWidget principale
+            widget.setParent(None)
+            widget.deleteLater()
+        self.groups.clear()
+        self.software_data.clear()
