@@ -37,7 +37,10 @@ jobs:
         run: uv add --dev git-cliff
 
       - name: Generate changelog
-        run: uv run git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
+        run: |
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^)
+          uv run git-cliff "${PREVIOUS_TAG}..${CURRENT_TAG}" --output CHANGELOG.md
 
       - name: Commit and push changelog
         run: |
