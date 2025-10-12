@@ -606,7 +606,7 @@ wheels = [
 
 [[package]]
 name = "pylizlib"
-version = "0.3.24"
+version = "0.3.25"
 source = { editable = "." }
 dependencies = [
     { name = "psutil" },
