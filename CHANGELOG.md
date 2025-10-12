@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.20] - 2025-10-12
+## [0.3.21] - 2025-10-12
 
 ### Bump
 
@@ -33,6 +33,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.15
 - Update changelog for 0.3.17
 - Update changelog for 0.3.18
+- Update changelog for 0.3.20
 
 ### 🚀 Features
 
@@ -47,6 +48,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.19 in pyproject.toml
 - Bump version to 0.3.19 in pyproject.toml
 - Bump version to 0.3.20 in pyproject.toml and uv.lock
+- Bump version to 0.3.21 in pyproject.toml and uv.lock, update dependencies
 ## [0.3.8] - 2025-10-09
 
 ### Bump
