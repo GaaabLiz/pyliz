@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.27] - 2025-10-12
+## [0.3.28] - 2025-10-12
 
 ### Bump
 
@@ -40,6 +40,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.20
 - Update changelog for 0.3.21
 - Update changelog for 0.3.26
+- Update changelog for 0.3.27
 
 ### 🚀 Features
 
@@ -67,6 +68,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add LineEditMessageBox for custom message box functionality
 - Add BoldLabel class for displaying bold text in the UI
 - Bump version to 0.3.27 in pyproject.toml and uv.lock
+- Add authors extraction to PyProjectToml class
+- Bump version to 0.3.27 and add authors information
 ## [0.3.8] - 2025-10-09
 
 ### Bump
