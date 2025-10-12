@@ -10,12 +10,15 @@
 # == PROJECT VARIABLES ==
 PYTHON_MAIN_PACKAGE = pylizlib
 FILE_MAIN_CLI := $(PYTHON_MAIN_PACKAGE)/core/cli.py
+QT_QRC_FILE := resources/resources.qrc
+QT_RESOURCE_PY := $(PYTHON_MAIN_PACKAGE)/resource/resources_rc.py
 
 # == FILES VARIABLES ==
 FILE_PROJECT_TOML := pyproject.toml
 FILE_PROJECT_PY_GENERATED := $(PYTHON_MAIN_PACKAGE)/project.py
 
-
+# == EXTERNAL COMMANDS VARIABLES ==
+QT_COMMAND_GEN_RES := pyside6-rcc
 
 
 
@@ -83,4 +86,7 @@ docs-gen:
 	pdoc -o docs -d markdown pylizlib
 
 gen-project-py:
-	uv run $(FILE_MAIN_CLI) gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+
+gen-qt-res-py:
+	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
