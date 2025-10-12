@@ -172,6 +172,15 @@ class WindowsOsUtils:
 
     @staticmethod
     def get_windows_exe_version(exe_path: Path) -> str:
+        """
+        Get the version of a Windows executable
+        if the version information is not available, returns "N/A"
+        if the OS is not Windows, returns N/A
+        :param exe_path: the path of the executable file
+        :return:  The version of the executable or "N/A" if not available
+        """
+        if not is_os_windows():
+            return "N/A"
         import win32api
         try:
             info = win32api.GetFileVersionInfo(exe_path.__str__(), "\\")
@@ -187,9 +196,12 @@ class WindowsOsUtils:
     def get_service_executable_path(service_name: str) -> str | None:
         """
         Get the executable path of a Windows service
+        If the os is not Windows, returns None
         :param service_name: The name of the service
         :return: The executable path of the service or None if not found
         """
+        if not is_os_windows():
+            return None
         import winreg
         try:
             key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
