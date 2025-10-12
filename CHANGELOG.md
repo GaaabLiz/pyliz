@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.17] - 2025-10-11
+## [0.3.18] - 2025-10-12
 
 ### Bump
 
@@ -31,6 +31,17 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 - Update changelog for 0.3.11
 - Update changelog for 0.3.15
+- Update changelog for 0.3.17
+
+### 🚀 Features
+
+- Add project metadata for pylizlib version 0.3.17
+- Enhance Windows executable version retrieval with OS checks
+- Add SoftwareData dataclass for managing software attributes
+- Add validators for executable paths and text lists in qconfig.py
+- Update makefile to include Qt resource generation commands
+- Add .gitignore entry for test_local and create __init__.py file
+- Bump version to 0.3.18 in pyproject.toml and uv.lock
 ## [0.3.8] - 2025-10-09
 
 ### Bump
