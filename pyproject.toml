@@ -1,13 +1,11 @@
 [project]
 name = "pylizlib"
-version = "0.3.20"
+version = "0.3.21"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "psutil>=7.1.0",
-    "pyqt6-fluent-widgets>=1.9.0",
-    "pyside6>=6.10.0",
     "python-dotenv>=1.1.0",
     "pywin32>=1.0 ; sys_platform == 'win32'",
     "requests>=2.32.3",
