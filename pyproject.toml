@@ -1,6 +1,6 @@
 [project]
 name = "pylizlib"
-version = "0.3.17"
+version = "0.3.18"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
