@@ -89,7 +89,6 @@ class SimpleProgressDialog(QDialog):
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)  # Non chiudibile
         self.setModal(True)
 
-
         # Layout
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -166,7 +165,6 @@ class SimpleProgressManager:
 
     def _on_finished(self, success: bool, callback: Optional[Callable]):
         """Gestisce il completamento"""
-
         # Salva l'eccezione prima di pulire
         exception_to_raise = None
         if not success and self.worker and hasattr(self.worker, 'exception'):
@@ -182,16 +180,19 @@ class SimpleProgressManager:
             self.worker.wait()
             self.worker = None
 
-        # IMPORTANTE: Rilancia l'eccezione se presente
-        if exception_to_raise:
-            if callback:
-                callback(success)
-            raise exception_to_raise
-
-        # Callback
+        # Callback con l'eccezione se presente
         if callback:
-            callback(success)
+            if exception_to_raise:
+                callback(success, exception_to_raise)  # Passa anche l'eccezione
+            else:
+                callback(success, None)
 
+        # Messaggio finale solo se successo e nessun callback personalizzato
+        elif success:
+            pass
+            from PySide6.QtWidgets import QMessageBox
+            #QMessageBox.information(self.parent_widget, "Completato",
+                                    # "Operazioni completate con successo!")
         # Messaggio finale
         # from PySide6.QtWidgets import QMessageBox
         # if success:
