@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Callable, Optional
 
-from PyQt6.QtCore import QThread, Qt
-from PyQt6.QtGui import QFont
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QThread, Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QDialog, QVBoxLayout
 from qfluentwidgets import BodyLabel, ProgressBar, FluentStyleSheet
 
@@ -86,7 +85,7 @@ class SimpleProgressDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle(self.settings.window_title)
-        self.setFixedSize(350, 150)
+        self.setFixedSize(self.settings.window_width, self.settings.window_height)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)  # Non chiudibile
         self.setModal(True)
 
