@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.28] - 2025-10-12
+## [0.3.29] - 2025-10-13
 
 ### Bump
 
@@ -41,6 +41,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.21
 - Update changelog for 0.3.26
 - Update changelog for 0.3.27
+- Update changelog for 0.3.28
 
 ### 🚀 Features
 
@@ -70,6 +71,9 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.27 in pyproject.toml and uv.lock
 - Add authors extraction to PyProjectToml class
 - Bump version to 0.3.27 and add authors information
+- Add SimpleProgressManager and related classes for background operations with progress dialog
+- Add SimpleProgressManager and related classes for background operations with progress dialog
+- Bump version to 0.3.29 in pyproject.toml and uv.lock
 ## [0.3.8] - 2025-10-09
 
 ### Bump
