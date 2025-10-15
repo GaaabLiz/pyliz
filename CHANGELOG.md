@@ -4,13 +4,17 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.31] - 2025-10-13
+## [0.3.32] - 2025-10-15
 
 ### Bump
 
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.11 in pyproject.toml and uv.lock
+
+### ♻️ Refactor
+
+- Refactor operation handling by introducing operation_core and operation_domain modules
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -44,6 +48,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.28
 - Update changelog for 0.3.29
 - Update changelog for 0.3.30
+- Update changelog for 0.3.31
 
 ### 🚀 Features
 
@@ -81,6 +86,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Enhance callback handling in progress dialog completion
 - Add utility class for clearing layouts in UI
 - Bump version to 0.3.31 in pyproject.toml and uv.lock
+- Add method to retrieve specific task result by name
+- Add method to retrieve specific task result by name
 ## [0.3.8] - 2025-10-09
 
 ### Bump
