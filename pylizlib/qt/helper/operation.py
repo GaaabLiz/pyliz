@@ -4,7 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.qt.handler.operation import Operation, Task, OperationInfo, RunnerInteraction
+from pylizlib.qt.handler.operation_core import Operation, Task
+from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
 
 
 class OperationDevDebug(Operation):
