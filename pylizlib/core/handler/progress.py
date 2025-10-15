@@ -156,3 +156,24 @@ class QueueProgress:
                 for step in self.steps:
                     total_progress += step.progress
         return int((total_progress / self.total_inner_progress) * 100)
+
+
+
+def get_step_progress_percentage(step_attuale: int, step_totali: int) -> int:
+    """
+    Calcola la percentuale di progresso come intero.
+
+    Args:
+        step_attuale: Numero di step completati
+        step_totali: Numero totale di step dell'operazione
+
+    Returns:
+        Percentuale di progresso come intero (0-100)
+
+    Raises:
+        ValueError: Se step_totali è zero o negativo
+    """
+    if step_totali <= 0:
+        raise ValueError("Il numero totale di step deve essere maggiore di zero")
+
+    return int((step_attuale / step_totali) * 100)
