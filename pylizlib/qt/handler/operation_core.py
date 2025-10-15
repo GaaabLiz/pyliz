@@ -126,6 +126,12 @@ class Operation(QRunnable):
     def get_task_results(self) -> list[Any]:
         return [task.result for task in self.tasks]
 
+    def get_task_result(self, task_name: str) -> Any:
+        for task in self.tasks:
+            if task.name == task_name:
+                return task.result
+        return None
+
     def update_op_status(self, status: OperationStatus):
         logger.debug("Updating operation status: %s", status)
         self.status = status
