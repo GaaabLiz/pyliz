@@ -19,6 +19,7 @@ class Task:
             abort_all_on_error: bool = True,
             interaction: RunnerInteraction | None = None
     ):
+        self.id = gen_random_string(10)
         self.interaction = interaction
         self.name = name
         self.abort_all_on_error = abort_all_on_error
@@ -129,9 +130,15 @@ class Operation(QRunnable):
     def get_task_results(self) -> list[Any]:
         return [task.result for task in self.tasks]
 
-    def get_task_result(self, task_name: str) -> Any:
+    def get_task_result_by_name(self, task_name: str) -> Any:
         for task in self.tasks:
             if task.name == task_name:
+                return task.result
+        return None
+
+    def get_task_result_by_id(self, task_id: str) -> Any:
+        for task in self.tasks:
+            if task.id == task_id:
                 return task.result
         return None
 
