@@ -15,7 +15,6 @@ class Task:
     def __init__(
             self,
             name: str,
-            on_progress_changed: Callable[[str, int], None],
             abort_all_on_error: bool = True,
             interaction: RunnerInteraction | None = None
     ):
@@ -24,7 +23,7 @@ class Task:
         self.name = name
         self.abort_all_on_error = abort_all_on_error
         self.status = OperationStatus.Pending
-        self.on_progress_changed = on_progress_changed
+        self.on_progress_changed = None
         self.result: Any = None
         self.progress = 0
 
@@ -82,6 +81,7 @@ class Operation(QRunnable):
     def execute_tasks(self):
         for task in self.tasks:
             try:
+                task.on_progress_changed = self.on_task_progress_update
                 self.interaction.on_task_start(task.name) if self.interaction else None
                 task.update_task_status(OperationStatus.InProgress)
                 logger.debug("Executing task: %s", task.name)
@@ -119,6 +119,8 @@ class Operation(QRunnable):
         self.progress_obj.set_single_progress(task_name, progress)
         self.update_op_progress(self.progress_obj.get_total_progress())
 
+    def run(self, /):
+        self.execute()
 
     @abstractmethod
     def stop(self):

@@ -4,7 +4,8 @@ from typing import Any
 
 from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QPushButton
 
-from pylizlib.qt.handler.operation_domain import RunnerInteraction
+from pylizlib.qt.handler.operation_core import Operation
+from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
 from pylizlib.qt.handler.operation_runner import OperationRunner
 from pylizlib.qt.helper.operation import OperationDevDebug
 
@@ -49,7 +50,13 @@ class OperationExampleWindow(QMainWindow):
             interaction=self.interaction,
             max_threads=1,
         )
-        runner.add(OperationDevDebug(self.interaction))
+        op_info = OperationInfo("Test Operation", "Test operation description")
+        op_tasks = [
+            OperationDevDebug.TaskTemplate2("Task1"),
+            OperationDevDebug.TaskTemplate2("Task2")
+        ]
+        op = Operation(op_tasks, op_info, self.interaction)
+        runner.add(op)
         runner.start()
 
     def stop(self):
@@ -57,6 +64,9 @@ class OperationExampleWindow(QMainWindow):
 
 
 class OperationExampleInteraction(RunnerInteraction):
+
+    def on_runner_start(self):
+        logger.info("Runner started")
 
     def on_op_eta_update(self, operation_id: str, eta: str):
         logger.debug(f"Operation {operation_id} ETA: {eta}")
