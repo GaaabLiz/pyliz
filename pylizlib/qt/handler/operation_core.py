@@ -5,7 +5,7 @@ from typing import Callable, Any
 from PySide6.QtCore import QRunnable
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
+from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode, get_step_progress_percentage
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationStatus, OperationInfo
 
@@ -40,6 +40,9 @@ class Task:
         self.progress = progress
         self.interaction.on_task_update_progress(self.name, progress) if self.interaction else None
         self.on_progress_changed(self.name, progress)
+
+    def gen_update_task_progress(self, current: int, total: int):
+        self.update_task_progress(get_step_progress_percentage(current, total))
 
 
 class Operation(QRunnable):
