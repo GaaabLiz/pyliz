@@ -58,8 +58,8 @@ class OperationDevDebug(Operation):
             interaction: RunnerInteraction | None = None,
     ):
         tasks = [
-            self.TaskTemplate("Task1", self.on_task_progress_update),
-            self.TaskTemplate("Task2", self.on_task_progress_update)
+            self.TaskTemplate2("Task1", ),
+            self.TaskTemplate2("Task2")
         ]
         info = OperationInfo(
             name="Dev Debug",
