@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, Q
 from pylizlib.qt.handler.operation_core import Operation
 from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
 from pylizlib.qt.handler.operation_runner import OperationRunner
-from pylizlib.qt.helper.operation import OperationDevDebug
+from pylizlib.qt.debug.operation import OperationDevDebug
 
 logging.basicConfig(
     level=logging.DEBUG,  # o DEBUG, WARNING, ERROR, CRITICAL
