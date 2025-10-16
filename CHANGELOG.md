@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.33] - 2025-10-15
+## [0.3.34] - 2025-10-16
 
 ### Bump
 
@@ -50,6 +50,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.30
 - Update changelog for 0.3.31
 - Update changelog for 0.3.32
+- Update changelog for 0.3.33
 
 ### 🚀 Features
 
@@ -94,6 +95,9 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add method to retrieve task result by ID
 - Enhance operation handling with new task templates and logging
 - Enhance operation handling with new task templates and logging
+- Update task templates to use TaskTemplate2 for improved functionality
+- Add delay between task executions for improved operation flow
+- Add delay between task executions for improved operation flow
 ## [0.3.8] - 2025-10-09
 
 ### Bump
