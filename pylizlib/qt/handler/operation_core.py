@@ -1,5 +1,6 @@
 import time
 from abc import abstractmethod
+from time import sleep
 from typing import Callable, Any
 
 from PySide6.QtCore import QRunnable
@@ -98,6 +99,8 @@ class Operation(QRunnable):
             finally:
                 self.interaction.on_task_finished(task.name) if self.interaction else None
                 self.current_task = None
+                sleep(self.info.delay_each_task)
+
 
 
     def execute(self):

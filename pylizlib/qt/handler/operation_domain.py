@@ -9,6 +9,7 @@ T = TypeVar("T")
 class OperationInfo:
     name: str
     description: str
+    delay_each_task: float = 0.0
 
 
 class OperationStatus(Enum):
