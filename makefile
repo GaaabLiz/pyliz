@@ -91,3 +91,24 @@ gen-project-py:
 
 gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
+
+
+
+
+
+#     __      _______  _____
+#     \ \    / / ____|/ ____|
+#      \ \  / / |    | (___
+#       \ \/ /| |     \___ \
+#        \  / | |____ ____) |
+#         \/   \_____|_____/
+#
+#
+
+bump-patch-push-tag:
+	git pull
+	uv version --bump patch
+	git commit -am "bump: Bump version to $$(uv version --short)"
+	git push
+	git tag $$(uv version --short)
+	git push origin $$(uv version --short)
