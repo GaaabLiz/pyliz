@@ -4,17 +4,24 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.34] - 2025-10-16
+## [0.3.35] - 2025-10-17
 
 ### Bump
 
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.11 in pyproject.toml and uv.lock
+- Bump version to 0.3.35
 
 ### ♻️ Refactor
 
 - Refactor operation handling by introducing operation_core and operation_domain modules
+- Simplify progress dialog and worker implementation
+- Rename progress utility module for improved clarity
+- Rename operation module for improved organization
+- Reorganize helper module and update import paths
+- Replace interaction protocol with signal-based communication in operation modules
+- Remove interaction protocol from operation module and add example window for operation execution
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -51,6 +58,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.31
 - Update changelog for 0.3.32
 - Update changelog for 0.3.33
+- Update changelog for 0.3.34
 
 ### 🚀 Features
 
