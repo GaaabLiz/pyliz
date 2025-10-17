@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.handler.operation_core import Operation, Task
-from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
+from pylizlib.qt.handler.operation_domain import OperationInfo
 
 
 @dataclass
@@ -55,7 +55,6 @@ class OperationDevDebug(Operation):
 
     def __init__(
             self,
-            interaction: RunnerInteraction | None = None,
     ):
         tasks = [
             self.TaskTemplate2("Task1", ),
@@ -65,7 +64,7 @@ class OperationDevDebug(Operation):
             name="Dev Debug",
             description="Dev Debug operation",
         )
-        super().__init__(tasks, info, interaction)
+        super().__init__(tasks, info)
 
 
     def run(self, /):
