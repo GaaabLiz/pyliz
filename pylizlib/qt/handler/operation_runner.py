@@ -39,6 +39,7 @@ class RunnerStatistics:
         return None
 
 
+# noinspection DuplicatedCode
 class OperationRunner(QObject):
     runner_start = Signal()
     runner_finish = Signal(object)
@@ -93,6 +94,16 @@ class OperationRunner(QObject):
         operation.signals.task_update_progress.connect(self.task_update_progress)
         operation.signals.task_failed.connect(self.task_failed)
         operation.signals.task_finished.connect(self.task_finished)
+
+    def clear(self):
+        """
+        Clears the queue of pending operations and resets the runner.
+        This method does not stop operations that are already running.
+        """
+        logger.info("Clearing pending operations from runner.")
+        self.operation_pool.clear()
+        self._all_operations.clear()
+        self.progress_obj = None
 
     def start(self):
         self.runner_start.emit()
