@@ -1,12 +1,12 @@
 import time
 from typing import Callable
 
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QThreadPool, QObject, Signal
 
 from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.handler.operation_core import Operation
-from pylizlib.qt.handler.operation_domain import RunnerInteraction
+from pylizlib.qt.handler.operation_domain import OperationStatus
 
 
 class RunnerStatistics:
@@ -39,16 +39,33 @@ class RunnerStatistics:
         return None
 
 
-class OperationRunner:
+class OperationRunner(QObject):
+    runner_start = Signal()
+    runner_finish = Signal(object)
+    runner_stop = Signal()
+    runner_update_progress = Signal(int)
+
+    op_start = Signal()
+    op_update = Signal(object)
+    op_update_status = Signal(str, OperationStatus)
+    op_update_progress = Signal(str, int)
+    op_eta_update = Signal(str, str)
+    op_failed = Signal(str, str)
+    op_finished = Signal(object)
+
+    task_start = Signal(str)
+    task_update_status = Signal(str, OperationStatus)
+    task_update_progress = Signal(str, int)
+    task_failed = Signal(str, str)
+    task_finished = Signal(str)
 
     def __init__(
             self,
-            interaction: RunnerInteraction,
             max_threads: int = 1,
             on_runner_finished: Callable | None = None,
             abort_all_on_error: bool = False,
     ):
-        self.interaction = interaction
+        super().__init__()
         self.max_threads = max_threads
         self.thread_pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(self.max_threads)
@@ -57,21 +74,37 @@ class OperationRunner:
         self.progress_obj: QueueProgress | None = None
         self.abort_all_on_error = abort_all_on_error
         self.on_runner_finished = on_runner_finished
-
+        self._all_operations: list[Operation] = []
 
     def add(self, operation: Operation):
         self.operation_pool.append(operation)
+        self._all_operations.append(operation)
+
+        operation.signals.op_start.connect(self.op_start)
+        operation.signals.op_update.connect(self.op_update)
+        operation.signals.op_update_status.connect(self.op_update_status)
+        operation.signals.op_update_progress.connect(self.op_update_progress)
+        operation.signals.op_eta_update.connect(self.op_eta_update)
+        operation.signals.op_failed.connect(self.op_failed)
+        operation.signals.op_finished.connect(self.op_finished)
+
+        operation.signals.task_start.connect(self.task_start)
+        operation.signals.task_update_status.connect(self.task_update_status)
+        operation.signals.task_update_progress.connect(self.task_update_progress)
+        operation.signals.task_failed.connect(self.task_failed)
+        operation.signals.task_finished.connect(self.task_finished)
 
     def start(self):
-        self.interaction.on_runner_start()
+        self.runner_start.emit()
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
         for op in self.operation_pool:
             self.progress_obj.add_single(op.id)
-        for op in self.operation_pool:
+        for _ in self.operation_pool:
             self.__start_next_operation()
 
     def stop(self):
-        self.interaction.on_runner_stop()
+        self.runner_stop.emit()
+        self.thread_pool.clear()
         self.thread_pool.waitForDone()
         self.active_operations = 0
         self.operation_pool.clear()
@@ -86,21 +119,26 @@ class OperationRunner:
             self.active_operations += 1
 
     def on_operation_finished(self, operation: Operation):
+        self.active_operations -= 1
         if self.abort_all_on_error and operation.is_failed():
             logger.error("Operation %s failed, stopping all operations", operation.id)
+            self.operation_pool.clear()
+            self.thread_pool.clear()
             self.__set_runner_finished()
             return
-        self.active_operations -= 1
+
         self.__start_next_operation()
         if self.active_operations == 0 and not self.operation_pool:
             self.__set_runner_finished()
 
     def __set_runner_finished(self):
-        time.sleep(1)
-        statistics = RunnerStatistics(self.operation_pool)
-        self.interaction.on_runner_finish(statistics)
-        self.on_runner_finished() if self.on_runner_finished else None
+        time.sleep(0.1)
+        statistics = RunnerStatistics(self._all_operations)
+        self.runner_finish.emit(statistics)
+        if self.on_runner_finished:
+            self.on_runner_finished()
 
     def on_op_progress_update(self, op_id: str, op_progress: int):
-        self.progress_obj.set_single_progress(op_id, op_progress)
-        self.interaction.on_runner_update_progress(self.progress_obj.get_total_progress())
+        if self.progress_obj:
+            self.progress_obj.set_single_progress(op_id, op_progress)
+            self.runner_update_progress.emit(self.progress_obj.get_total_progress())
