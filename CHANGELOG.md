@@ -8,6 +8,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ### Bump
 
+- Update version to 0.3.8 in pyproject.toml and uv.lock; modify release trigger in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.11 in pyproject.toml and uv.lock
@@ -16,6 +17,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.37
 - Bump version to 0.3.38
 - Bump version to 0.3.39
+- Bump version to 0.3.40
 
 ### ♻️ Refactor
 
@@ -27,6 +29,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Replace interaction protocol with signal-based communication in operation modules
 - Remove interaction protocol from operation module and add example window for operation execution
 - Update release workflow for changelog generation and cleanup
+- Enhance release notes generation to include changelog between tags
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -69,6 +72,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.36
 - Update changelog for 0.3.37
 - Update changelog for 0.3.38
+- Update changelog for 0.3.39
 
 ### 🚀 Features
 
@@ -123,11 +127,6 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add QtFwQConfigItem class for enhanced configuration management
 - Add QtFwQConfigItem class for enhanced configuration management
 - Add QtFwQConfigGroup dataclass for configuration grouping
-## [0.3.8] - 2025-10-09
-
-### Bump
-
-- Update version to 0.3.8 in pyproject.toml and uv.lock; modify release trigger in release.yml
 ## [0.3.7] - 2025-10-09
 
 ### Bump
