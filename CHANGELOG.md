@@ -8,6 +8,11 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ### Bump
 
+- Update version to 0.3.3
+- Update version to 0.3.4 in pyproject.toml
+- Update version to 0.3.5 in pyproject.toml and uv.lock; rename pypi.yml
+- Update version to 0.3.6 in pyproject.toml and uv.lock; add release workflow in release.yml
+- Update version to 0.3.7 in pyproject.toml and uv.lock
 - Update version to 0.3.8 in pyproject.toml and uv.lock; modify release trigger in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
@@ -18,9 +23,16 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.38
 - Bump version to 0.3.39
 - Bump version to 0.3.40
+- Bump version to 0.3.41
 
 ### ♻️ Refactor
 
+- Reorganize test files and update dependencies in pyproject.toml
+- Enhance Snapshot and Catalogue functionality with data management methods
+- Restructure Snapshot and SnapshotCatalogue classes for improved management and clarity
+- Streamline directory management with install and uninstall methods
+- Remove unused imports and clean up type hints in snap.py
+- Remove unused imports in snapshot.py
 - Refactor operation handling by introducing operation_core and operation_domain modules
 - Simplify progress dialog and worker implementation
 - Rename progress utility module for improved clarity
@@ -29,6 +41,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Replace interaction protocol with signal-based communication in operation modules
 - Remove interaction protocol from operation module and add example window for operation execution
 - Update release workflow for changelog generation and cleanup
+- Enhance release notes generation to include changelog between tags
 - Enhance release notes generation to include changelog between tags
 
 ### ⚙️ Miscellaneous Tasks
@@ -73,9 +86,15 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.37
 - Update changelog for 0.3.38
 - Update changelog for 0.3.39
+- Update changelog for 0.3.40
 
 ### 🚀 Features
 
+- Add data item editing and snapshot retrieval functionality
+- Implement snapshot duplication functionality
+- Add install functionality to manage snapshot directory installations
+- Update dependencies and refactor import paths for pylizlib
+- Update pdoc version and add new dependencies in pyproject.toml; refactor type hints in video.py and frameselector.py; rename docs target in makefile
 - Add project metadata for pylizlib version 0.3.17
 - Enhance Windows executable version retrieval with OS checks
 - Add SoftwareData dataclass for managing software attributes
@@ -127,34 +146,4 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add QtFwQConfigItem class for enhanced configuration management
 - Add QtFwQConfigItem class for enhanced configuration management
 - Add QtFwQConfigGroup dataclass for configuration grouping
-## [0.3.7] - 2025-10-09
-
-### Bump
-
-- Update version to 0.3.7 in pyproject.toml and uv.lock
-## [0.3.6] - 2025-10-09
-
-### Bump
-
-- Update version to 0.3.3
-- Update version to 0.3.4 in pyproject.toml
-- Update version to 0.3.5 in pyproject.toml and uv.lock; rename pypi.yml
-- Update version to 0.3.6 in pyproject.toml and uv.lock; add release workflow in release.yml
-
-### ♻️ Refactor
-
-- Reorganize test files and update dependencies in pyproject.toml
-- Enhance Snapshot and Catalogue functionality with data management methods
-- Restructure Snapshot and SnapshotCatalogue classes for improved management and clarity
-- Streamline directory management with install and uninstall methods
-- Remove unused imports and clean up type hints in snap.py
-- Remove unused imports in snapshot.py
-
-### 🚀 Features
-
-- Add data item editing and snapshot retrieval functionality
-- Implement snapshot duplication functionality
-- Add install functionality to manage snapshot directory installations
-- Update dependencies and refactor import paths for pylizlib
-- Update pdoc version and add new dependencies in pyproject.toml; refactor type hints in video.py and frameselector.py; rename docs target in makefile
 
