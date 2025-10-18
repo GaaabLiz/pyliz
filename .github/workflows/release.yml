@@ -60,10 +60,25 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-      - name: Generate release notes for current tag
+      - name: Generate release notes between tags
         run: |
-          # Genera solo le note per il tag corrente (tra questo e il precedente)
-          uv run git-cliff --latest --strip all > release_notes.md
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          
+          # Ottieni il tag precedente usando l'ordinamento semver
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1)
+          
+          # Genera changelog tra i due tag
+          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$CURRENT_TAG" ]; then
+            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+            uv run git-cliff "${PREVIOUS_TAG}".."${CURRENT_TAG}" --tag "${CURRENT_TAG}" --strip all > release_notes.md
+          else
+            echo "No previous tag found, generating changelog for first release"
+            uv run git-cliff --tag "${CURRENT_TAG}" --strip all > release_notes.md
+          fi
+          
+          # Debug: mostra il contenuto delle note di rilascio
+          echo "Release notes content:"
+          cat release_notes.md
 
       - name: Create GitHub Release
         id: create_release
