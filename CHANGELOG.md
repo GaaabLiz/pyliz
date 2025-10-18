@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.38] - 2025-10-18
+## [unreleased]
 
 ### Bump
 
@@ -15,6 +15,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.36
 - Bump version to 0.3.37
 - Bump version to 0.3.38
+- Bump version to 0.3.39
 
 ### ♻️ Refactor
 
@@ -25,6 +26,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Reorganize helper module and update import paths
 - Replace interaction protocol with signal-based communication in operation modules
 - Remove interaction protocol from operation module and add example window for operation execution
+- Update release workflow for changelog generation and cleanup
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -66,6 +68,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.35
 - Update changelog for 0.3.36
 - Update changelog for 0.3.37
+- Update changelog for 0.3.38
 
 ### 🚀 Features
 
@@ -119,6 +122,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add UiUtils class with message display and widget creation methods
 - Add QtFwQConfigItem class for enhanced configuration management
 - Add QtFwQConfigItem class for enhanced configuration management
+- Add QtFwQConfigGroup dataclass for configuration grouping
 ## [0.3.8] - 2025-10-09
 
 ### Bump
