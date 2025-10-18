@@ -2,7 +2,6 @@ name: Build and Release
 
 on:
   push:
-    # Trigger per i push di tag via git
     tags:
       - '*'
 
@@ -22,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Importante per avere tutta la storia dei tag
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -36,8 +35,8 @@ jobs:
       - name: Install git-cliff for changelog generation
         run: uv add --dev git-cliff
 
-      - name: Generate changelog
-        run: uv run git-cliff --tag ${GITHUB_REF#refs/tags/} --output CHANGELOG.md
+      - name: Generate full changelog
+        run: uv run git-cliff --output CHANGELOG.md
 
       - name: Commit and push changelog
         run: |
@@ -61,14 +60,10 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-      - name: Extract changelog for release
-        id: changelog
+      - name: Generate release notes for current tag
         run: |
-          version=${GITHUB_REF#refs/tags/}
-          sed -n "/## \[${version#v}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
-          echo "changelog_content<<EOF" >> $GITHUB_OUTPUT
-          cat release_notes.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Genera solo le note per il tag corrente (tra questo e il precedente)
+          uv run git-cliff --latest --strip all > release_notes.md
 
       - name: Create GitHub Release
         id: create_release
@@ -81,107 +76,107 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: release
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies and build Linux executable
-        run: |
-          uv sync --all-groups
-          uv add --group dev pyinstaller
-          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-linux pylizlib/core/cli.py
-          if [ -f "pylizlib/qt/cli.py" ]; then
-            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-linux pylizlib/qt/cli.py
-          fi
-
-      - name: Upload Linux executable to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/pyliz-${{ github.ref_name }}-linux
-            dist/qtliz-${{ github.ref_name }}-linux
-          append_body: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos:
-    runs-on: macos-latest
-    needs: release
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies and build macOS executable
-        run: |
-          uv sync --all-groups
-          uv add --group dev pyinstaller
-          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-macos pylizlib/core/cli.py
-          if [ -f "pylizlib/qt/cli.py" ]; then
-            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-macos pylizlib/qt/cli.py
-          fi
-
-      - name: Upload macOS executable to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/pyliz-${{ github.ref_name }}-macos
-            dist/qtliz-${{ github.ref_name }}-macos
-          append_body: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows:
-    runs-on: windows-latest
-    needs: release
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies and build Windows executable
-        run: |
-          uv sync --all-groups
-          uv add --group dev pyinstaller
-          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-windows.exe pylizlib/core/cli.py
-          if (Test-Path "pylizlib/qt/cli.py") {
-            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-windows.exe pylizlib/qt/cli.py
-          }
-
-      - name: Upload Windows executable to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/pyliz-${{ github.ref_name }}-windows.exe
-            dist/qtliz-${{ github.ref_name }}-windows.exe
-          append_body: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#  build-linux:
+#    runs-on: ubuntu-latest
+#    needs: release
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Install uv
+#        uses: astral-sh/setup-uv@v6
+#        with:
+#          version: "latest"
+#          enable-cache: true
+#
+#      - name: Set up Python
+#        run: uv python install 3.12
+#
+#      - name: Install dependencies and build Linux executable
+#        run: |
+#          uv sync --all-groups
+#          uv add --group dev pyinstaller
+#          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-linux pylizlib/core/cli.py
+#          if [ -f "pylizlib/qt/cli.py" ]; then
+#            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-linux pylizlib/qt/cli.py
+#          fi
+#
+#      - name: Upload Linux executable to release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          files: |
+#            dist/pyliz-${{ github.ref_name }}-linux
+#            dist/qtliz-${{ github.ref_name }}-linux
+#          append_body: false
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#
+#  build-macos:
+#    runs-on: macos-latest
+#    needs: release
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Install uv
+#        uses: astral-sh/setup-uv@v6
+#        with:
+#          version: "latest"
+#          enable-cache: true
+#
+#      - name: Set up Python
+#        run: uv python install 3.12
+#
+#      - name: Install dependencies and build macOS executable
+#        run: |
+#          uv sync --all-groups
+#          uv add --group dev pyinstaller
+#          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-macos pylizlib/core/cli.py
+#          if [ -f "pylizlib/qt/cli.py" ]; then
+#            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-macos pylizlib/qt/cli.py
+#          fi
+#
+#      - name: Upload macOS executable to release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          files: |
+#            dist/pyliz-${{ github.ref_name }}-macos
+#            dist/qtliz-${{ github.ref_name }}-macos
+#          append_body: false
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#
+#  build-windows:
+#    runs-on: windows-latest
+#    needs: release
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Install uv
+#        uses: astral-sh/setup-uv@v6
+#        with:
+#          version: "latest"
+#          enable-cache: true
+#
+#      - name: Set up Python
+#        run: uv python install 3.12
+#
+#      - name: Install dependencies and build Windows executable
+#        run: |
+#          uv sync --all-groups
+#          uv add --group dev pyinstaller
+#          uv run pyinstaller --onefile --name pyliz-${{ github.ref_name }}-windows.exe pylizlib/core/cli.py
+#          if (Test-Path "pylizlib/qt/cli.py") {
+#            uv run pyinstaller --onefile --name qtliz-${{ github.ref_name }}-windows.exe pylizlib/qt/cli.py
+#          }
+#
+#      - name: Upload Windows executable to release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          files: |
+#            dist/pyliz-${{ github.ref_name }}-windows.exe
+#            dist/qtliz-${{ github.ref_name }}-windows.exe
+#          append_body: false
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
