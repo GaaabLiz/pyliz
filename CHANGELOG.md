@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.37] - 2025-10-18
+## [0.3.38] - 2025-10-18
 
 ### Bump
 
@@ -14,6 +14,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.35
 - Bump version to 0.3.36
 - Bump version to 0.3.37
+- Bump version to 0.3.38
 
 ### ♻️ Refactor
 
@@ -64,6 +65,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.34
 - Update changelog for 0.3.35
 - Update changelog for 0.3.36
+- Update changelog for 0.3.37
 
 ### 🚀 Features
 
@@ -114,6 +116,9 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add UiWidgetMode enum for widget state management
 - Add clear method to OperationRunner for managing pending operations
 - Add tags_as_string property and get_for_table_array method to enhance data representation
+- Add UiUtils class with message display and widget creation methods
+- Add QtFwQConfigItem class for enhanced configuration management
+- Add QtFwQConfigItem class for enhanced configuration management
 ## [0.3.8] - 2025-10-09
 
 ### Bump
