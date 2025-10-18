@@ -4,7 +4,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [0.3.35] - 2025-10-17
+## [0.3.36] - 2025-10-17
 
 ### Bump
 
@@ -12,6 +12,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update version to 0.3.9 in pyproject.toml and uv.lock; modify release workflow in release.yml
 - Update version to 0.3.11 in pyproject.toml and uv.lock
 - Bump version to 0.3.35
+- Bump version to 0.3.36
 
 ### ♻️ Refactor
 
@@ -59,6 +60,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.32
 - Update changelog for 0.3.33
 - Update changelog for 0.3.34
+- Update changelog for 0.3.35
 
 ### 🚀 Features
 
@@ -106,6 +108,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update task templates to use TaskTemplate2 for improved functionality
 - Add delay between task executions for improved operation flow
 - Add delay between task executions for improved operation flow
+- Add UiWidgetMode enum for widget state management
+- Add clear method to OperationRunner for managing pending operations
 ## [0.3.8] - 2025-10-09
 
 ### Bump
