@@ -107,6 +107,19 @@ class Snapshot:
     data: dict[str, str] = field(default_factory=dict)
 
     @property
+    def tags_as_string(self) -> str:
+        return ", ".join(self.tags) if self.tags else " "
+
+    def get_for_table_array(self, key_list: list[str]) -> list[str]:
+        array = [self.name, self.desc]
+        for key in key_list:
+            value = self.data.get(key, "")
+            array.append(value)
+        array.append(self.date_created.strftime("%d/%m/%Y %H:%M:%S"))
+        array.append(self.tags_as_string)
+        return array
+
+    @property
     def folder_name(self) -> str:
         return self.id + "-" + self.name
 
@@ -122,7 +135,7 @@ class Snapshot:
         """Verifica se una chiave esiste nel dizionario."""
         return key in self.data
 
-    def get_data_tem(self, key: str, default: str = "") -> str:
+    def get_data_item(self, key: str, default: str = "") -> str:
         """Ottiene un valore dal dizionario con un default."""
         return self.data.get(key, default)
 
