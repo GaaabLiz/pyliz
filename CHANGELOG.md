@@ -28,6 +28,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.43
 - Bump version to 0.3.44
 - Bump version to 0.3.45
+- Bump version to 0.3.46
 
 ### ♻️ Refactor
 
@@ -99,6 +100,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.42
 - Update changelog for 0.3.43
 - Update changelog for 0.3.44
+- Update changelog for 0.3.45
 
 ### 🚀 Features
 
@@ -162,4 +164,5 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add backup functionality for snapshots during install, modify, and delete operations
 - Improve snapshot directory management and update snapshot description
 - Add cloning functionality to Snapshot and improve directory removal handling
+- Update folder naming convention to include creation date
 
