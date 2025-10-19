@@ -405,20 +405,38 @@ class SnapshotManager:
 
     def install(self):
         for dir_assoc in self.snapshot.directories:
-            # Path to the directory stored inside the snapshot
             source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
-            # The original path where the directory should be installed
             install_location = Path(dir_assoc.original_path)
 
-            # As per user suggestion, remove the destination path if it exists to avoid errors.
-            if install_location.exists():
-                logger.info(f"Removing existing path before install: {install_location}")
-                clear_or_move_to_temp(install_location)
+            logger.info(f"Performing clean installation from '{source_dir}' to '{install_location}'")
 
-            # Copy the directory from the snapshot to the install location.
-            # copytree will create the install_location directory.
-            logger.info(f"Installing '{source_dir}' to '{install_location}'")
-            shutil.copytree(source_dir, install_location)
+            # 1. Ensure the destination directory exists.
+            install_location.mkdir(parents=True, exist_ok=True)
+
+            # 2. Clear the contents of the destination directory.
+            # This is safer than deleting the top-level folder and avoids permission errors on protected directories.
+            logger.info(f"Clearing contents of '{install_location}' before install.")
+            for item in install_location.iterdir():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+                except Exception as e:
+                    logger.error(f"Could not remove item {item} during clean install: {e}")
+
+            # 3. Copy the contents from the source directory to the now-empty destination.
+            for item in source_dir.iterdir():
+                src_item = source_dir / item.name
+                dst_item = install_location / item.name
+                try:
+                    if src_item.is_dir():
+                        shutil.copytree(src_item, dst_item)
+                    else:
+                        shutil.copy2(src_item, dst_item)
+                except Exception as e:
+                    logger.error(f"Could not copy item {src_item} during install: {e}")
+
 
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
