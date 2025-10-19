@@ -30,6 +30,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.45
 - Bump version to 0.3.46
 - Bump version to 0.3.47
+- Bump version to 0.3.48
 
 ### ♻️ Refactor
 
@@ -103,6 +104,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.44
 - Update changelog for 0.3.45
 - Update changelog for 0.3.46
+- Update changelog for 0.3.47
 
 ### 🚀 Features
 
@@ -169,4 +171,5 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update folder naming convention to include creation date
 - Enhance installation process by removing existing paths before copying
 - Add function to normalize size in GB and MB formats
+- Improve installation process with safer directory clearing and copying
 
