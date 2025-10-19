@@ -26,6 +26,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.41
 - Bump version to 0.3.42
 - Bump version to 0.3.43
+- Bump version to 0.3.44
 
 ### ♻️ Refactor
 
@@ -67,6 +68,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update import from PyQt6 to PySide6 for compatibility
 - Remove unnecessary comment in release.yml
 - Comment out unused build steps for Linux, macOS, and Windows in release.yml
+- Comment out release notes generation steps in release.yml
 
 ### 📚 Documentation
 
@@ -94,6 +96,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.41
 - Update makefile
 - Update changelog for 0.3.42
+- Update changelog for 0.3.43
 
 ### 🚀 Features
 
@@ -155,4 +158,5 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add QtFwQConfigGroup dataclass for configuration grouping
 - Add functionality to track edits between snapshots
 - Add backup functionality for snapshots during install, modify, and delete operations
+- Improve snapshot directory management and update snapshot description
 
