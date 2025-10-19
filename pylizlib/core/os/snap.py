@@ -44,6 +44,8 @@ class SnapDirAssociation:
     folder_id: str
     _current_index: ClassVar[int] = 0
 
+    def __post_init__(self):
+        self.original_path = Path(self.original_path).as_posix()
 
     @classmethod
     def next_index(cls):
@@ -92,6 +94,7 @@ class SnapEditAction:
     timestamp: datetime = datetime.now()
     new_path: str = ""
     folder_id_to_remove: str = ""
+    directory_name_to_remove: str = ""
 
 
 
@@ -154,6 +157,27 @@ class Snapshot:
             raise KeyError(f"Key '{key}' not found in data.")
 
 
+    def clone(self) -> 'Snapshot':
+        """Crea una copia profonda dell'istanza Snapshot."""
+        return Snapshot(
+            id=self.id,
+            name=self.name,
+            desc=self.desc,
+            author=self.author,
+            directories=[SnapDirAssociation(
+                index=dir_assoc.index,
+                original_path=dir_assoc.original_path,
+                folder_id=dir_assoc.folder_id
+            ) for dir_assoc in self.directories],
+            tags=list(self.tags),
+            date_created=self.date_created,
+            date_modified=self.date_modified,
+            date_last_used=self.date_last_used,
+            date_last_modified=self.date_last_modified,
+            data=dict(self.data)
+        )
+
+
 
 
 
@@ -175,7 +199,7 @@ class SnapshotUtils:
             desc="Randomly generated snapshot",
             author="User",
             directories=dirs,
-            tags=["example", "test"]
+            tags=["example", "test"],
         )
 
 
@@ -219,10 +243,11 @@ class SnapshotUtils:
         # Trova cartelle rimosse (presenti in old ma non in new)
         removed_paths = old_paths - new_paths
         for path in removed_paths:
-            folder_id = old_path_to_assoc[path].folder_id
+            assoc = old_path_to_assoc[path]
             edits.append(SnapEditAction(
                 action_type=SnapEditType.REMOVE_DIR,
-                folder_id_to_remove=folder_id
+                folder_id_to_remove=assoc.folder_id,
+                directory_name_to_remove=assoc.directory_name
             ))
 
         return edits
@@ -342,11 +367,29 @@ class SnapshotManager:
             self.__save_json()
 
     def update_from_actions_list(self, edits: list[SnapEditAction]):
-        for edit in edits:
-            if edit.action_type == SnapEditType.ADD_DIR:
-                self.install_directory(Path(edit.new_path))
-            elif edit.action_type == SnapEditType.REMOVE_DIR:
-                self.uninstall_directory_by_folder_id(edit.folder_id_to_remove)
+        # The `self.snapshot` is the NEW snapshot.
+
+        # Handle additions
+        add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
+        added_paths = {e.new_path for e in add_actions}
+
+        for dir_assoc in self.snapshot.directories:
+            # Find the newly added directories in the snapshot's list
+            # The path in dir_assoc is already normalized by __post_init__
+            if dir_assoc.original_path in added_paths:
+                # This is a new directory. Copy its content to the snapshot storage.
+                dir_assoc.copy_install_to(self.path_snapshot)
+
+        # Handle removals
+        remove_actions = [e for e in edits if e.action_type == SnapEditType.REMOVE_DIR]
+        for edit in remove_actions:
+            if edit.directory_name_to_remove:
+                dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
+                if dir_path.exists():
+                    clear_or_move_to_temp(dir_path)
+
+        # After all filesystem changes, save the final state of the new snapshot.
+        self.__save_json()
 
     def duplicate(self):
         if not self.path_snapshot.exists():
