@@ -404,6 +404,17 @@ class SnapshotManager:
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
     def install(self):
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import win32security
+                import ntsecuritycon as con
+            except ImportError:
+                logger.error("pywin32 not installed, cannot set file permissions.")
+                win32security = None
+        else:
+            win32security = None
+
         for dir_assoc in self.snapshot.directories:
             source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
             install_location = Path(dir_assoc.original_path)
@@ -414,7 +425,6 @@ class SnapshotManager:
             install_location.mkdir(parents=True, exist_ok=True)
 
             # 2. Clear the contents of the destination directory.
-            # This is safer than deleting the top-level folder and avoids permission errors on protected directories.
             logger.info(f"Clearing contents of '{install_location}' before install.")
             for item in install_location.iterdir():
                 try:
@@ -437,6 +447,28 @@ class SnapshotManager:
                 except Exception as e:
                     logger.error(f"Could not copy item {src_item} during install: {e}")
 
+            # 4. Set permissions if on Windows and pywin32 is installed
+            if win32security:
+                try:
+                    logger.info(f"Setting full control permissions for Everyone on '{install_location}'")
+
+                    everyone, domain, type = win32security.LookupAccountName("", "Everyone")
+
+                    sd = win32security.GetFileSecurity(str(install_location), win32security.DACL_SECURITY_INFORMATION)
+                    dacl = sd.GetSecurityDescriptorDacl()
+
+                    dacl.AddAccessAllowedAceEx(
+                        win32security.ACL_REVISION,
+                        con.OBJECT_INHERIT_ACE | con.CONTAINER_INHERIT_ACE,
+                        con.GENERIC_ALL,
+                        everyone
+                    )
+
+                    sd.SetSecurityDescriptorDacl(1, dacl, 0)
+                    win32security.SetFileSecurity(str(install_location), win32security.DACL_SECURITY_INFORMATION, sd)
+
+                except Exception as e:
+                    logger.error(f"Failed to set permissions on '{install_location}': {e}")
 
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
