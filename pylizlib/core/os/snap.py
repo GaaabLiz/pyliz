@@ -403,7 +403,7 @@ class SnapshotManager:
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
-    def install(self):
+    def install(self, enable_everyone_full_control: bool = True):
         import sys
         if sys.platform == 'win32':
             try:
@@ -524,6 +524,7 @@ class SnapshotCatalogue:
             backup_pre_install: bool = False,
             backup_pre_modify: bool = False,
             backup_pre_delete: bool = False,
+            install_with_everyone_full_control: bool = True,
     ):
         self.path_catalogue = path_catalogue
         self.snapshot_json_filename = snapshot_json_filename
@@ -531,6 +532,7 @@ class SnapshotCatalogue:
         self.backup_pre_install = backup_pre_install
         self.backup_pre_modify = backup_pre_modify
         self.backup_pre_delete = backup_pre_delete
+        self.install_with_everyone_full_control = install_with_everyone_full_control
 
         self.backup_pre_install_enabled = backup_pre_install and backup_path is not None
         self.backup_pre_modify_enabled = backup_pre_modify and backup_path is not None
@@ -589,7 +591,7 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
         if self.backup_pre_install_enabled:
             snap_manager.backup_associated("preinstall", self.backup_path)
-        snap_manager.install()
+        snap_manager.install(self.install_with_everyone_full_control)
 
     def exists(self, snap_id: str) -> bool:
         return self.get_by_id(snap_id) is not None
