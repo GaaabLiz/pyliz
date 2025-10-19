@@ -60,55 +60,55 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-      - name: Generate release notes between tags
-        run: |
-          CURRENT_TAG=${GITHUB_REF#refs/tags/}
-          
-          echo "Current tag: $CURRENT_TAG"
-          
-          # Determina il pattern del tag corrente (con o senza v)
-          if [[ $CURRENT_TAG == v* ]]; then
-            TAG_PATTERN="v[0-9]*"
-          else
-            TAG_PATTERN="[0-9]*"
-          fi
-          
-          echo "Tag pattern: $TAG_PATTERN"
-          
-          # Ottieni tutti i tag che corrispondono al pattern, ordinati per versione
-          ALL_TAGS=$(git tag --list "$TAG_PATTERN" --sort=-version:refname)
-          
-          echo "All matching tags (sorted):"
-          echo "$ALL_TAGS"
-          
-          # Trova il tag precedente (il secondo nella lista dopo aver escluso il corrente)
-          PREVIOUS_TAG=$(echo "$ALL_TAGS" | grep -v "^${CURRENT_TAG}$" | head -n1)
-          
-          echo "Previous tag: $PREVIOUS_TAG"
-          
-          # Genera changelog tra i due tag
-          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$CURRENT_TAG" ]; then
-            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
-            uv run git-cliff "${PREVIOUS_TAG}".."${CURRENT_TAG}" --tag "${CURRENT_TAG}" --strip all > release_notes.md
-          else
-            echo "No previous tag found, generating changelog for first release"
-            uv run git-cliff --tag "${CURRENT_TAG}" --strip all > release_notes.md
-          fi
-          
-          # Debug: mostra il contenuto delle note di rilascio
-          echo "Release notes content:"
-          cat release_notes.md
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Release ${{ github.ref_name }}
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Generate release notes between tags
+#        run: |
+#          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+#
+#          echo "Current tag: $CURRENT_TAG"
+#
+#          # Determina il pattern del tag corrente (con o senza v)
+#          if [[ $CURRENT_TAG == v* ]]; then
+#            TAG_PATTERN="v[0-9]*"
+#          else
+#            TAG_PATTERN="[0-9]*"
+#          fi
+#
+#          echo "Tag pattern: $TAG_PATTERN"
+#
+#          # Ottieni tutti i tag che corrispondono al pattern, ordinati per versione
+#          ALL_TAGS=$(git tag --list "$TAG_PATTERN" --sort=-version:refname)
+#
+#          echo "All matching tags (sorted):"
+#          echo "$ALL_TAGS"
+#
+#          # Trova il tag precedente (il secondo nella lista dopo aver escluso il corrente)
+#          PREVIOUS_TAG=$(echo "$ALL_TAGS" | grep -v "^${CURRENT_TAG}$" | head -n1)
+#
+#          echo "Previous tag: $PREVIOUS_TAG"
+#
+#          # Genera changelog tra i due tag
+#          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$CURRENT_TAG" ]; then
+#            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+#            uv run git-cliff "${PREVIOUS_TAG}".."${CURRENT_TAG}" --tag "${CURRENT_TAG}" --strip all > release_notes.md
+#          else
+#            echo "No previous tag found, generating changelog for first release"
+#            uv run git-cliff --tag "${CURRENT_TAG}" --strip all > release_notes.md
+#          fi
+#
+#          # Debug: mostra il contenuto delle note di rilascio
+#          echo "Release notes content:"
+#          cat release_notes.md
+#
+#      - name: Create GitHub Release
+#        id: create_release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          name: Release ${{ github.ref_name }}
+#          body_path: release_notes.md
+#          draft: false
+#          prerelease: false
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 #  build-linux:
 #    runs-on: ubuntu-latest
