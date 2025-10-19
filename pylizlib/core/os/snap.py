@@ -405,7 +405,21 @@ class SnapshotManager:
 
     def install(self):
         for dir_assoc in self.snapshot.directories:
-            dir_assoc.copy_install_to(Path(dir_assoc.original_path))
+            # Path to the directory stored inside the snapshot
+            source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
+            # The original path where the directory should be installed
+            install_location = Path(dir_assoc.original_path)
+
+            # As per user suggestion, remove the destination path if it exists to avoid errors.
+            if install_location.exists():
+                logger.info(f"Removing existing path before install: {install_location}")
+                clear_or_move_to_temp(install_location)
+
+            # Copy the directory from the snapshot to the install location.
+            # copytree will create the install_location directory.
+            logger.info(f"Installing '{source_dir}' to '{install_location}'")
+            shutil.copytree(source_dir, install_location)
+
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
 
