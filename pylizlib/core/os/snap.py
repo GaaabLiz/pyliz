@@ -195,6 +195,31 @@ class SnapshotUtils:
     def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
         return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(json_filename)
 
+    @staticmethod
+    def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
+        edits: list[SnapEditAction] = []
+
+        old_folder_ids = {dir_assoc.folder_id for dir_assoc in old.directories}
+        new_folder_ids = {dir_assoc.folder_id for dir_assoc in new.directories}
+
+        # Trova cartelle aggiunte
+        for dir_assoc in new.directories:
+            if dir_assoc.folder_id not in old_folder_ids:
+                edits.append(SnapEditAction(
+                    action_type=SnapEditType.ADD_DIR,
+                    new_path=dir_assoc.original_path
+                ))
+
+        # Trova cartelle rimosse
+        for dir_assoc in old.directories:
+            if dir_assoc.folder_id not in new_folder_ids:
+                edits.append(SnapEditAction(
+                    action_type=SnapEditType.REMOVE_DIR,
+                    folder_id_to_remove=dir_assoc.folder_id
+                ))
+
+        return edits
+
 
 
 
@@ -372,7 +397,11 @@ class SnapshotCatalogue:
                 return snap
         return None
 
-    def update_snapshot(self, snap: Snapshot, edits: list[SnapEditAction]):
+    def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot):
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+        self.update_snapshot_by_edits(old, edits)
+
+    def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
@@ -388,6 +417,14 @@ class SnapshotCatalogue:
     def install(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
         snap_manager.install()
+
+    def exists(self, snap_id: str) -> bool:
+        return self.get_by_id(snap_id) is not None
+
+    def get_snap_directory_path(self, snap: Snapshot) -> Path | None:
+        if not self.exists(snap.id):
+            return None
+        return SnapshotUtils.get_snapshot_path(snap.folder_name, self.path_catalogue)
 
 
 
