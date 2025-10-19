@@ -33,3 +33,9 @@ def convert_months_number_to_str(number: int) -> str:
     }
     return months.get(number, "Invalid Month")
 
+def get_normalized_gb_mb_str(total_size: float ) -> str:
+    size_mb = total_size / (1024 * 1024)
+    if size_mb < 1000:
+        return f"{size_mb:.2f} MB"
+    size_gb = size_mb / 1024
+    return f"{size_gb:.2f} GB"
