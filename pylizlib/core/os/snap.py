@@ -1,5 +1,7 @@
 import json
+import os
 import shutil
+import zipfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
@@ -7,6 +9,7 @@ from pathlib import Path
 from typing import ClassVar, Optional
 
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp, duplicate_directory
 
 
@@ -359,16 +362,68 @@ class SnapshotManager:
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
 
+    def backup_associated(self, prefix: str, backup_path: Path):
+        try:
+            dirs_to_backup = list(self.snapshot.directories)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_name = f"backup_{prefix}_{self.snapshot.id}_{timestamp}.zip"
+            backup_path.mkdir(parents=True, exist_ok=True)
+            zip_path = backup_path.joinpath(zip_name)
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for folder in dirs_to_backup:
+                    folder = Path(folder.original_path)
+                    if folder.is_dir():
+                        for file_path in folder.rglob("*"):
+                            # Evita di includere la directory vuota
+                            if file_path.is_file():
+                                # Archivia la struttura originale relativa alla directory base
+                                archive.write(
+                                    file_path,
+                                    arcname=os.path.join(folder.name, file_path.relative_to(folder))
+                                )
+        except Exception as e:
+            logger.error(e)
+
+
+    def backup_snap_directory(self, backup_path: Path):
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_name = f"backup_snapdir_{self.snapshot.id}_{timestamp}.zip"
+            backup_path.mkdir(parents=True, exist_ok=True)
+            zip_path = backup_path.joinpath(zip_name)
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for file_path in self.path_snapshot.rglob("*"):
+                    # Evita di includere la directory vuota
+                    if file_path.is_file():
+                        # Archivia la struttura originale relativa alla directory base
+                        archive.write(
+                            file_path,
+                            arcname=file_path.relative_to(self.path_snapshot)
+                        )
+        except Exception as e:
+            logger.error(e)
 
 class SnapshotCatalogue:
 
     def __init__(
             self,
             path_catalogue: Path,
-            snapshot_json_filename: str = "snapshot.json"
+            snapshot_json_filename: str = "snapshot.json",
+            backup_path: Path | None = None,
+            backup_pre_install: bool = False,
+            backup_pre_modify: bool = False,
+            backup_pre_delete: bool = False,
     ):
         self.path_catalogue = path_catalogue
         self.snapshot_json_filename = snapshot_json_filename
+        self.backup_path = backup_path
+        self.backup_pre_install = backup_pre_install
+        self.backup_pre_modify = backup_pre_modify
+        self.backup_pre_delete = backup_pre_delete
+
+        self.backup_pre_install_enabled = backup_pre_install and backup_path is not None
+        self.backup_pre_modify_enabled = backup_pre_modify and backup_path is not None
+        self.backup_pre_delete_enabled = backup_pre_delete and backup_path is not None
 
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
@@ -379,6 +434,8 @@ class SnapshotCatalogue:
 
     def delete(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        if self.backup_pre_delete_enabled:
+            snap_manager.backup_snap_directory(self.backup_path)
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
@@ -399,10 +456,12 @@ class SnapshotCatalogue:
 
     def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot):
         edits = SnapshotUtils.get_edits_between_snapshots(old, new)
-        self.update_snapshot_by_edits(old, edits)
+        self.update_snapshot_by_edits(new, edits)
 
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        if self.backup_pre_modify_enabled:
+            snap_manager.backup_snap_directory(self.backup_path)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
@@ -416,6 +475,8 @@ class SnapshotCatalogue:
 
     def install(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        if self.backup_pre_install_enabled:
+            snap_manager.backup_associated("preinstall", self.backup_path)
         snap_manager.install()
 
     def exists(self, snap_id: str) -> bool:
