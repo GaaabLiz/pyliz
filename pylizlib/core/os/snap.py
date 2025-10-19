@@ -202,24 +202,28 @@ class SnapshotUtils:
     def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
         edits: list[SnapEditAction] = []
 
-        old_folder_ids = {dir_assoc.folder_id for dir_assoc in old.directories}
-        new_folder_ids = {dir_assoc.folder_id for dir_assoc in new.directories}
+        old_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in old.directories}
+        new_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in new.directories}
 
-        # Trova cartelle aggiunte
-        for dir_assoc in new.directories:
-            if dir_assoc.folder_id not in old_folder_ids:
-                edits.append(SnapEditAction(
-                    action_type=SnapEditType.ADD_DIR,
-                    new_path=dir_assoc.original_path
-                ))
+        old_paths = set(old_path_to_assoc.keys())
+        new_paths = set(new_path_to_assoc.keys())
 
-        # Trova cartelle rimosse
-        for dir_assoc in old.directories:
-            if dir_assoc.folder_id not in new_folder_ids:
-                edits.append(SnapEditAction(
-                    action_type=SnapEditType.REMOVE_DIR,
-                    folder_id_to_remove=dir_assoc.folder_id
-                ))
+        # Trova cartelle aggiunte (presenti in new ma non in old)
+        added_paths = new_paths - old_paths
+        for path in added_paths:
+            edits.append(SnapEditAction(
+                action_type=SnapEditType.ADD_DIR,
+                new_path=path
+            ))
+
+        # Trova cartelle rimosse (presenti in old ma non in new)
+        removed_paths = old_paths - new_paths
+        for path in removed_paths:
+            folder_id = old_path_to_assoc[path].folder_id
+            edits.append(SnapEditAction(
+                action_type=SnapEditType.REMOVE_DIR,
+                folder_id_to_remove=folder_id
+            ))
 
         return edits
 
@@ -439,6 +443,7 @@ class SnapshotCatalogue:
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
+        self.path_catalogue.mkdir(parents=True, exist_ok=True)
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():

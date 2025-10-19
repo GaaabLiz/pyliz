@@ -2,20 +2,22 @@ from pathlib import Path
 
 from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotUtils
 
-path_catalogue = Path("/Users/gabliz/Documents/Test/Dev Tests")
-path_temp = Path("/Users/gabliz/Documents/Test/eagleTest/test.library/images")
+path_catalogue = Path(r"C:\Users\Gabriele\devliz\Catalogue")
+path_temp = Path(r"C:\Users\Gabriele\Pictures\LibTest.library\images")
 
 snap = SnapshotUtils.gen_random_snap(path_temp)
 snap.add_data_item("ExtraField1", "ExtraValue1")
 snap.add_data_item("ExtraField2", "ExtraValue2")
 
+snap_edit = snap
+snap.desc = "edited description"
+
 
 catalogue = SnapshotCatalogue(path_catalogue)
 catalogue.add(snap)
 
-list_snaps = catalogue.get_all()
+catalogue.update_snapshot_by_objs(snap, snap_edit)
 
-# snap_found = catalogue.get_by_id(snap.id)
 # snap_found.add_data_item("ExtraField3", "ExtraValue3")
 # snap_found.edit_data_item("ExtraField2", "ExtraValue2-Edited")
 # snap_found.desc = "Snapshot Edited"
@@ -25,5 +27,3 @@ list_snaps = catalogue.get_all()
 
 catalogue.duplicate_by_id(snap.id)
 
-
-print(list_snaps)
