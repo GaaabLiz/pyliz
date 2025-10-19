@@ -127,7 +127,7 @@ class Snapshot:
 
     @property
     def folder_name(self) -> str:
-        return self.id + "-" + self.name
+        return self.id + "-" + self.date_created.strftime("%d-%m-%Y")
 
     def add_data_item(self, key: str, value: str) -> None:
         """Aggiunge un elemento al dizionario."""
