@@ -540,6 +540,9 @@ class SnapshotCatalogue:
 
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
+    def set_catalogue_path(self, new_path: Path):
+        self.path_catalogue = new_path
+        self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def add(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
