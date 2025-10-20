@@ -35,6 +35,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.50
 - Bump version to 0.3.51
 - Bump version to 0.3.52
+- Bump version to 0.3.53
 
 ### ♻️ Refactor
 
@@ -70,6 +71,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Restructure release workflow to separate GitHub release and PyPI publishing steps
 - Bump version to 0.3.15 and update release workflow for improved changelog generation
 - Bump version to 0.3.17 and update release workflow for Linux and macOS builds
+- Update dependencies to include pytest and related packages
 
 ### 🐛 Bug Fixes
 
@@ -79,6 +81,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Comment out unused build steps for Linux, macOS, and Windows in release.yml
 - Comment out release notes generation steps in release.yml
 - Simplify folder_name property to return only the id
+- Use settings.json_filename for snapshot JSON path
 
 ### 📚 Documentation
 
@@ -115,6 +118,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.49
 - Update changelog for 0.3.50
 - Update changelog for 0.3.51
+- Update changelog for 0.3.52
 
 ### 🚀 Features
 
@@ -187,4 +191,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add method to set custom catalogue path
 - Updated uv.lock
 - Add AboutMessageBox class for application information display
+
+### 🧪 Testing
+
+- Add unit tests for Snapshot and related classes
 
