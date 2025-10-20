@@ -33,6 +33,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.48
 - Bump version to 0.3.49
 - Bump version to 0.3.50
+- Bump version to 0.3.51
 
 ### ♻️ Refactor
 
@@ -75,6 +76,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Remove unnecessary comment in release.yml
 - Comment out unused build steps for Linux, macOS, and Windows in release.yml
 - Comment out release notes generation steps in release.yml
+- Simplify folder_name property to return only the id
 
 ### 📚 Documentation
 
@@ -109,6 +111,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.47
 - Update changelog for 0.3.48
 - Update changelog for 0.3.49
+- Update changelog for 0.3.50
 
 ### 🚀 Features
 
