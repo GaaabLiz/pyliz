@@ -13,29 +13,6 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp, duplicate_directory
 
 
-# S = TypeVar("S")
-
-
-# class CatalogueInterface(ABC, Generic[S]):
-#
-#     def __init__(self, path_catalogue: Path):
-#         self.__setup_catalogue(path_catalogue)
-#
-#     def __setup_catalogue(self, path_catalogue: Path):
-#         path_catalogue.mkdir(parents=True, exist_ok=True)
-#         self.path_catalogue = path_catalogue
-#
-#     def update_catalogue_path(self, new_path: Path):
-#         self.__setup_catalogue(new_path)
-#
-#     @abstractmethod
-#     def add(self, data: S) -> S:
-#         pass
-#
-#     @abstractmethod
-#     def get_all(self) -> list[S]:
-#         pass
-
 
 @dataclass
 class SnapDirAssociation:
@@ -96,6 +73,29 @@ class SnapEditAction:
     folder_id_to_remove: str = ""
     directory_name_to_remove: str = ""
 
+
+@dataclass
+class SnapshotSettings:
+    json_filename: str = "snapshot.json"
+    backup_path: Path | None = None
+    backup_pre_install: bool = False
+    backup_pre_modify: bool = False
+    backup_pre_delete: bool = False
+    install_with_everyone_full_control: bool = True
+    snap_id_length: int = 20
+    folder_id_length: int = 6
+
+    @property
+    def bck_before_install_enabled(self) -> bool:
+        return self.backup_pre_install and self.backup_path is not None
+
+    @property
+    def bck_before_modify_enabled(self) -> bool:
+        return self.backup_pre_modify and self.backup_path is not None
+
+    @property
+    def bck_before_delete_enabled(self) -> bool:
+        return self.backup_pre_delete and self.backup_path is not None
 
 
 @dataclass
@@ -309,10 +309,10 @@ class SnapshotManager:
             self,
             snapshot: Snapshot,
             catalogue_path: Path,
-            json_filename: str = "snapshot.json"
+            settings: SnapshotSettings = SnapshotSettings(),
     ):
         self.snapshot = snapshot
-        self.json_filename = json_filename
+        self.settings = settings
         self.path_catalogue = catalogue_path
         self.path_snapshot = SnapshotUtils.get_snapshot_path(self.snapshot.folder_name, self.path_catalogue)
         self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.json_filename)
@@ -519,25 +519,10 @@ class SnapshotCatalogue:
     def __init__(
             self,
             path_catalogue: Path,
-            snapshot_json_filename: str = "snapshot.json",
-            backup_path: Path | None = None,
-            backup_pre_install: bool = False,
-            backup_pre_modify: bool = False,
-            backup_pre_delete: bool = False,
-            install_with_everyone_full_control: bool = True,
+            settings: SnapshotSettings = SnapshotSettings(),
     ):
         self.path_catalogue = path_catalogue
-        self.snapshot_json_filename = snapshot_json_filename
-        self.backup_path = backup_path
-        self.backup_pre_install = backup_pre_install
-        self.backup_pre_modify = backup_pre_modify
-        self.backup_pre_delete = backup_pre_delete
-        self.install_with_everyone_full_control = install_with_everyone_full_control
-
-        self.backup_pre_install_enabled = backup_pre_install and backup_path is not None
-        self.backup_pre_modify_enabled = backup_pre_modify and backup_path is not None
-        self.backup_pre_delete_enabled = backup_pre_delete and backup_path is not None
-
+        self.settings = settings
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def set_catalogue_path(self, new_path: Path):
@@ -545,13 +530,13 @@ class SnapshotCatalogue:
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def add(self, snap: Snapshot):
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.create()
 
     def delete(self, snap: Snapshot):
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
-        if self.backup_pre_delete_enabled:
-            snap_manager.backup_snap_directory(self.backup_path)
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        if self.settings.bck_before_delete_enabled:
+            snap_manager.backup_snap_directory(self.settings.backup_path)
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
@@ -559,7 +544,7 @@ class SnapshotCatalogue:
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():
-                snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.snapshot_json_filename)
+                snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
                 if snap is not None:
                     snapshots.append(snap)
         return snapshots
@@ -576,9 +561,9 @@ class SnapshotCatalogue:
         self.update_snapshot_by_edits(new, edits)
 
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
-        if self.backup_pre_modify_enabled:
-            snap_manager.backup_snap_directory(self.backup_path)
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        if self.settings.bck_before_modify_enabled:
+            snap_manager.backup_snap_directory(self.settings.backup_path)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
@@ -587,14 +572,14 @@ class SnapshotCatalogue:
         snap = self.get_by_id(snap_id)
         if snap is None:
             raise ValueError(f"No snapshot found with ID {snap_id}")
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.duplicate()
 
     def install(self, snap: Snapshot):
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.snapshot_json_filename)
-        if self.backup_pre_install_enabled:
-            snap_manager.backup_associated("preinstall", self.backup_path)
-        snap_manager.install(self.install_with_everyone_full_control)
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        if self.settings.bck_before_install_enabled:
+            snap_manager.backup_associated("preinstall", self.settings.backup_path)
+        snap_manager.install(self.settings.install_with_everyone_full_control)
 
     def exists(self, snap_id: str) -> bool:
         return self.get_by_id(snap_id) is not None
