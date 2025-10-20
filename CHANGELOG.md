@@ -31,6 +31,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.46
 - Bump version to 0.3.47
 - Bump version to 0.3.48
+- Bump version to 0.3.49
 
 ### ♻️ Refactor
 
@@ -105,6 +106,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.45
 - Update changelog for 0.3.46
 - Update changelog for 0.3.47
+- Update changelog for 0.3.48
 
 ### 🚀 Features
 
@@ -172,4 +174,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Enhance installation process by removing existing paths before copying
 - Add function to normalize size in GB and MB formats
 - Improve installation process with safer directory clearing and copying
+- Add Windows file permission handling during installation
+- Add option for full control permissions during installation
+- Add method to set custom catalogue path
 
