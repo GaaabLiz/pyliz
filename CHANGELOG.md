@@ -32,6 +32,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.47
 - Bump version to 0.3.48
 - Bump version to 0.3.49
+- Bump version to 0.3.50
 
 ### ♻️ Refactor
 
@@ -107,6 +108,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.46
 - Update changelog for 0.3.47
 - Update changelog for 0.3.48
+- Update changelog for 0.3.49
 
 ### 🚀 Features
 
@@ -177,4 +179,6 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add Windows file permission handling during installation
 - Add option for full control permissions during installation
 - Add method to set custom catalogue path
+- Updated uv.lock
+- Add AboutMessageBox class for application information display
 
