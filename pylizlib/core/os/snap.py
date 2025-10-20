@@ -35,11 +35,11 @@ class SnapDirAssociation:
 
 
     @staticmethod
-    def gen_random(source_folder_for_choices: Path):
+    def gen_random(source_folder_for_choices: Path, folder_id_length: int = 4) -> 'SnapDirAssociation':
         return SnapDirAssociation(
             index=SnapDirAssociation.next_index(),
             original_path=random_subfolder(source_folder_for_choices).__str__(),
-            folder_id=gen_random_string(4)
+            folder_id=gen_random_string(folder_id_length)
         )
 
     @staticmethod
@@ -195,7 +195,7 @@ class SnapshotUtils:
         dirs = SnapDirAssociation.gen_random_list(3, source_folder_for_choices)
         return Snapshot(
             id=gen_random_string(id_length),
-            name="Snapshot " + gen_random_string(5),
+            name="Snapshot " + gen_random_string(id_length),
             desc="Randomly generated snapshot",
             author="User",
             directories=dirs,
@@ -351,7 +351,7 @@ class SnapshotManager:
         new_dir = SnapDirAssociation(
             index=SnapDirAssociation.next_index(),
             original_path=destination_path.as_posix(),
-            folder_id=gen_random_string(4)
+            folder_id=gen_random_string(self.settings.folder_id_length)
         )
         new_dir.copy_install_to(self.path_snapshot)
         self.snapshot.directories.append(new_dir)
@@ -395,7 +395,7 @@ class SnapshotManager:
         if not self.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
         new_snap = self.snapshot
-        new_snap.id = gen_random_string(10)
+        new_snap.id = gen_random_string(self.settings.snap_id_length)
         new_snap.name = self.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
         new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
