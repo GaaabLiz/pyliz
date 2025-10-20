@@ -315,7 +315,7 @@ class SnapshotManager:
         self.settings = settings
         self.path_catalogue = catalogue_path
         self.path_snapshot = SnapshotUtils.get_snapshot_path(self.snapshot.folder_name, self.path_catalogue)
-        self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.json_filename)
+        self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.settings.json_filename)
 
     def __save_json(self):
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
@@ -399,7 +399,7 @@ class SnapshotManager:
         new_snap.name = self.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
         new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
-        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.json_filename)
+        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.settings.json_filename)
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
