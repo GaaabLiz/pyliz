@@ -34,6 +34,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.49
 - Bump version to 0.3.50
 - Bump version to 0.3.51
+- Bump version to 0.3.52
 
 ### ♻️ Refactor
 
@@ -53,6 +54,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update release workflow for changelog generation and cleanup
 - Enhance release notes generation to include changelog between tags
 - Enhance release notes generation to include changelog between tags
+- Introduce SnapshotSettings class for improved snapshot management
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -112,6 +114,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.48
 - Update changelog for 0.3.49
 - Update changelog for 0.3.50
+- Update changelog for 0.3.51
 
 ### 🚀 Features
 
