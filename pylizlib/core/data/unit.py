@@ -1,10 +1,21 @@
 
 
 def convert_byte_to_mb(byte: int) -> float:
+    """
+    Convert byte to megabyte.
+    1 MB = 1024 * 1024 bytes
+    :param byte: Size in bytes
+    :return: Size in megabytes
+    """
     return byte / (1024 * 1024)
 
 
 def get_total_sec_from_msec(msec: int) -> int:
+    """
+    Convert milliseconds to total seconds.
+    :param msec: Time in milliseconds
+    :return: Time in total seconds
+    """
     return msec // 1000
 
 

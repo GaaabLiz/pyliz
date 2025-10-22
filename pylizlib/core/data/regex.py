@@ -5,6 +5,13 @@ import typer
 
 
 def is_valid_url(url: str):
+    """
+    Verify if the given string is a valid URL.
+    Args:
+        url (str): The URL string to verify.
+    : Returns:
+        bool: True if the URL is valid, False otherwise.
+    """
     # Definizione di un'espressione regolare per verificare l'URL
     regex = re.compile(
         r'^(?:http|ftp)s?://' # Schema
