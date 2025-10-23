@@ -10,6 +10,7 @@
 #                                   VERSION 1.0.0
 
 # == PROJECT VARIABLES ==
+APP_NAME := pyliz
 PYTHON_MAIN_PACKAGE = pylizlib
 FILE_MAIN_CLI := $(PYTHON_MAIN_PACKAGE)/core/cli.py
 QT_QRC_FILE := resources/resources.qrc
@@ -17,9 +18,11 @@ QT_RESOURCE_PY := $(PYTHON_MAIN_PACKAGE)/resource/resources_rc.py
 INNO_SETUP_FILE := installer.iss
 INNO_SETUP_VERSION_VARIABLE := MyAppVersion
 
+
 # == FILES VARIABLES ==
 FILE_PROJECT_TOML := pyproject.toml
 FILE_PROJECT_PY_GENERATED := $(PYTHON_MAIN_PACKAGE)/project.py
+FILE_MAIN_LOGO_ICO := resources/logo.ico
 
 # == EXTERNAL COMMANDS VARIABLES ==
 QT_COMMAND_GEN_RES := pyside6-rcc
@@ -67,11 +70,11 @@ clean-docs:
 
 # Command to clean all generated files
 clean-generated:
-	@echo "clean-generated not implemented yet"
+	@echo "CLeaning generated files..."
 	- rm -f $(FILE_PROJECT_PY_GENERATED)
 
 # Aggregate clean command
-clean: clean-build clean-cache clean-docs clean-generated
+clean: clean-build clean-cache clean-generated
 
 
 
@@ -85,16 +88,22 @@ clean: clean-build clean-cache clean-docs clean-generated
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
 build:
-	uv run pyinstaller --windowed --icon=resources/logo.ico --name=pyliz pylizlib/core/cli.py
+    uv build
+
+build-exe:
+	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN_CLI)
 
 docs-gen:
-	pdoc -o docs -d markdown pylizlib
+	pdoc -o docs -d markdown $(PYTHON_MAIN_PACKAGE)
 
 gen-project-py:
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
 
 gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
+
+installer:
+    ISCC.exe $(INNO_SETUP_FILE)
 
 
 
