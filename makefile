@@ -14,6 +14,8 @@ PYTHON_MAIN_PACKAGE = pylizlib
 FILE_MAIN_CLI := $(PYTHON_MAIN_PACKAGE)/core/cli.py
 QT_QRC_FILE := resources/resources.qrc
 QT_RESOURCE_PY := $(PYTHON_MAIN_PACKAGE)/resource/resources_rc.py
+INNO_SETUP_FILE := installer.iss
+INNO_SETUP_VERSION_VARIABLE := MyAppVersion
 
 # == FILES VARIABLES ==
 FILE_PROJECT_TOML := pyproject.toml
@@ -107,10 +109,18 @@ gen-qt-res-py:
 #
 #
 
-bump-patch-push-tag:
-	git pull
+upgrade-patch:
 	uv version --bump patch
 	git commit -am "bump: Bump version to $$(uv version --short)"
 	git push
+	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+	@if [ -f $(INNO_SETUP_FILE) ]; then \
+		echo "Inno setup script found. upgrading version..."; \
+		sed -i 's/#define $(INNO_SETUP_VERSION_VARIABLE) "[^"]*"/#define $(INNO_SETUP_VERSION_VARIABLE) "$$(uv version --short)"/' $(INNO_SETUP_FILE); \
+	fi
+
+
+upgrade-patch-push-tag: upgrade-patch
+	git pull
 	git tag $$(uv version --short)
 	git push origin $$(uv version --short)
