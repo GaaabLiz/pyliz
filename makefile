@@ -56,8 +56,8 @@ install-env:
 clean-build:
 	- rm -rf dist
 	- rm -rf build
-	- rm -rf pylizlib.egg-info
-	- rm -rf pyliz.spec
+	- rm -rf $(PYTHON_MAIN_PACKAGE).egg-info
+	- rm -rf $(PYTHON_MAIN_PACKAGE).spec
 
 # Command to clean Python cache files
 clean-cache:
@@ -87,7 +87,7 @@ clean: clean-build clean-cache clean-generated
 #     | |__| | |____| |\  | |____| | \ \  / ____ \| |  | |____
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
-build:
+build-uv:
 	uv build
 
 build-exe:
