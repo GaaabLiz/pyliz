@@ -112,11 +112,12 @@ gen-qt-res-py:
 upgrade-patch:
 	uv version --bump patch
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
-	@if [ -f $(INNO_SETUP_FILE) ]; then \
-		echo "Inno setup script found. upgrading version..."; \
-		sed -i 's/#define $(INNO_SETUP_VERSION_VARIABLE) "[^"]*"/#define $(INNO_SETUP_VERSION_VARIABLE) "$$(uv version --short)"/' $(INNO_SETUP_FILE); \
-	fi
-	git commit -am "bump: Bump version to $$(uv version --short)"
+	@VERSION=$$(uv version --short); \
+	if [ -f $(INNO_SETUP_FILE) ]; then \
+		echo "Inno setup script found. upgrading version to $$VERSION..."; \
+		sed -i "s/#define $(INNO_SETUP_VERSION_VARIABLE) \"[^\"]*\"/#define $(INNO_SETUP_VERSION_VARIABLE) \"$$VERSION\"/" $(INNO_SETUP_FILE); \
+	fi; \
+	git commit -am "bump: Bump version to $$VERSION"; \
 	git push
 
 
