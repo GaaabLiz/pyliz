@@ -88,7 +88,7 @@ clean: clean-build clean-cache clean-generated
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
 build:
-    uv build
+	uv build
 
 build-exe:
 	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN_CLI)
@@ -103,7 +103,7 @@ gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
 
 installer:
-    ISCC.exe $(INNO_SETUP_FILE)
+	ISCC.exe $(INNO_SETUP_FILE)
 
 
 
