@@ -7,25 +7,11 @@
 #    $$ | \_/ $$ |$$ |  $$ |$$ | \$$\ $$$$$$$$\ $$ |      $$$$$$\ $$$$$$$$\ $$$$$$$$\
 #    \__|     \__|\__|  \__|\__|  \__|\________|\__|      \______|\________|\________|
 #
-#                                   VERSION 1.0.0
+#                                   VERSION 1.0.1
 
-# == PROJECT VARIABLES ==
-APP_NAME := pyliz
-PYTHON_MAIN_PACKAGE = pylizlib
-FILE_MAIN_CLI := $(PYTHON_MAIN_PACKAGE)/core/cli.py
-QT_QRC_FILE := resources/resources.qrc
-QT_RESOURCE_PY := $(PYTHON_MAIN_PACKAGE)/resource/resources_rc.py
-INNO_SETUP_FILE := installer.iss
-INNO_SETUP_VERSION_VARIABLE := MyAppVersion
+include project.mk
 
 
-# == FILES VARIABLES ==
-FILE_PROJECT_TOML := pyproject.toml
-FILE_PROJECT_PY_GENERATED := $(PYTHON_MAIN_PACKAGE)/project.py
-FILE_MAIN_LOGO_ICO := resources/logo.ico
-
-# == EXTERNAL COMMANDS VARIABLES ==
-QT_COMMAND_GEN_RES := pyside6-rcc
 
 
 
@@ -72,6 +58,7 @@ clean-docs:
 clean-generated:
 	@echo "CLeaning generated files..."
 	- rm -f $(FILE_PROJECT_PY_GENERATED)
+	- rm -f Output
 
 # Aggregate clean command
 clean: clean-build clean-cache clean-generated
@@ -87,15 +74,6 @@ clean: clean-build clean-cache clean-generated
 #     | |__| | |____| |\  | |____| | \ \  / ____ \| |  | |____
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
-build-uv:
-	uv build
-
-build-exe:
-	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN_CLI)
-
-docs-gen:
-	pdoc -o docs -d markdown $(PYTHON_MAIN_PACKAGE)
-
 gen-project-py:
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
 
@@ -104,6 +82,19 @@ gen-qt-res-py:
 
 installer:
 	ISCC.exe $(INNO_SETUP_FILE)
+
+build-uv:
+	uv build
+
+build-exe:
+	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN)
+
+docs-gen:
+	pdoc -o docs -d markdown $(PYTHON_MAIN_PACKAGE)
+
+build-app: clean gen-project-py build-uv build-exe
+
+build-installer: build-app installer
 
 
 
