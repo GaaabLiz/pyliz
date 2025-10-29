@@ -454,7 +454,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         shutil.rmtree(TEST_LOCAL_ROOT)
 
     def test_search_text_found(self):
-        results = self.searcher.search_text("Hello")
+        results = self.searcher.search_text_global("Hello")
         self.assertEqual(len(results), 2)
 
         # Sort results to have a predictable order for assertions
@@ -469,33 +469,33 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertEqual(results[1].searched_text, "Hello")
 
     def test_search_text_not_found(self):
-        results = self.searcher.search_text("nonexistent")
+        results = self.searcher.search_text_global("nonexistent")
         self.assertEqual(len(results), 0)
 
     def test_search_text_single_match(self):
-        results = self.searcher.search_text("value=12345")
+        results = self.searcher.search_text_global("value=12345")
         self.assertEqual(len(results), 1)
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
 
     def test_search_regex_found(self):
-        results = self.searcher.search_regex(r"value=\d+")
+        results = self.searcher.search_regex_global(r"value=\d+")
         self.assertEqual(len(results), 1)
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, r"value=\d+")
 
     def test_search_regex_multiple_matches(self):
-        results = self.searcher.search_regex(r"\bfile\b")  # match whole word 'file'
+        results = self.searcher.search_regex_global(r"\bfile\b")  # match whole word 'file'
         self.assertEqual(len(results), 3)
 
     def test_search_regex_not_found(self):
-        results = self.searcher.search_regex(r"nonexistent\d{5}")
+        results = self.searcher.search_regex_global(r"nonexistent\d{5}")
         self.assertEqual(len(results), 0)
 
     def test_search_regex_invalid_pattern(self):
         # An invalid regex should be handled gracefully (log an error and return empty list)
-        results = self.searcher.search_regex(r"[invalid")
+        results = self.searcher.search_regex_global(r"[invalid")
         self.assertEqual(len(results), 0)
 
 

@@ -665,7 +665,7 @@ class SnapshotSearcher:
         """
         self.catalogue = catalogue
 
-    def search_text(self, text: str) -> list[SnapshotSearchResult]:
+    def search_text_global(self, text: str) -> list[SnapshotSearchResult]:
         """
         Cerca un dato testo in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
         I file binari vengono saltati automaticamente.
@@ -710,7 +710,7 @@ class SnapshotSearcher:
 
         return results
 
-    def search_regex(self, regex_pattern: str) -> list[SnapshotSearchResult]:
+    def search_regex_global(self, regex_pattern: str) -> list[SnapshotSearchResult]:
         """
         Cerca un dato pattern regex in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
         I file binari vengono saltati automaticamente.
