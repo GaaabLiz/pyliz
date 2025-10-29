@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pylizlib.core.os.snap import (
     Snapshot,
@@ -14,6 +14,7 @@ from pylizlib.core.os.snap import (
     SnapshotSerializer,
     SnapshotSearcher,
     SnapshotSearchResult,
+    SnapshotSortKey,
 )
 from pylizlib.core.data.gen import gen_random_string
 
@@ -146,6 +147,38 @@ class TestSnapshotUtils(unittest.TestCase):
         self.assertEqual(edits_remove[0].action_type, SnapEditType.REMOVE_DIR)
         self.assertEqual(edits_remove[0].folder_id_to_remove, removed_assoc.folder_id)
         self.assertEqual(edits_remove[0].directory_name_to_remove, removed_assoc.directory_name)
+
+    def test_sort_snapshots(self):
+        now = datetime.now()
+        s1 = Snapshot(id="1", name="Beta", desc="d", date_created=now - timedelta(days=1), date_modified=now)
+        s2 = Snapshot(id="2", name="alpha", desc="d", date_created=now - timedelta(days=2), date_modified=None)
+        s3 = Snapshot(id="3", name="Gamma", desc="d", date_created=now, date_modified=now - timedelta(days=1))
+
+        snapshots = [s1, s2, s3]
+
+        # Test sort by name (ascending, case-insensitive)
+        sorted_by_name = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.NAME)
+        self.assertEqual([s.name for s in sorted_by_name], ["alpha", "Beta", "Gamma"])
+
+        # Test sort by name (descending, case-insensitive)
+        sorted_by_name_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.NAME, reverse=True)
+        self.assertEqual([s.name for s in sorted_by_name_desc], ["Gamma", "Beta", "alpha"])
+
+        # Test sort by date_created (ascending)
+        sorted_by_date = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_CREATED)
+        self.assertEqual([s.id for s in sorted_by_date], ["2", "1", "3"])
+
+        # Test sort by date_created (descending)
+        sorted_by_date_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_CREATED, reverse=True)
+        self.assertEqual([s.id for s in sorted_by_date_desc], ["3", "1", "2"])
+
+        # Test sort by date_modified (with None, ascending)
+        sorted_with_none = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED)
+        self.assertEqual([s.id for s in sorted_with_none], ["3", "1", "2"])
+
+        # Test sort by date_modified (with None, descending)
+        sorted_with_none_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED, reverse=True)
+        self.assertEqual([s.id for s in sorted_with_none_desc], ["1", "3", "2"])
 
 
 class TestSnapshotManager(unittest.TestCase):
