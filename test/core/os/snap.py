@@ -12,6 +12,8 @@ from pylizlib.core.os.snap import (
     SnapshotUtils,
     SnapEditType,
     SnapshotSerializer,
+    SnapshotSearcher,
+    SnapshotSearchResult,
 )
 from pylizlib.core.data.gen import gen_random_string
 
@@ -371,6 +373,97 @@ class TestSnapshotCatalogue(unittest.TestCase):
         # Check last used date
         updated_snap = self.catalogue.get_by_id(snap1.id)
         self.assertIsNotNone(updated_snap.date_last_used)
+
+
+class TestSnapshotSearcher(unittest.TestCase):
+    def setUp(self):
+        """Set up for the searcher tests."""
+        if TEST_LOCAL_ROOT.exists():
+            shutil.rmtree(TEST_LOCAL_ROOT)
+
+        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+        # Create source files and content
+        dir1 = SOURCE_DATA_PATH / "search_dir1"
+        dir1.mkdir()
+        (dir1 / "fileA.txt").write_text("Hello world\nThis is a test file.")
+        (dir1 / "fileB.txt").write_text("Another file with test content.\nHello again.")
+
+        dir2 = SOURCE_DATA_PATH / "search_dir2"
+        dir2.mkdir()
+        (dir2 / "fileC.log").write_text("Log file with some data: value=12345")
+        (dir2 / "fileD.txt").write_text("No interesting content here.")
+
+        # Create a binary file
+        (dir2 / "binary.bin").write_bytes(b'\x80\x81\x82')
+
+        # Create a snapshot containing these dirs
+        SnapDirAssociation._current_index = 0
+        self.snap = Snapshot(
+            id="search-snap-id",
+            name="SearchTestSnap",
+            desc="A snapshot for testing search functionality",
+            directories=[
+                SnapDirAssociation(index=1, original_path=str(dir1), folder_id="d1"),
+                SnapDirAssociation(index=2, original_path=str(dir2), folder_id="d2"),
+            ],
+            author="SearchTest"
+        )
+
+        self.catalogue = SnapshotCatalogue(CATALOGUE_PATH)
+        self.catalogue.add(self.snap)
+
+        self.searcher = SnapshotSearcher(self.catalogue)
+
+    def tearDown(self):
+        """Tear down after each test method."""
+        shutil.rmtree(TEST_LOCAL_ROOT)
+
+    def test_search_text_found(self):
+        results = self.searcher.search_text("Hello")
+        self.assertEqual(len(results), 2)
+
+        # Sort results to have a predictable order for assertions
+        results.sort(key=lambda r: r.file_path)
+
+        self.assertIn("fileA.txt", results[0].file_path)
+        self.assertEqual(results[0].line_number, 1)
+        self.assertEqual(results[0].searched_text, "Hello")
+
+        self.assertIn("fileB.txt", results[1].file_path)
+        self.assertEqual(results[1].line_number, 2)
+        self.assertEqual(results[1].searched_text, "Hello")
+
+    def test_search_text_not_found(self):
+        results = self.searcher.search_text("nonexistent")
+        self.assertEqual(len(results), 0)
+
+    def test_search_text_single_match(self):
+        results = self.searcher.search_text("value=12345")
+        self.assertEqual(len(results), 1)
+        self.assertIn("fileC.log", results[0].file_path)
+        self.assertEqual(results[0].line_number, 1)
+
+    def test_search_regex_found(self):
+        results = self.searcher.search_regex(r"value=\d+")
+        self.assertEqual(len(results), 1)
+        self.assertIn("fileC.log", results[0].file_path)
+        self.assertEqual(results[0].line_number, 1)
+        self.assertEqual(results[0].searched_text, r"value=\d+")
+
+    def test_search_regex_multiple_matches(self):
+        results = self.searcher.search_regex(r"\bfile\b")  # match whole word 'file'
+        self.assertEqual(len(results), 3)
+
+    def test_search_regex_not_found(self):
+        results = self.searcher.search_regex(r"nonexistent\d{5}")
+        self.assertEqual(len(results), 0)
+
+    def test_search_regex_invalid_pattern(self):
+        # An invalid regex should be handled gracefully (log an error and return empty list)
+        results = self.searcher.search_regex(r"[invalid")
+        self.assertEqual(len(results), 0)
 
 
 if __name__ == '__main__':
