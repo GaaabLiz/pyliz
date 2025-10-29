@@ -1,5 +1,5 @@
 name = 'pylizlib'
-version = '0.3.58'
+version = '0.3.59'
 description = 'Add your description here'
 requires_python = '>=3.12'
 authors = [('Gabliz', 'gabliz.dev@gmail.com')]
