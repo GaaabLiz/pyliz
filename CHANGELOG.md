@@ -6,6 +6,11 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [unreleased]
 
+### Build
+
+- Refactor build process and add installer target
+- Update clean targets and rename build command
+
 ### Bump
 
 - Update version to 0.3.3
@@ -36,6 +41,12 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.51
 - Bump version to 0.3.52
 - Bump version to 0.3.53
+- Bump version to 0.3.54
+- Bump version to 0.3.55
+- Update versioning logic in upgrade-patch target
+- Bump version to 0.3.56
+- Bump version to 0.3.57
+- Bump version to 0.3.58
 
 ### ♻️ Refactor
 
@@ -56,6 +67,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Enhance release notes generation to include changelog between tags
 - Enhance release notes generation to include changelog between tags
 - Introduce SnapshotSettings class for improved snapshot management
+- Removed README.md
+- Reorganize makefile and introduce project.mk for better structure
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -82,6 +95,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Comment out release notes generation steps in release.yml
 - Simplify folder_name property to return only the id
 - Use settings.json_filename for snapshot JSON path
+- Make folder ID and snapshot ID lengths configurable
 
 ### 📚 Documentation
 
@@ -119,6 +133,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.50
 - Update changelog for 0.3.51
 - Update changelog for 0.3.52
+- Update changelog for 0.3.53
+- Added some comments
 
 ### 🚀 Features
 
@@ -191,6 +207,9 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add method to set custom catalogue path
 - Updated uv.lock
 - Add AboutMessageBox class for application information display
+- Add project metadata for pylizlib
+- Implement text and regex search functionality in SnapshotSearcher
+- Add sorting functionality for Snapshot objects with SnapshotSortKey enum
 
 ### 🧪 Testing
 
