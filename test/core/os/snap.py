@@ -498,6 +498,25 @@ class TestSnapshotSearcher(unittest.TestCase):
         results = self.searcher.search_regex_global(r"[invalid")
         self.assertEqual(len(results), 0)
 
+    def test_search_text_snap(self):
+        results = self.searcher.search_text_snap(self.snap, "Hello")
+        self.assertEqual(len(results), 2)
+        results.sort(key=lambda r: r.file_path)
+        self.assertIn("fileA.txt", results[0].file_path)
+        self.assertEqual(results[0].line_number, 1)
+        self.assertIn("fileB.txt", results[1].file_path)
+        self.assertEqual(results[1].line_number, 2)
+
+    def test_search_regex_snap(self):
+        results = self.searcher.search_regex_snap(self.snap, r"value=\d+")
+        self.assertEqual(len(results), 1)
+        self.assertIn("fileC.log", results[0].file_path)
+        self.assertEqual(results[0].line_number, 1)
+
+    def test_search_text_snap_not_found(self):
+        results = self.searcher.search_text_snap(self.snap, "nonexistent")
+        self.assertEqual(len(results), 0)
+
 
 if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)

@@ -665,61 +665,40 @@ class SnapshotSearcher:
         """
         self.catalogue = catalogue
 
-    def search_text_global(self, text: str) -> list[SnapshotSearchResult]:
+    def search_text_snap(self, snapshot: Snapshot, text: str) -> list[SnapshotSearchResult]:
         """
-        Cerca un dato testo in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
-        I file binari vengono saltati automaticamente.
-
-        Args:
-            text: Il testo da cercare.
-
-        Returns:
-            Una lista di oggetti SnapshotSearchResult per ogni corrispondenza trovata.
+        Cerca un dato testo in tutti i file di testo in un singolo snapshot.
         """
         results: list[SnapshotSearchResult] = []
-        snapshots = self.catalogue.get_all()
+        snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
+        if not snapshot_path or not snapshot_path.is_dir():
+            return results
 
-        for snapshot in snapshots:
-            snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
-            if not snapshot_path or not snapshot_path.is_dir():
+        for dir_assoc in snapshot.directories:
+            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
+            if not copied_dir_path.is_dir():
                 continue
-
-            for dir_assoc in snapshot.directories:
-                copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
-
-                if not copied_dir_path.is_dir():
+            for file_path in copied_dir_path.rglob('*'):
+                if not file_path.is_file():
                     continue
-
-                for file_path in copied_dir_path.rglob('*'):
-                    if not file_path.is_file():
-                        continue
-
-                    try:
-                        with file_path.open('r', encoding='utf-8') as f:
-                            for i, line in enumerate(f, 1):
-                                if text in line:
-                                    results.append(SnapshotSearchResult(
-                                        file_path=str(file_path),
-                                        searched_text=text,
-                                        line_number=i
-                                    ))
-                    except UnicodeDecodeError:
-                        logger.debug(f"Skipping binary file during search: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Error reading file {file_path} during search: {e}")
-
+                try:
+                    with file_path.open('r', encoding='utf-8') as f:
+                        for i, line in enumerate(f, 1):
+                            if text in line:
+                                results.append(SnapshotSearchResult(
+                                    file_path=str(file_path),
+                                    searched_text=text,
+                                    line_number=i
+                                ))
+                except UnicodeDecodeError:
+                    logger.debug(f"Skipping binary file during search: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Error reading file {file_path} during search: {e}")
         return results
 
-    def search_regex_global(self, regex_pattern: str) -> list[SnapshotSearchResult]:
+    def search_regex_snap(self, snapshot: Snapshot, regex_pattern: str) -> list[SnapshotSearchResult]:
         """
-        Cerca un dato pattern regex in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
-        I file binari vengono saltati automaticamente.
-
-        Args:
-            regex_pattern: Il pattern regex da cercare.
-
-        Returns:
-            Una lista di oggetti SnapshotSearchResult per ogni corrispondenza trovata.
+        Cerca un dato pattern regex in tutti i file di testo in un singolo snapshot.
         """
         results: list[SnapshotSearchResult] = []
         try:
@@ -728,35 +707,48 @@ class SnapshotSearcher:
             logger.error(f"Invalid regex pattern provided: {e}")
             return results
 
-        snapshots = self.catalogue.get_all()
+        snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
+        if not snapshot_path or not snapshot_path.is_dir():
+            return results
 
-        for snapshot in snapshots:
-            snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
-            if not snapshot_path or not snapshot_path.is_dir():
+        for dir_assoc in snapshot.directories:
+            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
+            if not copied_dir_path.is_dir():
                 continue
-
-            for dir_assoc in snapshot.directories:
-                copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
-
-                if not copied_dir_path.is_dir():
+            for file_path in copied_dir_path.rglob('*'):
+                if not file_path.is_file():
                     continue
+                try:
+                    with file_path.open('r', encoding='utf-8') as f:
+                        for i, line in enumerate(f, 1):
+                            if compiled_regex.search(line):
+                                results.append(SnapshotSearchResult(
+                                    file_path=str(file_path),
+                                    searched_text=regex_pattern,
+                                    line_number=i
+                                ))
+                except UnicodeDecodeError:
+                    logger.debug(f"Skipping binary file during search: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Error reading file {file_path} during search: {e}")
+        return results
 
-                for file_path in copied_dir_path.rglob('*'):
-                    if not file_path.is_file():
-                        continue
+    def search_text_global(self, text: str) -> list[SnapshotSearchResult]:
+        """
+        Cerca un dato testo in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
+        """
+        results: list[SnapshotSearchResult] = []
+        snapshots = self.catalogue.get_all()
+        for snapshot in snapshots:
+            results.extend(self.search_text_snap(snapshot, text))
+        return results
 
-                    try:
-                        with file_path.open('r', encoding='utf-8') as f:
-                            for i, line in enumerate(f, 1):
-                                if compiled_regex.search(line):
-                                    results.append(SnapshotSearchResult(
-                                        file_path=str(file_path),
-                                        searched_text=regex_pattern,
-                                        line_number=i
-                                    ))
-                    except UnicodeDecodeError:
-                        logger.debug(f"Skipping binary file during search: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Error reading file {file_path} during search: {e}")
-
+    def search_regex_global(self, regex_pattern: str) -> list[SnapshotSearchResult]:
+        """
+        Cerca un dato pattern regex in tutti i file di testo attraverso tutti gli snapshot nel catalogo.
+        """
+        results: list[SnapshotSearchResult] = []
+        snapshots = self.catalogue.get_all()
+        for snapshot in snapshots:
+            results.extend(self.search_regex_snap(snapshot, regex_pattern))
         return results
