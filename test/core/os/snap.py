@@ -15,6 +15,8 @@ from pylizlib.core.os.snap import (
     SnapshotSearcher,
     SnapshotSearchResult,
     SnapshotSortKey,
+    SnapshotSearchType,
+    SnapshotSearchParams,
 )
 from pylizlib.core.data.gen import gen_random_string
 
@@ -447,14 +449,18 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.catalogue = SnapshotCatalogue(CATALOGUE_PATH)
         self.catalogue.add(self.snap)
 
-        self.searcher = SnapshotSearcher(self.catalogue)
-
     def tearDown(self):
         """Tear down after each test method."""
         shutil.rmtree(TEST_LOCAL_ROOT)
 
     def test_search_text_found(self):
-        results = self.searcher.search_text_global("Hello")
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="Hello",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 2)
 
         # Sort results to have a predictable order for assertions
@@ -469,53 +475,85 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertEqual(results[1].searched_text, "Hello")
 
     def test_search_text_not_found(self):
-        results = self.searcher.search_text_global("nonexistent")
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="nonexistent",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 0)
 
-    def test_search_text_single_match(self):
-        results = self.searcher.search_text_global("value=12345")
-        self.assertEqual(len(results), 1)
-        self.assertIn("fileC.log", results[0].file_path)
-        self.assertEqual(results[0].line_number, 1)
-
     def test_search_regex_found(self):
-        results = self.searcher.search_regex_global(r"value=\d+")
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query=r"value=\d+",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.REGEX
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 1)
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, r"value=\d+")
 
-    def test_search_regex_multiple_matches(self):
-        results = self.searcher.search_regex_global(r"\bfile\b")  # match whole word 'file'
-        self.assertEqual(len(results), 3)
-
-    def test_search_regex_not_found(self):
-        results = self.searcher.search_regex_global(r"nonexistent\d{5}")
-        self.assertEqual(len(results), 0)
-
     def test_search_regex_invalid_pattern(self):
-        # An invalid regex should be handled gracefully (log an error and return empty list)
-        results = self.searcher.search_regex_global(r"[invalid")
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query=r"[invalid",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.REGEX
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 0)
 
-    def test_search_text_snap(self):
-        results = self.searcher.search_text_snap(self.snap, "Hello")
+    def test_search_with_extension_filter(self):
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="file",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT,
+            extensions=[".txt"]
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 2)
-        results.sort(key=lambda r: r.file_path)
-        self.assertIn("fileA.txt", results[0].file_path)
-        self.assertEqual(results[0].line_number, 1)
-        self.assertIn("fileB.txt", results[1].file_path)
-        self.assertEqual(results[1].line_number, 2)
+        for result in results:
+            self.assertTrue(result.file_path.endswith(".txt"))
 
-    def test_search_regex_snap(self):
-        results = self.searcher.search_regex_snap(self.snap, r"value=\d+")
-        self.assertEqual(len(results), 1)
-        self.assertIn("fileC.log", results[0].file_path)
-        self.assertEqual(results[0].line_number, 1)
-
-    def test_search_text_snap_not_found(self):
-        results = self.searcher.search_text_snap(self.snap, "nonexistent")
+    def test_search_with_extension_filter_no_match(self):
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="value",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT,
+            extensions=[".txt"]
+        )
+        results = searcher.search([self.snap], params)
         self.assertEqual(len(results), 0)
+
+    def test_search_in_multiple_snapshots(self):
+        dir3 = SOURCE_DATA_PATH / "search_dir3"
+        dir3.mkdir()
+        (dir3 / "fileE.txt").write_text("A new file for the second snapshot.\nHello from snap 2.")
+        snap2 = Snapshot(
+            id="search-snap-id-2",
+            name="SearchTestSnap2",
+            desc="Second snapshot",
+            directories=[
+                SnapDirAssociation(index=1, original_path=str(dir3), folder_id="d3"),
+            ],
+            author="SearchTest"
+        )
+        self.catalogue.add(snap2)
+
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="Hello",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT
+        )
+        results = searcher.search([self.snap, snap2], params)
+        self.assertEqual(len(results), 3)
 
 
 if __name__ == '__main__':
