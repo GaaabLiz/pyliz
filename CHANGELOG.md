@@ -47,6 +47,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.56
 - Bump version to 0.3.57
 - Bump version to 0.3.58
+- Bump version to 0.3.59
+- Bump version to 0.3.60
 
 ### ♻️ Refactor
 
@@ -135,6 +137,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.52
 - Update changelog for 0.3.53
 - Added some comments
+- Update changelog for 0.3.58
 
 ### 🚀 Features
 
@@ -210,6 +213,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add project metadata for pylizlib
 - Implement text and regex search functionality in SnapshotSearcher
 - Add sorting functionality for Snapshot objects with SnapshotSortKey enum
+- Rename search functions to indicate global scope
+- Refactor search functions to operate on individual snapshots
 
 ### 🧪 Testing
 
