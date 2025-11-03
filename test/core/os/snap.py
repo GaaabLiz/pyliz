@@ -465,13 +465,13 @@ class TestSnapshotSearcher(unittest.TestCase):
         # Sort results to have a predictable order for assertions
         results.sort(key=lambda r: r.file_path)
 
-        self.assertIn("fileA.txt", results[0].file_path)
+        self.assertEqual("fileA.txt", results[0].file_path.name)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, "Hello")
         self.assertEqual(results[0].line_content, "Hello world")
         self.assertEqual(results[0].snapshot_name, self.snap.name)
 
-        self.assertIn("fileB.txt", results[1].file_path)
+        self.assertEqual("fileB.txt", results[1].file_path.name)
         self.assertEqual(results[1].line_number, 2)
         self.assertEqual(results[1].searched_text, "Hello")
         self.assertEqual(results[1].line_content, "Hello again.")
@@ -492,7 +492,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         )
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
-        self.assertIn("fileC.log", results[0].file_path)
+        self.assertEqual("fileC.log", results[0].file_path.name)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, r"value=\d+")
         self.assertEqual(results[0].line_content, "Log file with some data: value=12345")
@@ -515,7 +515,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         for result in results:
-            self.assertTrue(result.file_path.endswith(".txt"))
+            self.assertEqual(result.file_path.suffix, ".txt")
 
     def test_search_with_extension_filter_no_match(self):
         params = SnapshotSearchParams(

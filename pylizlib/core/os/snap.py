@@ -646,7 +646,7 @@ class SnapshotSearchResult:
     """
     Rappresenta un singolo risultato di ricerca all'interno di un file di snapshot.
     """
-    file_path: str
+    file_path: Path
     searched_text: str
     line_number: int
     line_content: str
@@ -746,7 +746,7 @@ class SnapshotSearcher:
 
                     if found:
                         results.append(SnapshotSearchResult(
-                            file_path=str(file_path),
+                            file_path=file_path,
                             searched_text=params.query,
                             line_number=i,
                             line_content=line.strip(),
