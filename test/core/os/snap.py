@@ -460,7 +460,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
 
         # Sort results to have a predictable order for assertions
@@ -481,7 +481,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
     def test_search_regex_found(self):
@@ -491,7 +491,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.REGEX
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
@@ -504,7 +504,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.REGEX
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
     def test_search_with_extension_filter(self):
@@ -515,7 +515,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             search_type=SnapshotSearchType.TEXT,
             extensions=[".txt"]
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         for result in results:
             self.assertTrue(result.file_path.endswith(".txt"))
@@ -528,10 +528,10 @@ class TestSnapshotSearcher(unittest.TestCase):
             search_type=SnapshotSearchType.TEXT,
             extensions=[".txt"]
         )
-        results = searcher.search([self.snap], params)
+        results = searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
-    def test_search_in_multiple_snapshots(self):
+    def test_search_list_multiple_snapshots(self):
         dir3 = SOURCE_DATA_PATH / "search_dir3"
         dir3.mkdir()
         (dir3 / "fileE.txt").write_text("A new file for the second snapshot.\nHello from snap 2.")
@@ -552,8 +552,18 @@ class TestSnapshotSearcher(unittest.TestCase):
             catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search([self.snap, snap2], params)
+        results = searcher.search_list([self.snap, snap2], params)
         self.assertEqual(len(results), 3)
+
+    def test_search_list_single_snapshot(self):
+        searcher = SnapshotSearcher()
+        params = SnapshotSearchParams(
+            query="Hello",
+            catalogue_path=CATALOGUE_PATH,
+            search_type=SnapshotSearchType.TEXT
+        )
+        results = searcher.search_list([self.snap], params)
+        self.assertEqual(len(results), 2)
 
 
 if __name__ == '__main__':

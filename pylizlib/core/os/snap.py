@@ -672,18 +672,11 @@ class SnapshotSearcher:
     Cerca un contenuto testuale all'interno dei file di uno o più snapshot.
     """
 
-    def search(self, snapshots: list[Snapshot], params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
+    def search(self, snapshot: Snapshot, params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
         """
-        Esegue una ricerca in una lista di snapshot in base ai parametri forniti.
-
-        Args:
-            snapshots: La lista di Snapshot in cui cercare.
-            params: I parametri di ricerca, incluso il catalogue_path.
-
-        Returns:
-            Una lista di risultati di ricerca.
+        Esegue una ricerca in un singolo snapshot in base ai parametri forniti.
         """
-        all_results: list[SnapshotSearchResult] = []
+        snapshot_path = SnapshotUtils.get_snapshot_path(snapshot.folder_name, params.catalogue_path)
 
         compiled_regex = None
         if params.search_type == SnapshotSearchType.REGEX:
@@ -691,15 +684,20 @@ class SnapshotSearcher:
                 compiled_regex = re.compile(params.query)
             except re.error as e:
                 logger.error(f"Invalid regex pattern provided: {e}")
-                return all_results
+                return []
 
+        return self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex)
+
+    def search_list(self, snapshots: list[Snapshot], params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
+        """
+        Esegue una ricerca in una lista di snapshot in base ai parametri forniti.
+        """
+        all_results: list[SnapshotSearchResult] = []
         for snapshot in snapshots:
-            snapshot_path = SnapshotUtils.get_snapshot_path(snapshot.folder_name, params.catalogue_path)
-            all_results.extend(self._search_single_snapshot(snapshot, snapshot_path, params, compiled_regex))
-
+            all_results.extend(self.search(snapshot, params))
         return all_results
 
-    def _search_single_snapshot(self, snapshot: Snapshot, snapshot_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern]) -> list[SnapshotSearchResult]:
+    def _search_in_snapshot_path(self, snapshot: Snapshot, snapshot_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern]) -> list[SnapshotSearchResult]:
         results: list[SnapshotSearchResult] = []
         if not snapshot_path or not snapshot_path.is_dir():
             logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
