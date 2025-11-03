@@ -49,6 +49,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.58
 - Bump version to 0.3.59
 - Bump version to 0.3.60
+- Bump version to 0.3.61
 
 ### ♻️ Refactor
 
@@ -138,6 +139,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.53
 - Added some comments
 - Update changelog for 0.3.58
+- Update changelog for 0.3.60
 
 ### 🚀 Features
 
@@ -215,6 +217,13 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add sorting functionality for Snapshot objects with SnapshotSortKey enum
 - Rename search functions to indicate global scope
 - Refactor search functions to operate on individual snapshots
+- Enhance snapshot search functionality with parameterized queries and support for multiple snapshots
+- Refactor search functionality to support single snapshot searches and add a method for searching multiple snapshots
+- Refactor SnapshotSearcher to utilize SnapshotCatalogue and streamline search parameters
+- Enhance search results to include line content and snapshot name
+- Update file_path type to Path and adjust related assertions
+- Add progress callback support to snapshot search methods
+- Add method to batch add operations to the operation runner
 
 ### 🧪 Testing
 
