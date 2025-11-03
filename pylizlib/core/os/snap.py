@@ -649,6 +649,8 @@ class SnapshotSearchResult:
     file_path: str
     searched_text: str
     line_number: int
+    line_content: str
+    snapshot_name: str
 
 
 class SnapshotSearchType(Enum):
@@ -717,7 +719,7 @@ class SnapshotSearcher:
 
             for file_path in copied_dir_path.rglob('*'):
                 if self._should_search_file(file_path, params.extensions):
-                    results.extend(self._search_in_file(file_path, params, compiled_regex))
+                    results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
         return results
 
 
@@ -729,7 +731,7 @@ class SnapshotSearcher:
             return True  # Se non ci sono estensioni specificate, cerca in tutti i file
         return file_path.suffix in extensions
 
-    def _search_in_file(self, file_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern]) -> list[SnapshotSearchResult]:
+    def _search_in_file(self, file_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern], snapshot_name: str) -> list[SnapshotSearchResult]:
         """Esegue la ricerca all'interno di un singolo file."""
         results: list[SnapshotSearchResult] = []
         try:
@@ -746,7 +748,9 @@ class SnapshotSearcher:
                         results.append(SnapshotSearchResult(
                             file_path=str(file_path),
                             searched_text=params.query,
-                            line_number=i
+                            line_number=i,
+                            line_content=line.strip(),
+                            snapshot_name=snapshot_name
                         ))
         except UnicodeDecodeError:
             logger.debug(f"Skipping binary file during search: {file_path}")

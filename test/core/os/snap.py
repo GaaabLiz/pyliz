@@ -468,10 +468,14 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertIn("fileA.txt", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, "Hello")
+        self.assertEqual(results[0].line_content, "Hello world")
+        self.assertEqual(results[0].snapshot_name, self.snap.name)
 
         self.assertIn("fileB.txt", results[1].file_path)
         self.assertEqual(results[1].line_number, 2)
         self.assertEqual(results[1].searched_text, "Hello")
+        self.assertEqual(results[1].line_content, "Hello again.")
+        self.assertEqual(results[1].snapshot_name, self.snap.name)
 
     def test_search_text_not_found(self):
         params = SnapshotSearchParams(
@@ -491,6 +495,8 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, r"value=\d+")
+        self.assertEqual(results[0].line_content, "Log file with some data: value=12345")
+        self.assertEqual(results[0].snapshot_name, self.snap.name)
 
     def test_search_regex_invalid_pattern(self):
         params = SnapshotSearchParams(
@@ -541,6 +547,13 @@ class TestSnapshotSearcher(unittest.TestCase):
         )
         results = self.searcher.search_list([self.snap, snap2], params)
         self.assertEqual(len(results), 3)
+
+        # Check if results are from both snapshots
+        snap1_results = [r for r in results if r.snapshot_name == self.snap.name]
+        snap2_results = [r for r in results if r.snapshot_name == snap2.name]
+        self.assertEqual(len(snap1_results), 2)
+        self.assertEqual(len(snap2_results), 1)
+        self.assertEqual(snap2_results[0].line_content, "Hello from snap 2.")
 
     def test_search_list_single_snapshot(self):
         params = SnapshotSearchParams(
