@@ -95,6 +95,10 @@ class OperationRunner(QObject):
         operation.signals.task_failed.connect(self.task_failed)
         operation.signals.task_finished.connect(self.task_finished)
 
+    def adds(self, operations: list[Operation]):
+        for operation in operations:
+            self.add(operation)
+
     def clear(self):
         """
         Clears the queue of pending operations and resets the runner.
