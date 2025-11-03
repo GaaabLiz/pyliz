@@ -662,7 +662,6 @@ class SnapshotSearchParams:
     Parametri per la ricerca all'interno di uno snapshot.
     """
     query: str
-    catalogue_path: Path
     search_type: SnapshotSearchType = SnapshotSearchType.TEXT
     extensions: list[str] = field(default_factory=list)
 
@@ -671,12 +670,20 @@ class SnapshotSearcher:
     """
     Cerca un contenuto testuale all'interno dei file di uno o più snapshot.
     """
+    def __init__(self, catalogue: SnapshotCatalogue):
+        """
+        Inizializza lo SnapshotSearcher.
+
+        Args:
+            catalogue: Lo SnapshotCatalogue in cui cercare.
+        """
+        self.catalogue = catalogue
 
     def search(self, snapshot: Snapshot, params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
         """
         Esegue una ricerca in un singolo snapshot in base ai parametri forniti.
         """
-        snapshot_path = SnapshotUtils.get_snapshot_path(snapshot.folder_name, params.catalogue_path)
+        snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
 
         compiled_regex = None
         if params.search_type == SnapshotSearchType.REGEX:

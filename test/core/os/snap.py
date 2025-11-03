@@ -448,19 +448,18 @@ class TestSnapshotSearcher(unittest.TestCase):
 
         self.catalogue = SnapshotCatalogue(CATALOGUE_PATH)
         self.catalogue.add(self.snap)
+        self.searcher = SnapshotSearcher(self.catalogue)
 
     def tearDown(self):
         """Tear down after each test method."""
         shutil.rmtree(TEST_LOCAL_ROOT)
 
     def test_search_text_found(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="Hello",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
 
         # Sort results to have a predictable order for assertions
@@ -475,60 +474,50 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertEqual(results[1].searched_text, "Hello")
 
     def test_search_text_not_found(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="nonexistent",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
     def test_search_regex_found(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query=r"value=\d+",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.REGEX
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertIn("fileC.log", results[0].file_path)
         self.assertEqual(results[0].line_number, 1)
         self.assertEqual(results[0].searched_text, r"value=\d+")
 
     def test_search_regex_invalid_pattern(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query=r"[invalid",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.REGEX
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
     def test_search_with_extension_filter(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="file",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT,
             extensions=[".txt"]
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         for result in results:
             self.assertTrue(result.file_path.endswith(".txt"))
 
     def test_search_with_extension_filter_no_match(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="value",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT,
             extensions=[".txt"]
         )
-        results = searcher.search(self.snap, params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
     def test_search_list_multiple_snapshots(self):
@@ -546,23 +535,19 @@ class TestSnapshotSearcher(unittest.TestCase):
         )
         self.catalogue.add(snap2)
 
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="Hello",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search_list([self.snap, snap2], params)
+        results = self.searcher.search_list([self.snap, snap2], params)
         self.assertEqual(len(results), 3)
 
     def test_search_list_single_snapshot(self):
-        searcher = SnapshotSearcher()
         params = SnapshotSearchParams(
             query="Hello",
-            catalogue_path=CATALOGUE_PATH,
             search_type=SnapshotSearchType.TEXT
         )
-        results = searcher.search_list([self.snap], params)
+        results = self.searcher.search_list([self.snap], params)
         self.assertEqual(len(results), 2)
 
 
