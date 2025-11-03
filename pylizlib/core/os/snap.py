@@ -7,12 +7,14 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Callable
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp, duplicate_directory
 
+
+SnapshotProgressCallback = Callable[[str, int, int], None]
 
 
 @dataclass
@@ -681,7 +683,7 @@ class SnapshotSearcher:
         """
         self.catalogue = catalogue
 
-    def search(self, snapshot: Snapshot, params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
+    def search(self, snapshot: Snapshot, params: SnapshotSearchParams, on_progress: Optional[SnapshotProgressCallback] = None) -> list[SnapshotSearchResult]:
         """
         Esegue una ricerca in un singolo snapshot in base ai parametri forniti.
         """
@@ -695,31 +697,41 @@ class SnapshotSearcher:
                 logger.error(f"Invalid regex pattern provided: {e}")
                 return []
 
-        return self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex)
+        return self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress)
 
-    def search_list(self, snapshots: list[Snapshot], params: SnapshotSearchParams) -> list[SnapshotSearchResult]:
+    def search_list(self, snapshots: list[Snapshot], params: SnapshotSearchParams, on_progress: Optional[SnapshotProgressCallback] = None) -> list[SnapshotSearchResult]:
         """
         Esegue una ricerca in una lista di snapshot in base ai parametri forniti.
         """
         all_results: list[SnapshotSearchResult] = []
         for snapshot in snapshots:
-            all_results.extend(self.search(snapshot, params))
+            all_results.extend(self.search(snapshot, params, on_progress))
         return all_results
 
-    def _search_in_snapshot_path(self, snapshot: Snapshot, snapshot_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern]) -> list[SnapshotSearchResult]:
+    def _search_in_snapshot_path(self, snapshot: Snapshot, snapshot_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern], on_progress: Optional[SnapshotProgressCallback]) -> list[SnapshotSearchResult]:
         results: list[SnapshotSearchResult] = []
         if not snapshot_path or not snapshot_path.is_dir():
             logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
             return results
 
+        # 1. Collect all files to be searched
+        files_to_search: list[Path] = []
         for dir_assoc in snapshot.directories:
             copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
             if not copied_dir_path.is_dir():
                 continue
-
             for file_path in copied_dir_path.rglob('*'):
                 if self._should_search_file(file_path, params.extensions):
-                    results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
+                    files_to_search.append(file_path)
+
+        # 2. Iterate and report progress
+        total_files = len(files_to_search)
+        for i, file_path in enumerate(files_to_search):
+            if on_progress:
+                on_progress(file_path.name, total_files, i + 1)
+
+            results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
+
         return results
 
 

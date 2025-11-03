@@ -563,6 +563,50 @@ class TestSnapshotSearcher(unittest.TestCase):
         results = self.searcher.search_list([self.snap], params)
         self.assertEqual(len(results), 2)
 
+    def test_search_with_progress_callback(self):
+        progress_reports = []
+
+        def progress_handler(current_file, total_files, current_index):
+            progress_reports.append((current_file, total_files, current_index))
+
+        params = SnapshotSearchParams(
+            query="file",
+            search_type=SnapshotSearchType.TEXT
+        )
+
+        self.searcher.search(self.snap, params, on_progress=progress_handler)
+
+        self.assertEqual(len(progress_reports), 5)
+
+        total_files_reported = progress_reports[0][1]
+        self.assertEqual(total_files_reported, 5)
+
+        # Check that the current_index increments correctly
+        for i, report in enumerate(progress_reports):
+            self.assertEqual(report[2], i + 1)
+
+        # Check that file names are reported
+        reported_files = {report[0] for report in progress_reports}
+        expected_files = {"fileA.txt", "fileB.txt", "fileC.log", "fileD.txt", "binary.bin"}
+        self.assertEqual(reported_files, expected_files)
+
+    def test_search_with_progress_and_extensions(self):
+        progress_reports = []
+
+        def progress_handler(current_file, total_files, current_index):
+            progress_reports.append((current_file, total_files, current_index))
+
+        params = SnapshotSearchParams(
+            query="file",
+            search_type=SnapshotSearchType.TEXT,
+            extensions=[".txt"]
+        )
+
+        self.searcher.search(self.snap, params, on_progress=progress_handler)
+
+        self.assertEqual(len(progress_reports), 3)
+        self.assertEqual(progress_reports[0][1], 3)  # total_files
+
 
 if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
