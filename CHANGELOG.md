@@ -50,6 +50,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.59
 - Bump version to 0.3.60
 - Bump version to 0.3.61
+- Bump version to 0.3.62
+- Bump version to 0.3.63
 
 ### ♻️ Refactor
 
@@ -140,6 +142,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Added some comments
 - Update changelog for 0.3.58
 - Update changelog for 0.3.60
+- Update changelog for 0.3.61
 
 ### 🚀 Features
 
@@ -224,6 +227,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update file_path type to Path and adjust related assertions
 - Add progress callback support to snapshot search methods
 - Add method to batch add operations to the operation runner
+- Update operation completion handling to report progress
 
 ### 🧪 Testing
 
