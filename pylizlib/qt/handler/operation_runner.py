@@ -57,8 +57,10 @@ class OperationRunner(QObject):
     task_start = Signal(str)
     task_update_status = Signal(str, OperationStatus)
     task_update_progress = Signal(str, int)
+    task_update_message = Signal(str, str)
     task_failed = Signal(str, str)
     task_finished = Signal(str)
+
 
     def __init__(
             self,
@@ -92,6 +94,7 @@ class OperationRunner(QObject):
         operation.signals.task_start.connect(self.task_start)
         operation.signals.task_update_status.connect(self.task_update_status)
         operation.signals.task_update_progress.connect(self.task_update_progress)
+        operation.signals.task_update_message.connect(self.task_update_message)
         operation.signals.task_failed.connect(self.task_failed)
         operation.signals.task_finished.connect(self.task_finished)
 

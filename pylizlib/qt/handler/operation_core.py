@@ -14,6 +14,7 @@ from pylizlib.qt.handler.operation_domain import OperationStatus, OperationInfo
 class Task(QObject):
     task_update_status = Signal(str, OperationStatus)
     task_update_progress = Signal(str, int)
+    task_update_message = Signal(str, str)
 
     def __init__(
             self,
@@ -62,6 +63,7 @@ class OperationSignals(QObject):
     task_update_progress = Signal(str, int)
     task_failed = Signal(str, str)
     task_finished = Signal(str)
+    task_update_message = Signal(str, str)
 
 
 class Operation(QRunnable):
@@ -96,6 +98,7 @@ class Operation(QRunnable):
             self.progress_obj.add_single(task.name)
             task.task_update_status.connect(self.signals.task_update_status)
             task.task_update_progress.connect(self.signals.task_update_progress)
+            task.task_update_message.connect(self.signals.task_update_message)
 
     def execute_tasks(self):
         for task in self.tasks:
