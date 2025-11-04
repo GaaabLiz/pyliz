@@ -135,6 +135,9 @@ class OperationRunner(QObject):
 
     def on_operation_finished(self, operation: Operation):
         self.active_operations -= 1
+        if operation.is_completed():
+            self.on_op_progress_update(operation.id, 100)
+
         if self.abort_all_on_error and operation.is_failed():
             logger.error("Operation %s failed, stopping all operations", operation.id)
             self.operation_pool.clear()
