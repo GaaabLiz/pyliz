@@ -564,6 +564,53 @@ class TestSnapshotCatalogue(unittest.TestCase):
             expected_file = f"{dir1_in_snap_name}/file1.txt"
             self.assertIn(expected_file, zipped_files)
 
+    def test_import_snapshot(self):
+        # 1. Create a snapshot and export it to have a valid zip file
+        snap_to_export = create_test_snapshot("SnapToImport", num_dirs=1)
+        self.catalogue.add(snap_to_export)
+        
+        export_destination = TEST_LOCAL_ROOT / "exports_for_import"
+        export_destination.mkdir()
+        self.catalogue.export_snapshot(snap_to_export.id, export_destination)
+        
+        zip_files = list(export_destination.glob("*.zip"))
+        self.assertEqual(len(zip_files), 1)
+        zip_to_import = zip_files[0]
+
+        # 2. Delete the original snapshot from the catalogue to ensure we are testing import
+        self.catalogue.delete(snap_to_export)
+        self.assertFalse(self.catalogue.exists(snap_to_export.id))
+
+        # 3. Import the snapshot
+        self.catalogue.import_snapshot(zip_to_import)
+
+        # 4. Verify it was imported correctly
+        self.assertTrue(self.catalogue.exists(snap_to_export.id))
+        imported_snap = self.catalogue.get_by_id(snap_to_export.id)
+        self.assertIsNotNone(imported_snap)
+        self.assertEqual(imported_snap.name, "SnapToImport")
+        self.assertEqual(len(imported_snap.directories), 1)
+
+        # 5. Test importing a duplicate ID
+        with self.assertRaises(ValueError) as cm:
+            self.catalogue.import_snapshot(zip_to_import)
+        self.assertIn(f"A snapshot with the ID '{snap_to_export.id}' already exists", str(cm.exception))
+
+        # 6. Test importing an invalid zip file (e.g., not a zip)
+        invalid_zip_path = TEST_LOCAL_ROOT / "invalid.zip"
+        invalid_zip_path.write_text("this is not a zip")
+        with self.assertRaises(ValueError) as cm:
+            self.catalogue.import_snapshot(invalid_zip_path)
+        self.assertIn("is not a valid zip file", str(cm.exception))
+
+        # 7. Test importing a zip file without a snapshot.json
+        empty_zip_path = TEST_LOCAL_ROOT / "empty.zip"
+        with zipfile.ZipFile(empty_zip_path, 'w') as zf:
+            zf.writestr("test.txt", "hello")
+        with self.assertRaises(ValueError) as cm:
+            self.catalogue.import_snapshot(empty_zip_path)
+        self.assertIn("does not contain a snapshot json file", str(cm.exception))
+
 
 class TestSnapshotSearcher(unittest.TestCase):
     def setUp(self):

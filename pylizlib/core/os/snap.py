@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import zipfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -685,6 +686,40 @@ class SnapshotCatalogue:
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True)
+
+    def import_snapshot(self, zip_path: Path):
+        if not zip_path.is_file() or zip_path.suffix != '.zip':
+            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+
+            # 1. Extract the zip to a temporary directory
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(temp_dir_path)
+            except zipfile.BadZipFile:
+                raise ValueError(f"File '{zip_path}' is not a valid zip file.")
+            except Exception as e:
+                raise IOError(f"Failed to extract zip file '{zip_path}': {e}")
+
+            # 2. Validate the content and get snapshot
+            json_path = temp_dir_path / self.settings.json_filename
+            if not json_path.is_file():
+                raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
+
+            try:
+                snapshot_to_import = SnapshotSerializer.from_json(json_path)
+            except Exception as e:
+                raise ValueError(f"Failed to read snapshot data from json: {e}")
+
+            # 3. Check for ID conflict
+            if self.exists(snapshot_to_import.id):
+                raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
+
+            # 4. Copy the extracted folder to the catalogue
+            destination_path = self.path_catalogue / snapshot_to_import.id
+            shutil.copytree(temp_dir_path, destination_path)
 
     def remove_installed_copies(self, snap_id: str):
         snap = self.get_by_id(snap_id)
