@@ -119,6 +119,7 @@ class TestSnapshotUtils(unittest.TestCase):
         SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
         (SOURCE_DATA_PATH / "dir1").mkdir()
         (SOURCE_DATA_PATH / "dir2").mkdir()
+        (SOURCE_DATA_PATH / "dir3").mkdir()
 
     def tearDown(self):
         shutil.rmtree(TEST_LOCAL_ROOT)
@@ -133,7 +134,6 @@ class TestSnapshotUtils(unittest.TestCase):
 
         # Test addition
         dir3_path = str(SOURCE_DATA_PATH / "dir3")
-        (SOURCE_DATA_PATH / "dir3").mkdir()
         snap_new.directories.append(SnapDirAssociation(index=3, original_path=dir3_path, folder_id="id3"))
 
         edits_add = SnapshotUtils.get_edits_between_snapshots(snap_old, snap_new)
@@ -182,6 +182,31 @@ class TestSnapshotUtils(unittest.TestCase):
         # Test sort by date_modified (with None, descending)
         sorted_with_none_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED, reverse=True)
         self.assertEqual([s.id for s in sorted_with_none_desc], ["1", "3", "2"])
+
+        # Test sort by ASSOC_DIR_MB_SIZE
+        # Create snapshots with different sizes
+        # Ensure directories have some content for size calculation
+        (SOURCE_DATA_PATH / "dir1" / "file_s.txt").write_text("s" * 100) # ~0.1KB
+        (SOURCE_DATA_PATH / "dir2" / "file_m.txt").write_text("m" * 1000) # ~1KB
+        (SOURCE_DATA_PATH / "dir3" / "file_l.txt").write_text("l" * 10000) # ~10KB
+
+        # Re-create snapshots to ensure mb_size is calculated based on new file sizes
+        snap_small = create_test_snapshot("SmallSnap", num_dirs=1) # Uses dir1
+        snap_medium = create_test_snapshot("MediumSnap", num_dirs=2) # Uses dir1, dir2
+        snap_large = create_test_snapshot("LargeSnap", num_dirs=3) # Uses dir1, dir2, dir3
+
+        # Ensure mb_size is calculated and ordered correctly
+        self.assertGreater(snap_small.get_assoc_dir_mb_size, 0)
+        self.assertGreater(snap_medium.get_assoc_dir_mb_size, snap_small.get_assoc_dir_mb_size)
+        self.assertGreater(snap_large.get_assoc_dir_mb_size, snap_medium.get_assoc_dir_mb_size)
+
+        snapshots_for_size_sort = [snap_large, snap_small, snap_medium]
+
+        sorted_by_size = SnapshotUtils.sort_snapshots(snapshots_for_size_sort, SnapshotSortKey.ASSOC_DIR_MB_SIZE)
+        self.assertEqual([s.name for s in sorted_by_size], ["SmallSnap", "MediumSnap", "LargeSnap"])
+
+        sorted_by_size_desc = SnapshotUtils.sort_snapshots(snapshots_for_size_sort, SnapshotSortKey.ASSOC_DIR_MB_SIZE, reverse=True)
+        self.assertEqual([s.name for s in sorted_by_size_desc], ["LargeSnap", "MediumSnap", "SmallSnap"])
 
 
 class TestSnapshotManager(unittest.TestCase):

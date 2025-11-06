@@ -92,6 +92,7 @@ class SnapshotSortKey(Enum):
     DATE_MODIFIED = "date_modified"
     DATE_LAST_USED = "date_last_used"
     DATE_LAST_MODIFIED = "date_last_modified"
+    ASSOC_DIR_MB_SIZE = "get_assoc_dir_mb_size"
 
 
 @dataclass
@@ -143,7 +144,7 @@ class Snapshot:
 
     @property
     def tags_as_string(self) -> str:
-        return ", ".join(self.tags) if self.tags else " "
+        return ", ".join(sorted(self.tags)) if self.tags else " "
 
     def get_for_table_array(self, key_list: list[str]) -> list[str]:
         array = [self.name, self.desc]
