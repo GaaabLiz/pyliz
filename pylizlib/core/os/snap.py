@@ -561,10 +561,10 @@ class SnapshotManager:
             logger.error(e)
 
 
-    def backup_snap_directory(self, backup_path: Path):
+    def backup_snap_directory(self, backup_path: Path, prefix: str):
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            zip_name = f"backup_snapdir_{self.snapshot.id}_{timestamp}.zip"
+            zip_name = f"backup_{prefix}_{self.snapshot.id}_{timestamp}.zip"
             backup_path.mkdir(parents=True, exist_ok=True)
             zip_path = backup_path.joinpath(zip_name)
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -601,7 +601,7 @@ class SnapshotCatalogue:
     def delete(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_delete_enabled:
-            snap_manager.backup_snap_directory(self.settings.backup_path)
+            snap_manager.backup_snap_directory(self.settings.backup_path, "beforeDelete")
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
@@ -628,7 +628,7 @@ class SnapshotCatalogue:
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_modify_enabled:
-            snap_manager.backup_snap_directory(self.settings.backup_path)
+            snap_manager.backup_snap_directory(self.settings.backup_path, "beforeEdit")
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
