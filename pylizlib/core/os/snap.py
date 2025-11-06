@@ -12,6 +12,7 @@ from typing import ClassVar, Optional, Callable
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder, clear_folder_contents, clear_or_move_to_temp, duplicate_directory
+from pylizlib.core.os.utils import get_folder_size_mb # New import
 
 
 SnapshotProgressCallback = Callable[[str, int, int], None]
@@ -22,10 +23,19 @@ class SnapDirAssociation:
     index: int
     original_path: str
     folder_id: str
+    mb_size: float | None = None
     _current_index: ClassVar[int] = 0
 
     def __post_init__(self):
         self.original_path = Path(self.original_path).as_posix()
+        if self.mb_size is None:
+            try:
+                self.mb_size = get_folder_size_mb(Path(self.original_path))
+            except FileNotFoundError:
+                self.mb_size = 0.0 # Handle missing directory
+            except Exception as e: # Catch other potential errors from os.walk/getsize
+                logger.error(f"Error calculating size for {self.original_path}: {e}")
+                self.mb_size = 0.0
 
     @classmethod
     def next_index(cls):
@@ -148,6 +158,13 @@ class Snapshot:
     def folder_name(self) -> str:
         return self.id
 
+    @property
+    def get_assoc_dir_mb_size(self) -> float:
+        """
+        Returns the sum of the mb_size of all associated directories.
+        """
+        return sum(d.mb_size for d in self.directories if d.mb_size is not None)
+
     def add_data_item(self, key: str, value: str) -> None:
         """Aggiunge un elemento al dizionario."""
         self.data[key] = value
@@ -186,7 +203,8 @@ class Snapshot:
             directories=[SnapDirAssociation(
                 index=dir_assoc.index,
                 original_path=dir_assoc.original_path,
-                folder_id=dir_assoc.folder_id
+                folder_id=dir_assoc.folder_id,
+                mb_size=dir_assoc.mb_size
             ) for dir_assoc in self.directories],
             tags=list(self.tags),
             date_created=self.date_created,
