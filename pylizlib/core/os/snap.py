@@ -659,6 +659,29 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.duplicate()
 
+    def export_assoc_dirs(self, snap_id: str, destination_path: Path):
+        """
+        Exports the associated directories of a snapshot to a zip file.
+        """
+        snap = self.get_by_id(snap_id)
+        if not snap:
+            raise ValueError(f"No snapshot found with ID {snap_id}")
+
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        # Use the existing create_backup method with a specific prefix for export
+        snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES)
+
+    def export_snapshot(self, snap_id: str, destination_path: Path):
+        """
+        Exports the entire snapshot directory to a zip file.
+        """
+        snap = self.get_by_id(snap_id)
+        if not snap:
+            raise ValueError(f"No snapshot found with ID {snap_id}")
+
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY)
+
     def remove_installed_copies(self, snap_id: str):
         snap = self.get_by_id(snap_id)
         if not snap:

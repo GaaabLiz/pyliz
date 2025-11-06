@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 import shutil
+import zipfile
 from datetime import datetime, timedelta
 
 from pylizlib.core.os.snap import (
@@ -503,6 +504,65 @@ class TestSnapshotCatalogue(unittest.TestCase):
 
         self.assertFalse(install_dir_3_path.exists()) # Should be removed
         self.assertFalse(install_dir_4_path.exists()) # Should still be missing, no error
+
+    def test_export_assoc_dirs(self):
+        # Setup: Create a snapshot with some associated directories
+        snap1 = create_test_snapshot("SnapToExport", num_dirs=2)
+        self.catalogue.add(snap1)
+
+        export_destination = TEST_LOCAL_ROOT / "exports"
+        export_destination.mkdir()
+
+        # Call the export method
+        self.catalogue.export_assoc_dirs(snap1.id, export_destination)
+
+        # Verify the zip file was created
+        self.assertTrue(export_destination.exists())
+        export_files = list(export_destination.iterdir())
+        self.assertEqual(len(export_files), 1)
+        
+        zip_file = export_files[0]
+        self.assertTrue(zip_file.name.startswith(f"backup_export_{snap1.id}_ad"))
+        self.assertTrue(zip_file.name.endswith(".zip"))
+
+        # Verify the contents of the zip file
+        with zipfile.ZipFile(zip_file, 'r') as zf:
+            zipped_files = zf.namelist()
+            # zipfile uses forward slashes
+            self.assertIn("dir1/file1.txt", zipped_files)
+            self.assertIn("dir2/file2.txt", zipped_files)
+
+    def test_export_snapshot(self):
+        # Setup: Create a snapshot
+        snap1 = create_test_snapshot("SnapToExportFull", num_dirs=2)
+        self.catalogue.add(snap1)
+
+        export_destination = TEST_LOCAL_ROOT / "exports_full"
+        export_destination.mkdir()
+
+        # Call the export method
+        self.catalogue.export_snapshot(snap1.id, export_destination)
+
+        # Verify the zip file was created
+        self.assertTrue(export_destination.exists())
+        export_files = list(export_destination.iterdir())
+        self.assertEqual(len(export_files), 1)
+        
+        zip_file = export_files[0]
+        self.assertTrue(zip_file.name.startswith(f"backup_export_snap_{snap1.id}_sd"))
+        self.assertTrue(zip_file.name.endswith(".zip"))
+
+        # Verify the contents of the zip file
+        with zipfile.ZipFile(zip_file, 'r') as zf:
+            zipped_files = zf.namelist()
+            # Check for the snapshot.json file and a file from one of the copied directories
+            self.assertIn(self.settings.json_filename, zipped_files)
+            
+            # The structure inside the zip is relative to the snapshot directory
+            # e.g., "1-dir1/file1.txt"
+            dir1_in_snap_name = snap1.directories[0].directory_name
+            expected_file = f"{dir1_in_snap_name}/file1.txt"
+            self.assertIn(expected_file, zipped_files)
 
 
 class TestSnapshotSearcher(unittest.TestCase):
