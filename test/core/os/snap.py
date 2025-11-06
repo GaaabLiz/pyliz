@@ -611,6 +611,39 @@ class TestSnapshotCatalogue(unittest.TestCase):
             self.catalogue.import_snapshot(empty_zip_path)
         self.assertIn("does not contain a snapshot json file", str(cm.exception))
 
+    def test_update_assoc_with_installed(self):
+        # 1. Create a snapshot and install it
+        snap1 = create_test_snapshot("SnapToUpdate", num_dirs=1)
+        self.catalogue.add(snap1)
+        self.catalogue.install(snap1)
+
+        # 2. Modify the "installed" directory on the system
+        installed_dir_path = Path(snap1.directories[0].original_path)
+        (installed_dir_path / "new_file.txt").write_text("this is a new file")
+        (installed_dir_path / "file1.txt").write_text("modified content")
+
+        # 3. Get the state of the snapshot's internal copy before updating
+        snap_dir_path = self.catalogue.get_snap_directory_path(snap1)
+        internal_copy_path = snap_dir_path / snap1.directories[0].directory_name
+        self.assertFalse((internal_copy_path / "new_file.txt").exists())
+        self.assertEqual((internal_copy_path / "file1.txt").read_text(), "content1")
+        
+        original_size = snap1.directories[0].mb_size
+
+        # 4. Call the update method
+        self.catalogue.update_assoc_with_installed(snap1.id)
+
+        # 5. Verify the internal copy has been updated
+        self.assertTrue((internal_copy_path / "new_file.txt").exists())
+        self.assertEqual((internal_copy_path / "new_file.txt").read_text(), "this is a new file")
+        self.assertEqual((internal_copy_path / "file1.txt").read_text(), "modified content")
+
+        # 6. Verify the size has been updated
+        updated_snap = self.catalogue.get_by_id(snap1.id)
+        new_size = updated_snap.directories[0].mb_size
+        self.assertGreater(new_size, original_size)
+        self.assertIsNotNone(updated_snap.date_last_modified)
+
 
 class TestSnapshotSearcher(unittest.TestCase):
     def setUp(self):

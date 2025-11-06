@@ -481,6 +481,28 @@ class SnapshotManager:
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
+    def update_associated_dirs_from_system(self):
+        """
+        Updates the snapshot's internal copy of each associated directory
+        with the current version from the original system path.
+        """
+        for dir_assoc in self.snapshot.directories:
+            snapshot_copy_path = self.path_snapshot / dir_assoc.directory_name
+            system_path = Path(dir_assoc.original_path)
+
+            if snapshot_copy_path.exists():
+                shutil.rmtree(snapshot_copy_path)
+            
+            if system_path.exists() and system_path.is_dir():
+                dir_assoc.copy_install_to(self.path_snapshot)
+                dir_assoc.mb_size = get_folder_size_mb(system_path)
+            else:
+                dir_assoc.mb_size = 0.0
+                logger.warning(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist. The snapshot's copy has been cleared.")
+
+        self.snapshot.date_last_modified = datetime.now()
+        self.__save_json()
+
     def remove_installed_copies(self):
         for dir_assoc in self.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
@@ -720,6 +742,18 @@ class SnapshotCatalogue:
             # 4. Copy the extracted folder to the catalogue
             destination_path = self.path_catalogue / snapshot_to_import.id
             shutil.copytree(temp_dir_path, destination_path)
+
+    def update_assoc_with_installed(self, snap_id: str):
+        """
+        Updates the snapshot's internal copy of associated directories
+        with the current state of those directories on the filesystem.
+        """
+        snap = self.get_by_id(snap_id)
+        if not snap:
+            raise ValueError(f"No snapshot found with ID {snap_id}")
+
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager.update_associated_dirs_from_system()
 
     def remove_installed_copies(self, snap_id: str):
         snap = self.get_by_id(snap_id)
