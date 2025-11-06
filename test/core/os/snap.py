@@ -112,6 +112,16 @@ class TestSnapshot(unittest.TestCase):
         self.assertNotEqual(snap1.tags, snap2.tags)
         self.assertNotEqual(snap1.data, snap2.data)
 
+    def test_tags_as_string_sorted(self):
+        snap = Snapshot(id="1", name="test", desc="d", tags=["beta", "alpha", "gamma"])
+        self.assertEqual(snap.tags_as_string, "alpha, beta, gamma")
+
+        snap_no_tags = Snapshot(id="2", name="test2", desc="d2", tags=[])
+        self.assertEqual(snap_no_tags.tags_as_string, " ")
+
+        snap_single_tag = Snapshot(id="3", name="test3", desc="d3", tags=["single"])
+        self.assertEqual(snap_single_tag.tags_as_string, "single")
+
 
 class TestSnapshotUtils(unittest.TestCase):
     def setUp(self):
