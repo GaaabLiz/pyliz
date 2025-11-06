@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import shutil
 from datetime import datetime, timedelta
@@ -408,6 +409,75 @@ class TestSnapshotCatalogue(unittest.TestCase):
         # Check last used date
         updated_snap = self.catalogue.get_by_id(snap1.id)
         self.assertIsNotNone(updated_snap.date_last_used)
+
+    def test_remove_installed_copies(self):
+        # Setup: Create a snapshot and install it
+        snap_to_remove = create_test_snapshot("SnapToRemove", num_dirs=2)
+
+        # Ensure the original_path for the snapshot directories are within INSTALL_DEST_PATH
+        # This is crucial to avoid deleting actual source data.
+        # We'll create dummy directories in INSTALL_DEST_PATH for this test.
+        install_dir_1_path = INSTALL_DEST_PATH / "snap_dir_1_test"
+        install_dir_2_path = INSTALL_DEST_PATH / "snap_dir_2_test"
+
+        # Create these directories and some content
+        install_dir_1_path.mkdir(parents=True, exist_ok=True)
+        (install_dir_1_path / "file_a.txt").write_text("content A")
+        install_dir_2_path.mkdir(parents=True, exist_ok=True)
+        (install_dir_2_path / "file_b.txt").write_text("content B")
+
+        # Update the snapshot's directories to point to these test install paths
+        snap_to_remove.directories = [
+            SnapDirAssociation(index=1, original_path=str(install_dir_1_path), folder_id="id1"),
+            SnapDirAssociation(index=2, original_path=str(install_dir_2_path), folder_id="id2"),
+        ]
+
+        self.catalogue.add(snap_to_remove) # Adds to catalogue
+        self.catalogue.install(snap_to_remove) # Installs to original_path locations
+
+        # Verify they exist before removal
+        self.assertTrue(install_dir_1_path.exists())
+        self.assertTrue(install_dir_2_path.exists())
+        self.assertTrue((install_dir_1_path / "file_a.txt").exists())
+
+        # Test Case 1: Successful Removal
+        self.catalogue.remove_installed_copies(snap_to_remove.id)
+
+        self.assertFalse(install_dir_1_path.exists())
+        self.assertFalse(install_dir_2_path.exists())
+
+        # Test Case 2: Snapshot Not Found (should log a warning)
+        with patch('pylizlib.core.log.pylizLogger.logger.warning') as mock_warning:
+            self.catalogue.remove_installed_copies("non-existent-id")
+            mock_warning.assert_called_once_with("Snapshot with ID 'non-existent-id' not found. Cannot remove installed copies.")
+
+        # Test Case 3: Some Directories Missing (should not raise error)
+        snap_partial_remove = create_test_snapshot("SnapPartialRemove", num_dirs=1)
+        install_dir_3_path = INSTALL_DEST_PATH / "snap_dir_3_test"
+        install_dir_4_path = INSTALL_DEST_PATH / "snap_dir_4_test_missing"
+
+        # Create both directories so 'add' succeeds
+        install_dir_3_path.mkdir(parents=True, exist_ok=True)
+        (install_dir_3_path / "file_c.txt").write_text("content C")
+        install_dir_4_path.mkdir(parents=True, exist_ok=True) # Create this one too
+        (install_dir_4_path / "file_d.txt").write_text("content D") # Add some content
+
+        snap_partial_remove.directories = [
+            SnapDirAssociation(index=1, original_path=str(install_dir_3_path), folder_id="id3"),
+            SnapDirAssociation(index=2, original_path=str(install_dir_4_path), folder_id="id4"),
+        ]
+        self.catalogue.add(snap_partial_remove) # This will now succeed
+
+        # Now, simulate one of the installed copies being missing
+        shutil.rmtree(install_dir_4_path) # Manually delete it
+
+        self.assertTrue(install_dir_3_path.exists())
+        self.assertFalse(install_dir_4_path.exists()) # Confirm it's missing
+
+        self.catalogue.remove_installed_copies(snap_partial_remove.id)
+
+        self.assertFalse(install_dir_3_path.exists()) # Should be removed
+        self.assertFalse(install_dir_4_path.exists()) # Should still be missing, no error
 
 
 class TestSnapshotSearcher(unittest.TestCase):

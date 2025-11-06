@@ -456,6 +456,18 @@ class SnapshotManager:
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
+    def remove_installed_copies(self):
+        for dir_assoc in self.snapshot.directories:
+            install_path = Path(dir_assoc.original_path)
+            if install_path.exists() and install_path.is_dir():
+                logger.info(f"Removing installed copy at '{install_path}'")
+                try:
+                    shutil.rmtree(install_path)
+                except Exception as e:
+                    logger.error(f"Failed to remove directory '{install_path}': {e}")
+            else:
+                logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
+
     def install(self, enable_everyone_full_control: bool = True):
         import sys
         if sys.platform == 'win32':
@@ -627,6 +639,14 @@ class SnapshotCatalogue:
             raise ValueError(f"No snapshot found with ID {snap_id}")
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.duplicate()
+
+    def remove_installed_copies(self, snap_id: str):
+        snap = self.get_by_id(snap_id)
+        if not snap:
+            logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
+            return
+        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager.remove_installed_copies()
 
     def install(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
