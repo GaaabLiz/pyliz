@@ -53,6 +53,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.62
 - Bump version to 0.3.63
 - Bump version to 0.3.64
+- Bump version to 0.3.65
 
 ### ♻️ Refactor
 
@@ -145,6 +146,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.60
 - Update changelog for 0.3.61
 - Update changelog for 0.3.63
+- Update changelog for 0.3.64
 
 ### 🚀 Features
 
@@ -231,6 +233,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add method to batch add operations to the operation runner
 - Update operation completion handling to report progress
 - Add task_update_message signal to Task and Operation classes
+- Emit progress update signal on operation completion
 
 ### 🧪 Testing
 
