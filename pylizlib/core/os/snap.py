@@ -562,7 +562,7 @@ class SnapshotManager:
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
 
-    def create_backup(self, backup_path: Path, prefix: str, backup_type: 'BackupType'):
+    def create_backup(self, backup_path: Path, prefix: str, backup_type: 'BackupType', is_export: bool = False):
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
@@ -572,7 +572,11 @@ class SnapshotManager:
             elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
                 backup_type_suffix = "_sd"
 
-            zip_name = f"backup_{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
+            if is_export:
+                zip_name = f"{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
+            else:
+                zip_name = f"backup_{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
+            
             backup_path.mkdir(parents=True, exist_ok=True)
             zip_path = backup_path.joinpath(zip_name)
 
@@ -669,7 +673,7 @@ class SnapshotCatalogue:
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         # Use the existing create_backup method with a specific prefix for export
-        snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES)
+        snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES, is_export=True)
 
     def export_snapshot(self, snap_id: str, destination_path: Path):
         """
@@ -680,7 +684,7 @@ class SnapshotCatalogue:
             raise ValueError(f"No snapshot found with ID {snap_id}")
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY)
+        snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True)
 
     def remove_installed_copies(self, snap_id: str):
         snap = self.get_by_id(snap_id)

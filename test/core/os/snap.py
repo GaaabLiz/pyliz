@@ -522,7 +522,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertEqual(len(export_files), 1)
         
         zip_file = export_files[0]
-        self.assertTrue(zip_file.name.startswith(f"backup_export_{snap1.id}_ad"))
+        self.assertTrue(zip_file.name.startswith(f"export_{snap1.id}_ad"))
         self.assertTrue(zip_file.name.endswith(".zip"))
 
         # Verify the contents of the zip file
@@ -549,7 +549,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertEqual(len(export_files), 1)
         
         zip_file = export_files[0]
-        self.assertTrue(zip_file.name.startswith(f"backup_export_snap_{snap1.id}_sd"))
+        self.assertTrue(zip_file.name.startswith(f"export_snap_{snap1.id}_sd"))
         self.assertTrue(zip_file.name.endswith(".zip"))
 
         # Verify the contents of the zip file
