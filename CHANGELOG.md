@@ -54,6 +54,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.63
 - Bump version to 0.3.64
 - Bump version to 0.3.65
+- Bump version to 0.3.66
+- Bump version to 0.3.67
 
 ### ♻️ Refactor
 
@@ -147,6 +149,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.61
 - Update changelog for 0.3.63
 - Update changelog for 0.3.64
+- Update changelog for 0.3.65
 
 ### 🚀 Features
 
@@ -234,6 +237,16 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update operation completion handling to report progress
 - Add task_update_message signal to Task and Operation classes
 - Emit progress update signal on operation completion
+- Add functionality to remove installed copies of snapshots with tests
+- Enhance backup naming for snapshot operations
+- Implement backup type differentiation for snapshot operations
+- Add folder size calculation to snapshot initialization
+- Add sorting functionality for snapshots by associated directory size
+- Add export functionality for snapshots and associated directories
+- Update create_backup method to differentiate export zip naming
+- Implement snapshot import functionality with validation and error handling
+- Add method to update associated directories from the filesystem and implement corresponding tests
+- Add unit test for tags_as_string method in Snapshot class
 
 ### 🧪 Testing
 
