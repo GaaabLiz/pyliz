@@ -331,7 +331,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertFalse((CATALOGUE_PATH / snap1.id).exists())
 
         # Check if backup was created
-        self.assertTrue(any(f.name.startswith(f"backup_beforeDelete_{snap1.id}") for f in BACKUP_PATH.iterdir()))
+        self.assertTrue(any(f.name.startswith(f"backup_beforeDelete_{snap1.id}_sd") for f in BACKUP_PATH.iterdir()))
 
     def test_update_snapshot(self):
         snap_old = create_test_snapshot("OriginalSnap", num_dirs=2)
@@ -358,7 +358,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertNotIn(Path(snap_old.directories[0].original_path).as_posix(), original_paths)
 
         # Check backup
-        self.assertTrue(any(f.name.startswith(f"backup_beforeEdit_{snap_new.id}") for f in BACKUP_PATH.iterdir()))
+        self.assertTrue(any(f.name.startswith(f"backup_beforeEdit_{snap_new.id}_sd") for f in BACKUP_PATH.iterdir()))
 
         # Check snapshot directory content
         snap_dir = CATALOGUE_PATH / snap_new.id
@@ -404,7 +404,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertEqual((install_target / "file1.txt").read_text(), "content1")
 
         # Check backup
-        self.assertTrue(any(f.name.startswith(f"backup_preinstall_{snap1.id}") for f in BACKUP_PATH.iterdir()))
+        self.assertTrue(any(f.name.startswith(f"backup_preinstall_{snap1.id}_ad") for f in BACKUP_PATH.iterdir()))
 
         # Check last used date
         updated_snap = self.catalogue.get_by_id(snap1.id)

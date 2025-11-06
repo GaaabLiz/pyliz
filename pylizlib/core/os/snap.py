@@ -68,6 +68,11 @@ class SnapEditType(Enum):
     REMOVE_DIR = "Remove"
 
 
+class BackupType(Enum):
+    ASSOCIATED_DIRECTORIES = 1
+    SNAPSHOT_DIRECTORY = 2
+
+
 class SnapshotSortKey(Enum):
     ID = "id"
     NAME = "name"
@@ -538,44 +543,39 @@ class SnapshotManager:
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
 
-    def backup_associated(self, prefix: str, backup_path: Path):
-        try:
-            dirs_to_backup = list(self.snapshot.directories)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            zip_name = f"backup_{prefix}_{self.snapshot.id}_{timestamp}.zip"
-            backup_path.mkdir(parents=True, exist_ok=True)
-            zip_path = backup_path.joinpath(zip_name)
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for folder in dirs_to_backup:
-                    folder = Path(folder.original_path)
-                    if folder.is_dir():
-                        for file_path in folder.rglob("*"):
-                            # Evita di includere la directory vuota
-                            if file_path.is_file():
-                                # Archivia la struttura originale relativa alla directory base
-                                archive.write(
-                                    file_path,
-                                    arcname=os.path.join(folder.name, file_path.relative_to(folder))
-                                )
-        except Exception as e:
-            logger.error(e)
-
-
-    def backup_snap_directory(self, backup_path: Path, prefix: str):
+    def create_backup(self, backup_path: Path, prefix: str, backup_type: 'BackupType'):
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            zip_name = f"backup_{prefix}_{self.snapshot.id}_{timestamp}.zip"
+            
+            backup_type_suffix = ""
+            if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
+                backup_type_suffix = "_ad"
+            elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
+                backup_type_suffix = "_sd"
+
+            zip_name = f"backup_{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
             backup_path.mkdir(parents=True, exist_ok=True)
             zip_path = backup_path.joinpath(zip_name)
+
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for file_path in self.path_snapshot.rglob("*"):
-                    # Evita di includere la directory vuota
-                    if file_path.is_file():
-                        # Archivia la struttura originale relativa alla directory base
-                        archive.write(
-                            file_path,
-                            arcname=file_path.relative_to(self.path_snapshot)
-                        )
+                if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
+                    dirs_to_backup = [Path(d.original_path) for d in self.snapshot.directories]
+                    for folder in dirs_to_backup:
+                        if folder.is_dir():
+                            for file_path in folder.rglob("*"):
+                                if file_path.is_file():
+                                    archive.write(
+                                        file_path,
+                                        arcname=os.path.join(folder.name, file_path.relative_to(folder))
+                                    )
+                elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
+                    source_dir = self.path_snapshot
+                    for file_path in source_dir.rglob("*"):
+                        if file_path.is_file():
+                            archive.write(
+                                file_path,
+                                arcname=file_path.relative_to(source_dir)
+                            )
         except Exception as e:
             logger.error(e)
 
@@ -601,7 +601,7 @@ class SnapshotCatalogue:
     def delete(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_delete_enabled:
-            snap_manager.backup_snap_directory(self.settings.backup_path, "beforeDelete")
+            snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
@@ -628,7 +628,7 @@ class SnapshotCatalogue:
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_modify_enabled:
-            snap_manager.backup_snap_directory(self.settings.backup_path, "beforeEdit")
+            snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
@@ -651,7 +651,7 @@ class SnapshotCatalogue:
     def install(self, snap: Snapshot):
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_install_enabled:
-            snap_manager.backup_associated("preinstall", self.settings.backup_path)
+            snap_manager.create_backup(self.settings.backup_path, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
         snap_manager.install(self.settings.install_with_everyone_full_control)
 
     def exists(self, snap_id: str) -> bool:
