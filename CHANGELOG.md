@@ -56,6 +56,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.65
 - Bump version to 0.3.66
 - Bump version to 0.3.67
+- Bump version to 0.3.68
+- Bump version to 0.3.69
 
 ### ♻️ Refactor
 
@@ -150,6 +152,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.63
 - Update changelog for 0.3.64
 - Update changelog for 0.3.65
+- Update changelog for 0.3.67
 
 ### 🚀 Features
 
@@ -247,6 +250,11 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Implement snapshot import functionality with validation and error handling
 - Add method to update associated directories from the filesystem and implement corresponding tests
 - Add unit test for tags_as_string method in Snapshot class
+- Enhanced all Snapshot classes with detailed docstrings
+- Enhanced all Snapshot classes with detailed docstrings
+- Add export and import functionality for snapshot catalogue
+- Add export and import functionality for snapshot catalogue tests
+- Refactor search functionality to support file name and content queries
 
 ### 🧪 Testing
 
