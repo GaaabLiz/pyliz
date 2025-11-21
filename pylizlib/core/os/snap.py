@@ -21,6 +21,15 @@ SnapshotProgressCallback = Callable[[str, int, int], None]
 
 @dataclass
 class SnapDirAssociation:
+    """
+    Represents the association between an original directory and its copy within a snapshot.
+
+    Attributes:
+        index: A sequential identifier for the directory within the snapshot.
+        original_path: The original, absolute path of the directory on the system.
+        folder_id: A unique random identifier for this specific directory association.
+        mb_size: The size of the directory in megabytes.
+    """
     index: int
     original_path: str
     folder_id: str
@@ -40,16 +49,28 @@ class SnapDirAssociation:
 
     @classmethod
     def next_index(cls):
+        """Increments and returns the class-level index for new directory associations."""
         cls._current_index += 1
         return cls._current_index
 
     @property
     def directory_name(self) -> str:
+        """The name of the directory when copied into the snapshot folder."""
         return self.index.__str__() + "-" + Path(self.original_path).name
 
 
     @staticmethod
     def gen_random(source_folder_for_choices: Path, folder_id_length: int = 4) -> 'SnapDirAssociation':
+        """
+        Generates a single, random SnapDirAssociation for testing purposes.
+
+        Args:
+            source_folder_for_choices: A directory from which a random subfolder will be chosen.
+            folder_id_length: The length of the random `folder_id`.
+
+        Returns:
+            A new `SnapDirAssociation` instance with random data.
+        """
         return SnapDirAssociation(
             index=SnapDirAssociation.next_index(),
             original_path=random_subfolder(source_folder_for_choices).__str__(),
@@ -58,10 +79,30 @@ class SnapDirAssociation:
 
     @staticmethod
     def gen_random_list(count: int, source_folder_for_choices: Path) -> list['SnapDirAssociation']:
+        """
+        Generates a list of random SnapDirAssociation objects for testing.
+
+        Args:
+            count: The number of associations to generate.
+            source_folder_for_choices: The directory from which random subfolders will be chosen.
+
+        Returns:
+            A list of new `SnapDirAssociation` instances.
+        """
         return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
 
     def copy_install_to(self, catalogue_target_path: Path):
+        """
+        Copies the entire content of the directory specified by `original_path`
+        into a subdirectory within the given `catalogue_target_path`.
+
+        The new subdirectory will be named using the `directory_name` property.
+
+        Args:
+            catalogue_target_path: The base path in the catalogue where the directory
+                                   content will be copied.
+        """
         source = Path(self.original_path)
         destination = catalogue_target_path.joinpath(self.directory_name)
         destination.mkdir(parents=True, exist_ok=True)
@@ -98,6 +139,17 @@ class SnapshotSortKey(Enum):
 
 @dataclass
 class SnapEditAction:
+    """
+    Represents a single atomic change (an addition or removal of a directory)
+    to a snapshot's structure.
+
+    Attributes:
+        action_type: The type of edit (ADD_DIR or REMOVE_DIR).
+        timestamp: The time the action was created.
+        new_path: The path of the directory being added (for ADD_DIR actions).
+        folder_id_to_remove: The ID of the folder to remove (for REMOVE_DIR actions).
+        directory_name_to_remove: The name of the directory to remove (for REMOVE_DIR actions).
+    """
     action_type: SnapEditType
     timestamp: datetime = datetime.now()
     new_path: str = ""
@@ -107,6 +159,20 @@ class SnapEditAction:
 
 @dataclass
 class SnapshotSettings:
+    """
+    Holds configuration settings for snapshot management.
+
+    Attributes:
+        json_filename: The name of the snapshot metadata file.
+        backup_path: The directory to store backups.
+        backup_pre_install: Whether to create a backup before installing a snapshot.
+        backup_pre_modify: Whether to create a backup before modifying a snapshot.
+        backup_pre_delete: Whether to create a backup before deleting a snapshot.
+        install_with_everyone_full_control: If on Windows, whether to grant 'Everyone'
+                                            full control over installed directories.
+        snap_id_length: The character length for new snapshot IDs.
+        folder_id_length: The character length for new folder association IDs.
+    """
     json_filename: str = "snapshot.json"
     backup_path: Path | None = None
     backup_pre_install: bool = False
@@ -118,19 +184,40 @@ class SnapshotSettings:
 
     @property
     def bck_before_install_enabled(self) -> bool:
+        """Checks if backup before installation is enabled and a path is set."""
         return self.backup_pre_install and self.backup_path is not None
 
     @property
     def bck_before_modify_enabled(self) -> bool:
+        """Checks if backup before modification is enabled and a path is set."""
         return self.backup_pre_modify and self.backup_path is not None
 
     @property
     def bck_before_delete_enabled(self) -> bool:
+        """Checks if backup before deletion is enabled and a path is set."""
         return self.backup_pre_delete and self.backup_path is not None
 
 
 @dataclass
 class Snapshot:
+    """
+    Represents a snapshot, which is a collection of directory associations
+    and metadata at a specific point in time.
+
+    Attributes:
+        id: A unique identifier for the snapshot.
+        name: A user-friendly name for the snapshot.
+        desc: A description of the snapshot's purpose or contents.
+        author: The user who created the snapshot.
+        directories: A list of `SnapDirAssociation` objects linking to the original directories.
+        tags: A list of strings for categorizing the snapshot.
+        date_created: The timestamp when the snapshot was created.
+        date_modified: The timestamp when the snapshot's metadata was last modified.
+        date_last_used: The timestamp when the snapshot was last installed.
+        date_last_modified: The timestamp when the snapshot's contents were last updated
+                            from the source directories.
+        data: A dictionary for storing custom, arbitrary key-value data.
+    """
     id: str
     name: str
     desc: str
@@ -145,9 +232,19 @@ class Snapshot:
 
     @property
     def tags_as_string(self) -> str:
+        """Returns the list of tags as a single, comma-separated string."""
         return ", ".join(sorted(self.tags)) if self.tags else " "
 
     def get_for_table_array(self, key_list: list[str]) -> list[str]:
+        """
+        Generates a list of strings representing the snapshot's data for table display.
+
+        Args:
+            key_list: A list of keys to retrieve from the snapshot's data dictionary.
+
+        Returns:
+            A list of strings containing snapshot information in a specific order.
+        """
         array = [self.name, self.desc]
         for key in key_list:
             value = self.data.get(key, "")
@@ -158,6 +255,7 @@ class Snapshot:
 
     @property
     def folder_name(self) -> str:
+        """The name of the snapshot's folder in the catalogue, which is its ID."""
         return self.id
 
     @property
@@ -168,27 +266,27 @@ class Snapshot:
         return sum(d.mb_size for d in self.directories if d.mb_size is not None)
 
     def add_data_item(self, key: str, value: str) -> None:
-        """Aggiunge un elemento al dizionario."""
+        """Adds an item to the data dictionary."""
         self.data[key] = value
 
     def remove_data_item(self, key: str) -> Optional[str]:
-        """Rimuove un elemento dal dizionario e restituisce il valore rimosso."""
+        """Removes an item from the data dictionary and returns its value."""
         return self.data.pop(key, None)
 
     def has_data_item(self, key: str) -> bool:
-        """Verifica se una chiave esiste nel dizionario."""
+        """Checks if a key exists in the data dictionary."""
         return key in self.data
 
     def get_data_item(self, key: str, default: str = "") -> str:
-        """Ottiene un valore dal dizionario con un default."""
+        """Gets a value from the data dictionary with a default."""
         return self.data.get(key, default)
 
     def clear_all_data(self) -> None:
-        """Pulisce tutti gli elementi del dizionario."""
+        """Clears all items from the data dictionary."""
         self.data.clear()
 
     def edit_data_item(self, key: str, new_value: str) -> None:
-        """Modifica il valore di un elemento esistente nel dizionario."""
+        """Edits the value of an existing item in the data dictionary."""
         if key in self.data:
             self.data[key] = new_value
         else:
@@ -196,7 +294,7 @@ class Snapshot:
 
 
     def clone(self) -> 'Snapshot':
-        """Crea una copia profonda dell'istanza Snapshot."""
+        """Creates a deep copy of the Snapshot instance."""
         return Snapshot(
             id=self.id,
             name=self.name,
@@ -231,6 +329,16 @@ class SnapshotUtils:
 
     @staticmethod
     def gen_random_snap(source_folder_for_choices: Path, id_length: int = 10, ) -> Snapshot:
+        """
+        Generates a random Snapshot instance for testing or demonstration purposes.
+
+        Args:
+            source_folder_for_choices: The path to a directory from which to pick random subdirectories.
+            id_length: The length of the random string to be used for the snapshot's ID and name.
+
+        Returns:
+            A new Snapshot object with randomly generated data.
+        """
         dirs = SnapDirAssociation.gen_random_list(3, source_folder_for_choices)
         return Snapshot(
             id=gen_random_string(id_length),
@@ -244,6 +352,20 @@ class SnapshotUtils:
 
     @staticmethod
     def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
+        """
+        Loads a Snapshot object from a directory containing a snapshot JSON file.
+
+        Args:
+            path_snapshot: The path to the snapshot's directory.
+            json_filename: The name of the JSON file that contains the snapshot's data.
+
+        Returns:
+            A Snapshot object if the file is found and parsed correctly, otherwise None.
+        
+        Raises:
+            ValueError: If the provided path is a file, not a directory.
+            FileNotFoundError: If the path or the JSON file does not exist.
+        """
         if path_snapshot.is_file():
             raise ValueError(f"The provided path {path_snapshot} is not a directory.")
         if not path_snapshot.exists():
@@ -255,14 +377,46 @@ class SnapshotUtils:
 
     @staticmethod
     def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
+        """
+        Constructs the full path to a snapshot's directory within the catalogue.
+
+        Args:
+            folder_name: The name of the snapshot's folder (usually the snapshot ID).
+            catalogue_path: The base path of the snapshot catalogue.
+
+        Returns:
+            The full path to the snapshot's directory.
+        """
         return catalogue_path.joinpath(folder_name)
 
     @staticmethod
     def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
+        """
+        Constructs the full path to a snapshot's JSON file.
+
+        Args:
+            folder_name: The name of the snapshot's folder.
+            catalogue_path: The base path of the snapshot catalogue.
+            json_filename: The name of the JSON file.
+
+        Returns:
+            The full path to the snapshot's JSON file.
+        """
         return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(json_filename)
 
     @staticmethod
     def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
+        """
+        Compares two Snapshot objects and generates a list of actions (add/remove)
+        required to transform the old snapshot into the new one.
+
+        Args:
+            old: The original Snapshot object.
+            new: The updated Snapshot object.
+
+        Returns:
+            A list of SnapEditAction objects representing the changes.
+        """
         edits: list[SnapEditAction] = []
 
         old_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in old.directories}
@@ -271,7 +425,7 @@ class SnapshotUtils:
         old_paths = set(old_path_to_assoc.keys())
         new_paths = set(new_path_to_assoc.keys())
 
-        # Trova cartelle aggiunte (presenti in new ma non in old)
+        # Find added folders (present in new but not in old)
         added_paths = new_paths - old_paths
         for path in added_paths:
             edits.append(SnapEditAction(
@@ -279,7 +433,7 @@ class SnapshotUtils:
                 new_path=path
             ))
 
-        # Trova cartelle rimosse (presenti in old ma non in new)
+        # Find removed folders (present in old but not in new)
         removed_paths = old_paths - new_paths
         for path in removed_paths:
             assoc = old_path_to_assoc[path]
@@ -337,15 +491,22 @@ class SnapshotSerializer:
 
     @staticmethod
     def _converter(o):
-        """Converti datetime e enum in formati serializzabili JSON."""
+        """Converts datetime and enum objects to JSON serializable formats."""
         if isinstance(o, datetime):
             return o.isoformat()
         if isinstance(o, Enum):
-            return o.value  # oppure o.name se preferisci il nome
+            return o.value  # or o.name if you prefer the name
         raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
     @staticmethod
     def to_json(snapshot: Snapshot, path: Path) -> None:
+        """
+        Serializes a Snapshot object to a JSON file.
+
+        Args:
+            snapshot: The Snapshot object to serialize.
+            path: The file path where the JSON data will be saved.
+        """
         data_dict = asdict(snapshot)
         json_str = json.dumps(data_dict, default=SnapshotSerializer._converter, indent=4)
         path.write_text(json_str, encoding="utf-8")
@@ -353,15 +514,15 @@ class SnapshotSerializer:
 
     @classmethod
     def from_json(cls, filepath: Path) -> Snapshot:
-        """Legge un AtomDevConfig da file JSON, convertendo datetime ed enum"""
+        """Reads a Snapshot from a JSON file, converting datetimes and enums."""
         data = json.loads(filepath.read_text(encoding="utf-8"))
 
-        # Converte i campi datetime da stringa ISO8601 a datetime
+        # Convert datetime fields from ISO8601 string to datetime
         for key in ["date_created", "date_last_installed", "date_modified", "date_last_used", "date_last_modified"]:
             if key in data and data[key] is not None:
                 data[key] = datetime.fromisoformat(data[key])
 
-        # Conversione 'directories' in lista di ConfigDirAssociation
+        # Convert 'directories' into a list of SnapDirAssociation
         if "directories" in data and isinstance(data["directories"], list):
             data["directories"] = [SnapDirAssociation(**d) if isinstance(d, dict) else d for d in data["directories"]]
 
@@ -369,13 +530,21 @@ class SnapshotSerializer:
 
     @classmethod
     def update_field(cls, filepath: Path, field_name: str, new_value):
-        # Leggi dati esistenti dal file JSON
+        """
+        Updates a single field in a snapshot's JSON file without loading the whole object.
+
+        Args:
+            filepath: The path to the JSON file.
+            field_name: The name of the field to update.
+            new_value: The new value for the field.
+        """
+        # Read existing data from the JSON file
         data = json.loads(filepath.read_text(encoding="utf-8"))
 
-        # Aggiorna solo il campo specificato
+        # Update only the specified field
         data[field_name] = new_value
 
-        # Serializza di nuovo il file con i convertitori per datetime e enum se necessario
+        # Serialize the file again with converters for datetime and enum if necessary
         json_str = json.dumps(data, default=cls._converter, indent=4)
         filepath.write_text(json_str, encoding="utf-8")
 
@@ -399,6 +568,11 @@ class SnapshotManager:
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
 
     def create(self):
+        """
+        Creates the snapshot on the filesystem. This involves creating the main snapshot
+        directory and copying all associated directories into it. If the directory
+        already exists, its contents are cleared first.
+        """
         if self.path_snapshot.exists():
             clear_folder_contents(self.path_snapshot)
         self.path_snapshot.mkdir(parents=True, exist_ok=True)
@@ -407,15 +581,27 @@ class SnapshotManager:
         self.__save_json()
 
     def delete(self):
+        """
+        Deletes the snapshot's directory from the filesystem.
+        The directory is moved to a temporary location before being permanently deleted.
+        """
         if self.path_snapshot.exists():
             clear_or_move_to_temp(self.path_snapshot)
 
     def update_json_data_fields(self):
+        """
+        Updates the 'data' and 'date_last_modified' fields in the snapshot's JSON file.
+        This method is typically called after modifying the snapshot's data dictionary.
+        """
         SnapshotSerializer.update_field(self.path_snapshot_json, "data", self.snapshot.data)
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_modified", datetime.now().isoformat())
         self.snapshot.date_last_modified = datetime.now()
 
     def update_json_base_fields(self):
+        """
+        Updates the basic metadata fields (name, desc, author, tags, date_modified)
+        of the snapshot's JSON file.
+        """
         SnapshotSerializer.update_field(self.path_snapshot_json, "name", self.snapshot.name)
         SnapshotSerializer.update_field(self.path_snapshot_json, "desc", self.snapshot.desc)
         SnapshotSerializer.update_field(self.path_snapshot_json, "author", self.snapshot.author)
@@ -424,6 +610,16 @@ class SnapshotManager:
         self.snapshot.date_modified = datetime.now()
 
     def install_directory(self, destination_path: Path):
+        """
+        Adds a new directory to the snapshot, copying its contents into the
+        snapshot's storage directory.
+
+        Args:
+            destination_path: The path of the directory to add to the snapshot.
+        
+        Raises:
+            ValueError: If the destination_path is not a valid directory.
+        """
         if not destination_path.exists() or not destination_path.is_dir():
             raise ValueError(f"The provided path {destination_path} is not a valid directory.")
         new_dir = SnapDirAssociation(
@@ -436,6 +632,13 @@ class SnapshotManager:
         self.__save_json()
 
     def uninstall_directory_by_folder_id(self, folder_id: str):
+        """
+        Removes a directory from the snapshot based on its folder_id.
+        This deletes the directory's copy from the snapshot's storage and updates the JSON file.
+
+        Args:
+            folder_id: The unique ID of the folder to remove.
+        """
         dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
             dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
@@ -445,6 +648,13 @@ class SnapshotManager:
             self.__save_json()
 
     def update_from_actions_list(self, edits: list[SnapEditAction]):
+        """
+        Applies a list of edit actions (add/remove directories) to the snapshot.
+        This updates the snapshot's contents on the filesystem based on the provided actions.
+
+        Args:
+            edits: A list of SnapEditAction objects.
+        """
         # The `self.snapshot` is the NEW snapshot.
 
         # Handle additions
@@ -470,6 +680,13 @@ class SnapshotManager:
         self.__save_json()
 
     def duplicate(self):
+        """
+        Creates a duplicate of the current snapshot with a new ID and name.
+        The entire snapshot directory is copied, and a new JSON file is created for the copy.
+
+        Raises:
+            FileNotFoundError: If the original snapshot path does not exist.
+        """
         if not self.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
         new_snap = self.snapshot
@@ -504,6 +721,12 @@ class SnapshotManager:
         self.__save_json()
 
     def remove_installed_copies(self):
+        """
+        Removes all directories on the system that this snapshot is managing.
+        This is effectively an 'uninstall' operation for the snapshot's associated directories.
+        It only removes the copies at the 'original_path' locations, not the snapshot's
+        internal backup.
+        """
         for dir_assoc in self.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
             if install_path.exists() and install_path.is_dir():
@@ -516,6 +739,15 @@ class SnapshotManager:
                 logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
 
     def install(self, enable_everyone_full_control: bool = True):
+        """
+        Installs the snapshot's contents to their original locations on the filesystem.
+        This will clear the destination directories before copying the snapshot's contents.
+
+        Args:
+            enable_everyone_full_control (bool): If True and on Windows, it will attempt
+                to set full control permissions for the 'Everyone' group on the
+                installed directories.
+        """
         import sys
         if sys.platform == 'win32':
             try:
@@ -586,6 +818,15 @@ class SnapshotManager:
         SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_used", self.snapshot.date_last_used.isoformat())
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: 'BackupType', is_export: bool = False):
+        """
+        Creates a zip archive of the snapshot's data.
+
+        Args:
+            backup_path: The directory where the backup zip file will be saved.
+            prefix: A prefix for the backup filename.
+            backup_type: The type of backup to create (associated directories or the snapshot directory).
+            is_export: If True, the filename will be formatted as an export.
+        """
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
@@ -637,20 +878,47 @@ class SnapshotCatalogue:
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def set_catalogue_path(self, new_path: Path):
+        """
+        Sets a new path for the snapshot catalogue.
+        The directory will be created if it does not exist.
+
+        Args:
+            new_path: The new path for the catalogue.
+        """
         self.path_catalogue = new_path
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def add(self, snap: Snapshot):
+        """
+        Adds a new snapshot to the catalogue.
+
+        Args:
+            snap: The Snapshot object to add.
+        """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.create()
 
     def delete(self, snap: Snapshot):
+        """
+        Deletes a snapshot from the catalogue.
+
+        If backup settings are enabled, a backup is created before deletion.
+
+        Args:
+            snap: The Snapshot object to delete.
+        """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_delete_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
+        """
+        Retrieves all snapshots from the catalogue.
+
+        Returns:
+            A list of Snapshot objects found in the catalogue.
+        """
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
@@ -661,6 +929,15 @@ class SnapshotCatalogue:
         return snapshots
 
     def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
+        """
+        Retrieves a single snapshot from the catalogue by its ID.
+
+        Args:
+            snap_id: The ID of the snapshot to retrieve.
+
+        Returns:
+            The Snapshot object if found, otherwise None.
+        """
         all_snaps = self.get_all()
         for snap in all_snaps:
             if snap.id == snap_id:
@@ -668,10 +945,27 @@ class SnapshotCatalogue:
         return None
 
     def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot):
+        """
+        Updates a snapshot by comparing the old and new Snapshot objects.
+        It calculates the differences and applies them.
+
+        Args:
+            old: The original Snapshot object.
+            new: The new Snapshot object with the desired changes.
+        """
         edits = SnapshotUtils.get_edits_between_snapshots(old, new)
         self.update_snapshot_by_edits(new, edits)
 
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
+        """
+        Updates a snapshot using a pre-computed list of edit actions.
+
+        If backup settings are enabled, a backup is created before the update.
+
+        Args:
+            snap: The Snapshot object to update.
+            edits: A list of SnapEditAction objects to apply.
+        """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_modify_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
@@ -680,6 +974,15 @@ class SnapshotCatalogue:
         snap_manager.update_from_actions_list(edits)
 
     def duplicate_by_id(self, snap_id: str):
+        """
+        Duplicates a snapshot by its ID.
+
+        Args:
+            snap_id: The ID of the snapshot to duplicate.
+
+        Raises:
+            ValueError: If no snapshot is found with the given ID.
+        """
         snap = self.get_by_id(snap_id)
         if snap is None:
             raise ValueError(f"No snapshot found with ID {snap_id}")
@@ -710,6 +1013,18 @@ class SnapshotCatalogue:
         snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True)
 
     def import_snapshot(self, zip_path: Path):
+        """
+        Imports a snapshot from a zip file into the catalogue.
+
+        Args:
+            zip_path: The path to the .zip file to import.
+
+        Raises:
+            ValueError: If the path is not a valid zip file, if the zip is corrupted,
+                        if the snapshot.json is missing, or if a snapshot with the same ID
+                        already exists.
+            IOError: If the zip file fails to extract.
+        """
         if not zip_path.is_file() or zip_path.suffix != '.zip':
             raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
 
@@ -756,6 +1071,12 @@ class SnapshotCatalogue:
         snap_manager.update_associated_dirs_from_system()
 
     def remove_installed_copies(self, snap_id: str):
+        """
+        Removes the installed copies of a snapshot's associated directories from the system.
+
+        Args:
+            snap_id: The ID of the snapshot whose installed copies should be removed.
+        """
         snap = self.get_by_id(snap_id)
         if not snap:
             logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
@@ -764,15 +1085,41 @@ class SnapshotCatalogue:
         snap_manager.remove_installed_copies()
 
     def install(self, snap: Snapshot):
+        """
+        Installs a snapshot's contents to their original target locations.
+
+        If backup settings are enabled, a backup of the target locations is created first.
+
+        Args:
+            snap: The Snapshot object to install.
+        """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_install_enabled:
             snap_manager.create_backup(self.settings.backup_path, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
         snap_manager.install(self.settings.install_with_everyone_full_control)
 
     def exists(self, snap_id: str) -> bool:
+        """
+        Checks if a snapshot with the given ID exists in the catalogue.
+
+        Args:
+            snap_id: The ID of the snapshot to check.
+
+        Returns:
+            True if the snapshot exists, False otherwise.
+        """
         return self.get_by_id(snap_id) is not None
 
     def get_snap_directory_path(self, snap: Snapshot) -> Path | None:
+        """
+        Gets the filesystem path to a snapshot's storage directory.
+
+        Args:
+            snap: The Snapshot object.
+
+        Returns:
+            The Path to the snapshot's directory, or None if the snapshot doesn't exist.
+        """
         if not self.exists(snap.id):
             return None
         return SnapshotUtils.get_snapshot_path(snap.folder_name, self.path_catalogue)
@@ -781,7 +1128,7 @@ class SnapshotCatalogue:
 @dataclass
 class SnapshotSearchResult:
     """
-    Rappresenta un singolo risultato di ricerca all'interno di un file di snapshot.
+    Represents a single search result within a snapshot file.
     """
     file_path: Path
     searched_text: str
@@ -798,7 +1145,7 @@ class SnapshotSearchType(Enum):
 @dataclass
 class SnapshotSearchParams:
     """
-    Parametri per la ricerca all'interno di uno snapshot.
+    Parameters for searching within a snapshot.
     """
     query: str
     search_type: SnapshotSearchType = SnapshotSearchType.TEXT
@@ -807,20 +1154,20 @@ class SnapshotSearchParams:
 
 class SnapshotSearcher:
     """
-    Cerca un contenuto testuale all'interno dei file di uno o più snapshot.
+    Searches for textual content within the files of one or more snapshots.
     """
     def __init__(self, catalogue: SnapshotCatalogue):
         """
-        Inizializza lo SnapshotSearcher.
+        Initializes the SnapshotSearcher.
 
         Args:
-            catalogue: Lo SnapshotCatalogue in cui cercare.
+            catalogue: The SnapshotCatalogue to search in.
         """
         self.catalogue = catalogue
 
     def search(self, snapshot: Snapshot, params: SnapshotSearchParams, on_progress: Optional[SnapshotProgressCallback] = None) -> list[SnapshotSearchResult]:
         """
-        Esegue una ricerca in un singolo snapshot in base ai parametri forniti.
+        Performs a search in a single snapshot based on the provided parameters.
         """
         snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
 
@@ -836,7 +1183,15 @@ class SnapshotSearcher:
 
     def search_list(self, snapshots: list[Snapshot], params: SnapshotSearchParams, on_progress: Optional[SnapshotProgressCallback] = None) -> list[SnapshotSearchResult]:
         """
-        Esegue una ricerca in una lista di snapshot in base ai parametri forniti.
+        Performs a search across a list of snapshots based on the provided parameters.
+
+        Args:
+            snapshots: A list of Snapshot objects to search within.
+            params: The search parameters (query, type, extensions).
+            on_progress: An optional callback to report progress.
+
+        Returns:
+            A list of all search results found across all specified snapshots.
         """
         all_results: list[SnapshotSearchResult] = []
         for snapshot in snapshots:
@@ -871,15 +1226,15 @@ class SnapshotSearcher:
 
 
     def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
-        """Controlla se un file deve essere incluso nella ricerca."""
+        """Checks if a file should be included in the search."""
         if not file_path.is_file():
             return False
         if not extensions:
-            return True  # Se non ci sono estensioni specificate, cerca in tutti i file
+            return True  # If no extensions are specified, search all files
         return file_path.suffix in extensions
 
     def _search_in_file(self, file_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern], snapshot_name: str) -> list[SnapshotSearchResult]:
-        """Esegue la ricerca all'interno di un singolo file."""
+        """Performs the search within a single file."""
         results: list[SnapshotSearchResult] = []
         try:
             with file_path.open('r', encoding='utf-8') as f:
