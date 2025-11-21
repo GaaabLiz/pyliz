@@ -936,6 +936,7 @@ class SnapshotManager:
         except Exception as e:
             logger.error(e)
 
+
 class SnapshotCatalogue:
 
     def __init__(
@@ -1096,6 +1097,90 @@ class SnapshotCatalogue:
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True)
+
+    def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
+        """
+        Exports the entire catalogue to a single zip file.
+
+        Args:
+            destination_path: The folder where the exported zip file will be saved.
+            file_name: The name for the output zip file.
+        """
+        destination_path.mkdir(parents=True, exist_ok=True)
+        zip_path = destination_path.joinpath(file_name)
+        
+        snapshots = self.get_all()
+        if not snapshots:
+            logger.warning("Catalogue is empty. Nothing to export.")
+            return
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for snap in snapshots:
+                snap_dir = self.get_snap_directory_path(snap)
+                if snap_dir and snap_dir.is_dir():
+                    for file_path in snap_dir.rglob("*"):
+                        if file_path.is_file():
+                            archive.write(
+                                file_path,
+                                arcname=file_path.relative_to(self.path_catalogue)
+                            )
+
+    def import_catalogue(self, zip_path: Path):
+        """
+        Imports all snapshots from a catalogue zip file, skipping existing ones.
+
+        Args:
+            zip_path: The path to the catalogue .zip file.
+
+        Raises:
+            ValueError: If the provided path is not a valid .zip file.
+            IOError: If the zip file fails to extract.
+        """
+        if not zip_path.is_file() or zip_path.suffix != '.zip':
+            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+
+            # 1. Extract the zip to a temporary directory
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(temp_dir_path)
+            except zipfile.BadZipFile:
+                raise ValueError(f"File '{zip_path}' is not a valid zip file.")
+            except Exception as e:
+                raise IOError(f"Failed to extract zip file '{zip_path}': {e}")
+
+            # 2. Iterate through extracted folders and import them
+            for potential_snap_dir in temp_dir_path.iterdir():
+                if not potential_snap_dir.is_dir():
+                    continue
+
+                json_path = potential_snap_dir / self.settings.json_filename
+                if not json_path.is_file():
+                    logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
+                    continue
+
+                try:
+                    # Read just the ID to avoid loading the whole object unnecessarily
+                    data = json.loads(json_path.read_text(encoding="utf-8"))
+                    snap_id = data.get("id")
+                    if not snap_id:
+                        logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
+                        continue
+
+                    # 3. Check for ID conflict
+                    if self.exists(snap_id):
+                        logger.info(f"Snapshot with ID '{snap_id}' already exists. Skipping import.")
+                        continue
+
+                    # 4. Copy the extracted folder to the catalogue
+                    destination_path = self.path_catalogue / snap_id
+                    shutil.copytree(potential_snap_dir, destination_path)
+                    logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
+
+                except Exception as e:
+                    logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
 
     def import_snapshot(self, zip_path: Path):
         """
