@@ -49,7 +49,12 @@ class SnapDirAssociation:
 
     @classmethod
     def next_index(cls):
-        """Increments and returns the class-level index for new directory associations."""
+        """
+        Increments and returns the class-level index for new directory associations.
+
+        Returns:
+            The next integer index.
+        """
         cls._current_index += 1
         return cls._current_index
 
@@ -266,19 +271,50 @@ class Snapshot:
         return sum(d.mb_size for d in self.directories if d.mb_size is not None)
 
     def add_data_item(self, key: str, value: str) -> None:
-        """Adds an item to the data dictionary."""
+        """
+        Adds a key-value pair to the custom data dictionary.
+
+        Args:
+            key: The key for the data item.
+            value: The value to store.
+        """
         self.data[key] = value
 
     def remove_data_item(self, key: str) -> Optional[str]:
-        """Removes an item from the data dictionary and returns its value."""
+        """
+        Removes an item from the data dictionary and returns its value.
+
+        Args:
+            key: The key of the item to remove.
+
+        Returns:
+            The value of the removed item, or None if the key was not found.
+        """
         return self.data.pop(key, None)
 
     def has_data_item(self, key: str) -> bool:
-        """Checks if a key exists in the data dictionary."""
+        """
+        Checks if a key exists in the data dictionary.
+
+        Args:
+            key: The key to check.
+
+        Returns:
+            True if the key exists, False otherwise.
+        """
         return key in self.data
 
     def get_data_item(self, key: str, default: str = "") -> str:
-        """Gets a value from the data dictionary with a default."""
+        """
+        Gets a value from the data dictionary, returning a default if the key is not found.
+
+        Args:
+            key: The key of the item to retrieve.
+            default: The default value to return if the key is not found.
+
+        Returns:
+            The value associated with the key, or the default value.
+        """
         return self.data.get(key, default)
 
     def clear_all_data(self) -> None:
@@ -286,7 +322,16 @@ class Snapshot:
         self.data.clear()
 
     def edit_data_item(self, key: str, new_value: str) -> None:
-        """Edits the value of an existing item in the data dictionary."""
+        """
+        Edits the value of an existing item in the data dictionary.
+
+        Args:
+            key: The key of the item to edit.
+            new_value: The new value to set.
+
+        Raises:
+            KeyError: If the key does not exist in the data dictionary.
+        """
         if key in self.data:
             self.data[key] = new_value
         else:
@@ -294,7 +339,12 @@ class Snapshot:
 
 
     def clone(self) -> 'Snapshot':
-        """Creates a deep copy of the Snapshot instance."""
+        """
+        Creates a deep, independent copy of the Snapshot instance.
+
+        Returns:
+            A new `Snapshot` object with the same data as the original.
+        """
         return Snapshot(
             id=self.id,
             name=self.name,
@@ -491,7 +541,18 @@ class SnapshotSerializer:
 
     @staticmethod
     def _converter(o):
-        """Converts datetime and enum objects to JSON serializable formats."""
+        """
+        Converts non-serializable objects for JSON dumping.
+
+        Args:
+            o: The object to convert.
+
+        Returns:
+            A serializable representation of the object.
+
+        Raises:
+            TypeError: If the object type is not supported.
+        """
         if isinstance(o, datetime):
             return o.isoformat()
         if isinstance(o, Enum):
@@ -558,6 +619,14 @@ class SnapshotManager:
             catalogue_path: Path,
             settings: SnapshotSettings = SnapshotSettings(),
     ):
+        """
+        Initializes a manager for a single snapshot's lifecycle.
+
+        Args:
+            snapshot: The `Snapshot` object to manage.
+            catalogue_path: The root path of the snapshot catalogue.
+            settings: Configuration settings for the manager.
+        """
         self.snapshot = snapshot
         self.settings = settings
         self.path_catalogue = catalogue_path
@@ -565,6 +634,7 @@ class SnapshotManager:
         self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.settings.json_filename)
 
     def __save_json(self):
+        """Saves the current snapshot object state to its JSON file."""
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
 
     def create(self):
@@ -873,6 +943,13 @@ class SnapshotCatalogue:
             path_catalogue: Path,
             settings: SnapshotSettings = SnapshotSettings(),
     ):
+        """
+        Initializes the catalogue manager for a collection of snapshots.
+
+        Args:
+            path_catalogue: The root directory path for the catalogue.
+            settings: Global settings to apply to snapshots in this catalogue.
+        """
         self.path_catalogue = path_catalogue
         self.settings = settings
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
@@ -992,6 +1069,10 @@ class SnapshotCatalogue:
     def export_assoc_dirs(self, snap_id: str, destination_path: Path):
         """
         Exports the associated directories of a snapshot to a zip file.
+
+        Args:
+            snap_id: The ID of the snapshot to export.
+            destination_path: The folder where the exported zip file will be saved.
         """
         snap = self.get_by_id(snap_id)
         if not snap:
@@ -1003,7 +1084,11 @@ class SnapshotCatalogue:
 
     def export_snapshot(self, snap_id: str, destination_path: Path):
         """
-        Exports the entire snapshot directory to a zip file.
+        Exports the entire snapshot directory (the internal backup) to a zip file.
+
+        Args:
+            snap_id: The ID of the snapshot to export.
+            destination_path: The folder where the exported zip file will be saved.
         """
         snap = self.get_by_id(snap_id)
         if not snap:
@@ -1168,6 +1253,15 @@ class SnapshotSearcher:
     def search(self, snapshot: Snapshot, params: SnapshotSearchParams, on_progress: Optional[SnapshotProgressCallback] = None) -> list[SnapshotSearchResult]:
         """
         Performs a search in a single snapshot based on the provided parameters.
+
+        Args:
+            snapshot: The `Snapshot` object to search within.
+            params: An object containing the search query and options.
+            on_progress: An optional callback function to report search progress,
+                         receiving (filename, total_files, processed_files).
+
+        Returns:
+            A list of `SnapshotSearchResult` objects matching the query.
         """
         snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
 
@@ -1199,6 +1293,19 @@ class SnapshotSearcher:
         return all_results
 
     def _search_in_snapshot_path(self, snapshot: Snapshot, snapshot_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern], on_progress: Optional[SnapshotProgressCallback]) -> list[SnapshotSearchResult]:
+        """
+        Private helper to perform a search within a specific snapshot's directory path.
+
+        Args:
+            snapshot: The snapshot being searched.
+            snapshot_path: The filesystem path of the snapshot's contents.
+            params: The search parameters.
+            compiled_regex: A pre-compiled regex pattern, if applicable.
+            on_progress: The progress callback function.
+
+        Returns:
+            A list of search results found in the snapshot.
+        """
         results: list[SnapshotSearchResult] = []
         if not snapshot_path or not snapshot_path.is_dir():
             logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
@@ -1226,7 +1333,16 @@ class SnapshotSearcher:
 
 
     def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
-        """Checks if a file should be included in the search."""
+        """
+        Determines if a file should be included in the search.
+
+        Args:
+            file_path: The path to the file.
+            extensions: A list of file extensions to include. If empty, all files are included.
+
+        Returns:
+            True if the file should be searched, False otherwise.
+        """
         if not file_path.is_file():
             return False
         if not extensions:
@@ -1234,7 +1350,18 @@ class SnapshotSearcher:
         return file_path.suffix in extensions
 
     def _search_in_file(self, file_path: Path, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern], snapshot_name: str) -> list[SnapshotSearchResult]:
-        """Performs the search within a single file."""
+        """
+        Performs the search within a single file.
+
+        Args:
+            file_path: The path of the file to search.
+            params: The search parameters.
+            compiled_regex: A pre-compiled regex pattern, if applicable.
+            snapshot_name: The name of the snapshot for including in results.
+
+        Returns:
+            A list of search results found within the file.
+        """
         results: list[SnapshotSearchResult] = []
         try:
             with file_path.open('r', encoding='utf-8') as f:
