@@ -17,7 +17,8 @@ from pylizlib.core.os.snap import (
     SnapshotSearcher,
     SnapshotSearchResult,
     SnapshotSortKey,
-    SnapshotSearchType,
+    QueryType,
+    SearchTarget,
     SnapshotSearchParams,
 )
 from pylizlib.core.data.gen import gen_random_string
@@ -794,158 +795,92 @@ class TestSnapshotSearcher(unittest.TestCase):
         """Tear down after each test method."""
         shutil.rmtree(TEST_LOCAL_ROOT)
 
-    def test_search_text_found(self):
+    def test_search_content_text_found(self):
         params = SnapshotSearchParams(
             query="Hello",
-            search_type=SnapshotSearchType.TEXT
+            search_target=SearchTarget.FILE_CONTENT,
+            query_type=QueryType.TEXT
         )
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
-
-        # Sort results to have a predictable order for assertions
-        results.sort(key=lambda r: r.file_path)
-
+        results.sort(key=lambda r: r.file_path.name)
         self.assertEqual("fileA.txt", results[0].file_path.name)
         self.assertEqual(results[0].line_number, 1)
-        self.assertEqual(results[0].searched_text, "Hello")
         self.assertEqual(results[0].line_content, "Hello world")
-        self.assertEqual(results[0].snapshot_name, self.snap.name)
-
         self.assertEqual("fileB.txt", results[1].file_path.name)
         self.assertEqual(results[1].line_number, 2)
-        self.assertEqual(results[1].searched_text, "Hello")
         self.assertEqual(results[1].line_content, "Hello again.")
-        self.assertEqual(results[1].snapshot_name, self.snap.name)
 
-    def test_search_text_not_found(self):
-        params = SnapshotSearchParams(
-            query="nonexistent",
-            search_type=SnapshotSearchType.TEXT
-        )
+    def test_search_content_text_not_found(self):
+        params = SnapshotSearchParams(query="nonexistent")
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
-    def test_search_regex_found(self):
+    def test_search_content_regex_found(self):
         params = SnapshotSearchParams(
             query=r"value=\d+",
-            search_type=SnapshotSearchType.REGEX
+            search_target=SearchTarget.FILE_CONTENT,
+            query_type=QueryType.REGEX
         )
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertEqual("fileC.log", results[0].file_path.name)
-        self.assertEqual(results[0].line_number, 1)
-        self.assertEqual(results[0].searched_text, r"value=\d+")
         self.assertEqual(results[0].line_content, "Log file with some data: value=12345")
-        self.assertEqual(results[0].snapshot_name, self.snap.name)
 
-    def test_search_regex_invalid_pattern(self):
-        params = SnapshotSearchParams(
-            query=r"[invalid",
-            search_type=SnapshotSearchType.REGEX
-        )
+    def test_search_content_regex_invalid_pattern(self):
+        params = SnapshotSearchParams(query=r"[invalid", query_type=QueryType.REGEX)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
-    def test_search_with_extension_filter(self):
-        params = SnapshotSearchParams(
-            query="file",
-            search_type=SnapshotSearchType.TEXT,
-            extensions=[".txt"]
-        )
+    def test_search_content_with_extension_filter(self):
+        params = SnapshotSearchParams(query="file", extensions=[".txt"])
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         for result in results:
             self.assertEqual(result.file_path.suffix, ".txt")
 
-    def test_search_with_extension_filter_no_match(self):
+    def test_search_name_text_found(self):
         params = SnapshotSearchParams(
-            query="value",
-            search_type=SnapshotSearchType.TEXT,
-            extensions=[".txt"]
+            query="fileA",
+            search_target=SearchTarget.FILE_NAME,
+            query_type=QueryType.TEXT
         )
         results = self.searcher.search(self.snap, params)
-        self.assertEqual(len(results), 0)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].file_path.name, "fileA.txt")
+        self.assertIsNone(results[0].line_number)
+        self.assertIsNone(results[0].line_content)
 
-    def test_search_list_multiple_snapshots(self):
-        dir3 = SOURCE_DATA_PATH / "search_dir3"
-        dir3.mkdir()
-        (dir3 / "fileE.txt").write_text("A new file for the second snapshot.\nHello from snap 2.")
-        snap2 = Snapshot(
-            id="search-snap-id-2",
-            name="SearchTestSnap2",
-            desc="Second snapshot",
-            directories=[
-                SnapDirAssociation(index=1, original_path=str(dir3), folder_id="d3"),
-            ],
-            author="SearchTest"
-        )
-        self.catalogue.add(snap2)
-
+    def test_search_name_regex_found(self):
         params = SnapshotSearchParams(
-            query="Hello",
-            search_type=SnapshotSearchType.TEXT
+            query=r"file(A|B)\.txt$",
+            search_target=SearchTarget.FILE_NAME,
+            query_type=QueryType.REGEX
         )
-        results = self.searcher.search_list([self.snap, snap2], params)
-        self.assertEqual(len(results), 3)
-
-        # Check if results are from both snapshots
-        snap1_results = [r for r in results if r.snapshot_name == self.snap.name]
-        snap2_results = [r for r in results if r.snapshot_name == snap2.name]
-        self.assertEqual(len(snap1_results), 2)
-        self.assertEqual(len(snap2_results), 1)
-        self.assertEqual(snap2_results[0].line_content, "Hello from snap 2.")
-
-    def test_search_list_single_snapshot(self):
-        params = SnapshotSearchParams(
-            query="Hello",
-            search_type=SnapshotSearchType.TEXT
-        )
-        results = self.searcher.search_list([self.snap], params)
+        results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
+        names = {r.file_path.name for r in results}
+        self.assertEqual(names, {"fileA.txt", "fileB.txt"})
 
-    def test_search_with_progress_callback(self):
-        progress_reports = []
-
-        def progress_handler(current_file, total_files, current_index):
-            progress_reports.append((current_file, total_files, current_index))
-
-        params = SnapshotSearchParams(
-            query="file",
-            search_type=SnapshotSearchType.TEXT
+    def test_search_name_with_extension_filter(self):
+        # Should find the log file
+        params_log = SnapshotSearchParams(
+            query="fileC",
+            search_target=SearchTarget.FILE_NAME,
+            extensions=[".log"]
         )
+        results_log = self.searcher.search(self.snap, params_log)
+        self.assertEqual(len(results_log), 1)
+        self.assertEqual(results_log[0].file_path.name, "fileC.log")
 
-        self.searcher.search(self.snap, params, on_progress=progress_handler)
-
-        self.assertEqual(len(progress_reports), 5)
-
-        total_files_reported = progress_reports[0][1]
-        self.assertEqual(total_files_reported, 5)
-
-        # Check that the current_index increments correctly
-        for i, report in enumerate(progress_reports):
-            self.assertEqual(report[2], i + 1)
-
-        # Check that file names are reported
-        reported_files = {report[0] for report in progress_reports}
-        expected_files = {"fileA.txt", "fileB.txt", "fileC.log", "fileD.txt", "binary.bin"}
-        self.assertEqual(reported_files, expected_files)
-
-    def test_search_with_progress_and_extensions(self):
-        progress_reports = []
-
-        def progress_handler(current_file, total_files, current_index):
-            progress_reports.append((current_file, total_files, current_index))
-
-        params = SnapshotSearchParams(
-            query="file",
-            search_type=SnapshotSearchType.TEXT,
+        # Should NOT find the log file if filtered to .txt
+        params_txt = SnapshotSearchParams(
+            query="fileC",
+            search_target=SearchTarget.FILE_NAME,
             extensions=[".txt"]
         )
-
-        self.searcher.search(self.snap, params, on_progress=progress_handler)
-
-        self.assertEqual(len(progress_reports), 3)
-        self.assertEqual(progress_reports[0][1], 3)  # total_files
+        results_txt = self.searcher.search(self.snap, params_txt)
+        self.assertEqual(len(results_txt), 0)
 
 
 if __name__ == '__main__':

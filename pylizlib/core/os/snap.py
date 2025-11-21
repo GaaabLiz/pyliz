@@ -1299,17 +1299,25 @@ class SnapshotCatalogue:
 class SnapshotSearchResult:
     """
     Represents a single search result within a snapshot file.
+    Can be a match in file content or a match of a file name.
     """
     file_path: Path
     searched_text: str
-    line_number: int
-    line_content: str
     snapshot_name: str
+    line_number: Optional[int] = None
+    line_content: Optional[str] = None
 
 
-class SnapshotSearchType(Enum):
+class QueryType(Enum):
+    """Specifies whether a search query is plain text or a regular expression."""
     TEXT = "text"
     REGEX = "regex"
+
+
+class SearchTarget(Enum):
+    """Specifies whether to search for a file name or within file content."""
+    FILE_NAME = "name"
+    FILE_CONTENT = "content"
 
 
 @dataclass
@@ -1318,7 +1326,8 @@ class SnapshotSearchParams:
     Parameters for searching within a snapshot.
     """
     query: str
-    search_type: SnapshotSearchType = SnapshotSearchType.TEXT
+    search_target: SearchTarget = SearchTarget.FILE_CONTENT
+    query_type: QueryType = QueryType.TEXT
     extensions: list[str] = field(default_factory=list)
 
 
@@ -1351,7 +1360,7 @@ class SnapshotSearcher:
         snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
 
         compiled_regex = None
-        if params.search_type == SnapshotSearchType.REGEX:
+        if params.query_type == QueryType.REGEX:
             try:
                 compiled_regex = re.compile(params.query)
             except re.error as e:
@@ -1412,7 +1421,23 @@ class SnapshotSearcher:
             if on_progress:
                 on_progress(file_path.name, total_files, i + 1)
 
-            results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
+            if params.search_target == SearchTarget.FILE_NAME:
+                found = False
+                if params.query_type == QueryType.TEXT:
+                    if params.query in file_path.name:
+                        found = True
+                elif compiled_regex and compiled_regex.search(file_path.name):
+                    found = True
+                
+                if found:
+                    results.append(SnapshotSearchResult(
+                        file_path=file_path,
+                        searched_text=params.query,
+                        snapshot_name=snapshot.name
+                    ))
+            
+            elif params.search_target == SearchTarget.FILE_CONTENT:
+                results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
 
         return results
 
@@ -1452,7 +1477,7 @@ class SnapshotSearcher:
             with file_path.open('r', encoding='utf-8') as f:
                 for i, line in enumerate(f, 1):
                     found = False
-                    if params.search_type == SnapshotSearchType.TEXT:
+                    if params.query_type == QueryType.TEXT:
                         if params.query in line:
                             found = True
                     elif compiled_regex and compiled_regex.search(line):
