@@ -406,6 +406,40 @@ class TestSnapshotCatalogue(unittest.TestCase):
         added_dir_name = snap_new.directories[-1].directory_name
         self.assertIn(added_dir_name, dir_names_in_snap)
 
+    def test_export_catalogue(self):
+        # 1. Add multiple snapshots to the catalogue
+        snap1 = create_test_snapshot("CatalogueExportSnap1", num_dirs=1)
+        snap2 = create_test_snapshot("CatalogueExportSnap2", num_dirs=2)
+        self.catalogue.add(snap1)
+        self.catalogue.add(snap2)
+
+        # 2. Export the entire catalogue
+        export_dest = TEST_LOCAL_ROOT / "catalogue_exports"
+        export_filename = "my_catalogue.zip"
+        self.catalogue.export_catalogue(export_dest, file_name=export_filename)
+
+        # 3. Verify the zip file was created
+        export_zip_path = export_dest / export_filename
+        self.assertTrue(export_zip_path.exists())
+
+        # 4. Verify the zip contents
+        with zipfile.ZipFile(export_zip_path, 'r') as zf:
+            zipped_files = zf.namelist()
+
+            # Check for snap1 files
+            snap1_prefix = f"{snap1.id}/"
+            self.assertIn(snap1_prefix + self.settings.json_filename, zipped_files)
+            dir1_in_snap1_name = snap1.directories[0].directory_name
+            self.assertIn(f"{snap1_prefix}{dir1_in_snap1_name}/file1.txt", zipped_files)
+
+            # Check for snap2 files
+            snap2_prefix = f"{snap2.id}/"
+            self.assertIn(snap2_prefix + self.settings.json_filename, zipped_files)
+            dir1_in_snap2_name = snap2.directories[0].directory_name
+            dir2_in_snap2_name = snap2.directories[1].directory_name
+            self.assertIn(f"{snap2_prefix}{dir1_in_snap2_name}/file1.txt", zipped_files)
+            self.assertIn(f"{snap2_prefix}{dir2_in_snap2_name}/file2.txt", zipped_files)
+
     def test_duplicate_by_id(self):
         snap1 = create_test_snapshot("SnapToDuplicate")
         self.catalogue.add(snap1)
@@ -422,6 +456,67 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertEqual(duplicated_snap.name, original_snap.name + " Copy")
         self.assertNotEqual(duplicated_snap.id, original_snap.id)
         self.assertEqual(len(duplicated_snap.directories), len(original_snap.directories))
+
+    def test_import_catalogue(self):
+        # 1. Create and export a catalogue with two snapshots
+        snap1 = create_test_snapshot("ImpCatSnap1", num_dirs=1)
+        snap2 = create_test_snapshot("ImpCatSnap2", num_dirs=2)
+        self.catalogue.add(snap1)
+        self.catalogue.add(snap2)
+
+        export_dest = TEST_LOCAL_ROOT / "catalogue_exports"
+        export_filename = "import_test_catalogue.zip"
+        self.catalogue.export_catalogue(export_dest, file_name=export_filename)
+        export_zip_path = export_dest / export_filename
+        self.assertTrue(export_zip_path.exists())
+
+        # 2. Clear the catalogue to simulate a fresh import environment
+        self.catalogue.delete(snap1)
+        self.catalogue.delete(snap2)
+        self.assertEqual(len(self.catalogue.get_all()), 0)
+
+        # 3. Import the catalogue
+        self.catalogue.import_catalogue(export_zip_path)
+
+        # 4. Verify the import
+        all_snaps = self.catalogue.get_all()
+        self.assertEqual(len(all_snaps), 2)
+        imported_ids = {s.id for s in all_snaps}
+        self.assertIn(snap1.id, imported_ids)
+        self.assertIn(snap2.id, imported_ids)
+        self.assertTrue((CATALOGUE_PATH / snap1.id).exists())
+        self.assertTrue((CATALOGUE_PATH / snap2.id).exists())
+
+    def test_import_catalogue_skip_existing(self):
+        # 1. Create and export a catalogue
+        snap1 = create_test_snapshot("SkipSnap1", num_dirs=1)
+        snap2 = create_test_snapshot("SkipSnap2", num_dirs=1)
+        self.catalogue.add(snap1)
+        self.catalogue.add(snap2)
+        export_dest = TEST_LOCAL_ROOT / "catalogue_exports_skip"
+        export_zip_path = export_dest / "skip_test.zip"
+        self.catalogue.export_catalogue(export_dest, file_name="skip_test.zip")
+
+        # 2. Clear the catalogue and add back only one of the snapshots
+        self.catalogue.delete(snap1)
+        self.catalogue.delete(snap2)
+        self.catalogue.add(snap1)
+        self.assertEqual(len(self.catalogue.get_all()), 1)
+
+        # 3. Import the catalogue and check for logging
+        with patch('pylizlib.core.log.pylizLogger.logger.info') as mock_info:
+            self.catalogue.import_catalogue(export_zip_path)
+            # Verify that the existing snapshot was skipped
+            mock_info.assert_any_call(f"Snapshot with ID '{snap1.id}' already exists. Skipping import.")
+            # Verify the new one was imported
+            mock_info.assert_any_call(f"Successfully imported snapshot with ID '{snap2.id}'.")
+
+        # 4. Verify the final state
+        all_snaps = self.catalogue.get_all()
+        self.assertEqual(len(all_snaps), 2)
+        final_ids = {s.id for s in all_snaps}
+        self.assertIn(snap1.id, final_ids)
+        self.assertIn(snap2.id, final_ids)
 
     def test_install(self):
         snap1 = create_test_snapshot("SnapToInstall", num_dirs=1)
