@@ -87,7 +87,11 @@ build-uv:
 	uv build
 
 build-exe:
+ifeq ($(shell uname), Darwin)
+	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICNS) --name=$(APP_NAME) $(FILE_MAIN)
+else
 	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN)
+endif
 
 docs-gen:
 	pdoc -o docs -d markdown $(PYTHON_MAIN_PACKAGE)
