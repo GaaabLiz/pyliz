@@ -1,9 +1,11 @@
 import json
 import os
+from datetime import datetime
 from typing import Optional, List
 
 import cv2
 import ffmpeg
+from PIL import Image, ExifTags
 from sd_parsers import ParserManager
 from sd_parsers.data import PromptInfo
 
@@ -129,3 +131,17 @@ class LizMedia:
         self.ai_tags = ai_info.tags
         self.ai_scanned = True
 
+    def get_creation_date(self) -> datetime:
+        if self.is_image:
+            try:
+                with Image.open(self.path) as img:
+                    exif = img._getexif()
+                    if exif:
+                        for tag, value in exif.items():
+                            decoded = ExifTags.TAGS.get(tag, tag)
+                            if decoded == 'DateTimeOriginal':
+                                return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+            except Exception as e:
+                logger.error(f"Error reading EXIF data from {self.path}: {e}")
+
+        return self.creation_time
