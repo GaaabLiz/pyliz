@@ -60,6 +60,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.68
 - Bump version to 0.3.69
 - Bump version to 0.3.70
+- Bump version to 0.3.71
 
 ### ♻️ Refactor
 
@@ -157,6 +158,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.65
 - Update changelog for 0.3.67
 - Update changelog for 0.3.69
+- Update changelog for 0.3.70
 
 ### 🚀 Features
 
@@ -261,6 +263,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Refactor search functionality to support file name and content queries
 - Add eaglecool optional dependency and initialize package structure
 - Add Eagle media reader and metadata models
+- Add get_creation_date method to LizMedia for EXIF metadata extraction
 
 ### 🧪 Testing
 
