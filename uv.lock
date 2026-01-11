@@ -646,15 +646,17 @@ wheels = [
 
 [[package]]
 name = "pylizlib"
-version = "0.3.70"
+version = "0.3.71"
 source = { editable = "." }
 dependencies = [
+    { name = "pillow" },
     { name = "psutil" },
     { name = "python-dotenv" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "requests" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "sd-parsers" },
     { name = "typer" },
 ]
 
@@ -693,6 +695,7 @@ requires-dist = [
     { name = "ffmpeg-python", marker = "extra == 'media'", specifier = ">=0.2.0" },
     { name = "numpy", marker = "extra == 'media'", specifier = ">=2.3.3" },
     { name = "opencv-python", marker = "extra == 'media'", specifier = ">=4.11.0.86" },
+    { name = "pillow", specifier = ">=12.0.0" },
     { name = "pillow", marker = "extra == 'media'", specifier = ">=11.3.0" },
     { name = "psutil", specifier = ">=7.1.0" },
     { name = "pydantic", marker = "extra == 'eaglecool'", specifier = ">=2.11.9" },
@@ -705,6 +708,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rich", specifier = ">=14.0.0" },
     { name = "ruff", specifier = ">=0.14.0" },
+    { name = "sd-parsers", specifier = ">=0.6" },
     { name = "sd-parsers", marker = "extra == 'media'", specifier = ">=0.6" },
     { name = "typer", specifier = ">=0.15.2" },
 ]

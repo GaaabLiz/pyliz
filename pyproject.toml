@@ -1,6 +1,6 @@
 [project]
 name = "pylizlib"
-version = "0.3.70"
+version = "0.3.71"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,12 +8,14 @@ authors = [
     {name = "Gabliz", email = "gabliz.dev@gmail.com"},
 ]
 dependencies = [
+    "pillow>=12.0.0",
     "psutil>=7.1.0",
     "python-dotenv>=1.1.0",
     "pywin32>=1.0 ; sys_platform == 'win32'",
     "requests>=2.32.3",
     "rich>=14.0.0",
     "ruff>=0.14.0",
+    "sd-parsers>=0.6",
     "typer>=0.15.2",
 ]
 
