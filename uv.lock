@@ -659,6 +659,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+eaglecool = [
+    { name = "pydantic" },
+]
 media = [
     { name = "ffmpeg-python" },
     { name = "numpy" },
@@ -692,6 +695,7 @@ requires-dist = [
     { name = "opencv-python", marker = "extra == 'media'", specifier = ">=4.11.0.86" },
     { name = "pillow", marker = "extra == 'media'", specifier = ">=11.3.0" },
     { name = "psutil", specifier = ">=7.1.0" },
+    { name = "pydantic", marker = "extra == 'eaglecool'", specifier = ">=2.11.9" },
     { name = "pydantic", marker = "extra == 'media'", specifier = ">=2.11.9" },
     { name = "pyside6", marker = "extra == 'qt'", specifier = ">=6.9.2" },
     { name = "pyside6", marker = "extra == 'qtfw'", specifier = ">=6.9.2" },
@@ -704,7 +708,7 @@ requires-dist = [
     { name = "sd-parsers", marker = "extra == 'media'", specifier = ">=0.6" },
     { name = "typer", specifier = ">=0.15.2" },
 ]
-provides-extras = ["qt", "media", "qtfw"]
+provides-extras = ["qt", "media", "qtfw", "eaglecool"]
 
 [package.metadata.requires-dev]
 dev = [
