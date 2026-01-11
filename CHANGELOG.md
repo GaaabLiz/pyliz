@@ -10,6 +10,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 - Refactor build process and add installer target
 - Update clean targets and rename build command
+- Add macOS icon support and fix FILE_MAIN path
 
 ### Bump
 
@@ -58,6 +59,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.67
 - Bump version to 0.3.68
 - Bump version to 0.3.69
+- Bump version to 0.3.70
 
 ### ♻️ Refactor
 
@@ -96,6 +98,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.15 and update release workflow for improved changelog generation
 - Bump version to 0.3.17 and update release workflow for Linux and macOS builds
 - Update dependencies to include pytest and related packages
+- Add logo icon resources in various resolutions
 
 ### 🐛 Bug Fixes
 
@@ -153,6 +156,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.64
 - Update changelog for 0.3.65
 - Update changelog for 0.3.67
+- Update changelog for 0.3.69
 
 ### 🚀 Features
 
@@ -255,6 +259,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add export and import functionality for snapshot catalogue
 - Add export and import functionality for snapshot catalogue tests
 - Refactor search functionality to support file name and content queries
+- Add eaglecool optional dependency and initialize package structure
+- Add Eagle media reader and metadata models
 
 ### 🧪 Testing
 
