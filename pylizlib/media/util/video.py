@@ -135,3 +135,34 @@ class VideoUtils:
         # Rilascia la cattura del video e chiudi le finestre
         cap.release()
         cv2.destroyAllWindows()
+
+    @staticmethod
+    def get_video_duration_seconds(path: str) -> float | None:
+        try:
+            probe = ffmpeg.probe(path)
+            duration = float(probe['format']['duration'])
+            return duration
+        except Exception as e:
+            logger.error(f"Error getting video duration: {str(e)}")
+        return None
+
+    @staticmethod
+    def get_video_frame_rate(path: str) -> float | None:
+        """
+        Restituisce il frame rate (FPS) del video.
+        """
+        try:
+            video = cv2.VideoCapture(path)
+            if not video.isOpened():
+                logger.error("Errore: impossibile aprire il video.")
+                return None
+
+            # Ottieni il frame rate
+            fps = video.get(cv2.CAP_PROP_FPS)
+            video.release()
+
+            # Ritorna il valore di FPS
+            return fps
+        except Exception as e:
+            logger.error(f"Errore nel calcolo del frame rate del video: {e}")
+            return None
