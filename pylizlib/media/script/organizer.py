@@ -4,7 +4,7 @@ import typer
 from rich import print
 
 from pylizlib.media import media_app
-from pylizlib.media.compute.organizer import MediaOrganizer
+from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
 from pylizlib.media.compute.searcher import MediaSearcher
 from pylizlib.media.lizmedia2 import LizMedia
 
@@ -93,15 +93,15 @@ def organizer(
         raise typer.Exit(code=0)
 
     # Organizing files
-    no_progress: bool = False
-    daily: bool = False
-    copy: bool = True
-    no_year: bool = False
-    delete_duplicates: bool = False
-    exif: bool = True
-
-    MediaOrganizer(media_global, output).organize(
-        no_progress=no_progress, daily=daily, copy=copy,
-        no_year=no_year, delete_duplicates=delete_duplicates, dry_run=dry, exif=exif
+    options = OrganizerOptions(
+        no_progress=False,
+        daily=False,
+        copy=True,
+        no_year=False,
+        delete_duplicates=False,
+        dry_run=dry,
+        exif=True
     )
+
+    MediaOrganizer(media_global, output).organize(options)
 

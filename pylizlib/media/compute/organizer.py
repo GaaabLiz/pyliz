@@ -2,12 +2,24 @@ import hashlib
 import os
 import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from rich import print
 from tqdm import tqdm
 
 from pylizlib.media.lizmedia2 import LizMedia
+
+
+@dataclass
+class OrganizerOptions:
+    no_progress: bool = False
+    daily: bool = False
+    copy: bool = False
+    no_year: bool = False
+    delete_duplicates: bool = False
+    dry_run: bool = False
+    exif: bool = False
 
 
 class MediaOrganizer:
@@ -20,10 +32,7 @@ class MediaOrganizer:
         self.media_list = media_list
         self.target = target
 
-    def organize(self, no_progress: bool = False, daily: bool = False,
-                 copy: bool = False, no_year: bool = False,
-                 delete_duplicates: bool = False, dry_run: bool = False,
-                 exif: bool = False) -> tuple[int, list[str]]:
+    def organize(self, options: OrganizerOptions) -> tuple[int, list[str]]:
         """
         Organize files from *source* into *target* according to the provided options.
 
@@ -33,11 +42,11 @@ class MediaOrganizer:
         failed_files = []
         success_count = 0
 
-        if dry_run:
+        if options.dry_run:
             print("[yellow]Dry run mode enabled - no actual file operations will be performed[/yellow]")
 
         # Prepare iteration
-        file_iter = self.media_list if no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
+        file_iter = self.media_list if options.no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
 
         for media_item in file_iter:
             file_path = str(media_item.path)
@@ -49,7 +58,7 @@ class MediaOrganizer:
                 continue
 
             # Determine date and original timestamp
-            if exif and media_item.is_image:
+            if options.exif and media_item.is_image:
                 creation_date = media_item.creation_date_from_exif_or_file
                 year, month, day = creation_date.year, creation_date.month, creation_date.day
                 original_timestamp = creation_date.timestamp()
@@ -58,15 +67,15 @@ class MediaOrganizer:
                 original_timestamp = media_item.creation_time.timestamp()
 
             # Build target path
-            target_folder = self._build_target_folder_path(self.target, year, month, day, no_year, daily)
+            target_folder = self._build_target_folder_path(self.target, year, month, day, options.no_year, options.daily)
             target_path = os.path.join(target_folder, os.path.basename(sanitized_path))
 
-            if not dry_run:
+            if not options.dry_run:
                 self._ensure_directory_exists(target_folder)
 
             # Handle existing files (duplicates/conflicts)
             if os.path.exists(target_path):
-                if self._handle_existing_file(file_path, target_path, delete_duplicates, dry_run):
+                if self._handle_existing_file(file_path, target_path, options.delete_duplicates, options.dry_run):
                      # Continue means we skipped or deleted, so we move to next file
                      # If handle_existing_file returns True, it means "skip/handled", continue loop
                      continue
@@ -76,15 +85,15 @@ class MediaOrganizer:
                     continue
 
             # Execute move or copy
-            if self._execute_transfer(file_path, target_path, target_folder, copy, dry_run, original_timestamp):
+            if self._execute_transfer(file_path, target_path, target_folder, options.copy, options.dry_run, original_timestamp):
                 success_count += 1
-                if no_progress:
+                if options.no_progress:
                      print(f"Processed {file_path} -> {target_path}")
             else:
                 failed_files.append(file_path)
 
         # Cleanup progress bar
-        if not no_progress and hasattr(file_iter, "close"):
+        if not options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
         print(f"Organized {success_count} files")
