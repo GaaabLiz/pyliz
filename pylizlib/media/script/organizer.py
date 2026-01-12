@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from pylizlib.eaglecool.reader import EagleMediaReader
 from pylizlib.media import media_app
+from pylizlib.media.compute.searcher import MediaSearcher
 from pylizlib.media.lizmedia2 import LizMedia
 
 
@@ -85,7 +86,11 @@ def organizer(
         typer.echo(f"🚫 Exclude pattern: {exclude})")
 
     # Searching file to organize
-    media_global: List[LizMedia] = __search_media(path, eaglecatalog, eagletag, exclude, dry)
+    searcher = MediaSearcher(path)
+    if eaglecatalog:
+        media_global: List[LizMedia] = searcher.search_eagle_catalog(eagletag)
+    else:
+        media_global: List[LizMedia] = searcher.search_file_system(exclude, dry)
     print("\n")
     print(f"Found {len(media_global)} files to process.")
     print("\n\n")
@@ -103,62 +108,6 @@ def organizer(
 
     __organize_files(media_global, output, no_progress=no_progress, daily=daily, copy=copy,
                      no_year=no_year, delete_duplicates=delete_duplicates, dry_run=dry, exif=exif)
-
-
-def __search_media(path: str, eaglecatalog: bool, eagletag: Optional[List[str]], exclude, dry: bool) -> List[LizMedia]:
-    media_global: List[LizMedia] = []
-
-    if not eaglecatalog:
-
-        exclude_regex = None
-        if exclude:
-            try:
-                exclude_regex = re.compile(exclude)
-            except re.error as e:
-                print(f"Error compiling regex '{exclude}': {e}")
-                raise typer.Exit(code=1)
-
-        print(f"Scanning directory: {path} ...")
-        for root, _, files in os.walk(path):
-            for file in files:
-                # Check exclude pattern
-                if exclude_regex and exclude_regex.search(file):
-                    if dry:
-                        print(f"  Skipping (regex match): {file}")
-                    continue
-
-                try:
-                    media_global.append(LizMedia(Path(root) / file))
-                except ValueError:
-                    # Not a media file, skip silently or log if needed
-                    pass
-    else:
-        skipped_media = []
-        reader = EagleMediaReader(Path(path))
-        eagles = reader.run()
-        for eagle in eagles:
-            try:
-                if eagletag:
-                    if not eagle.metadata:
-                        print("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
-                        skipped_media.append(eagle.media_path)
-                        continue
-                    if not any(tag in eagle.metadata.tags for tag in eagletag):
-                        print(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
-                        continue
-                lizmedia = LizMedia(eagle.media_path)
-                lizmedia.attach_eagle_metadata(eagle.metadata)
-                media_global.append(lizmedia)
-                print(f"[green]Added Eagle media: {eagle.media_path}[/green]")
-            except ValueError as e:
-                print(f"[red]Error: {eagle.media_path}: {e}[/red]")
-                pass
-
-        if skipped_media:
-            print("\n")
-            print(f"[yellow]Skipped {len(skipped_media)} Eagle media due to missing metadata or tag mismatch.[/yellow]")
-
-    return media_global
 
 
 def _sanitize_path(path: str) -> str:
