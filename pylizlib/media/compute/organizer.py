@@ -28,11 +28,12 @@ class MediaOrganizer:
     based on their creation date (from EXIF or filesystem).
     """
 
-    def __init__(self, media_list: list[LizMedia], target: str):
+    def __init__(self, media_list: list[LizMedia], target: str, options: OrganizerOptions):
         self.media_list = media_list
         self.target = target
+        self.options = options
 
-    def organize(self, options: OrganizerOptions) -> tuple[int, list[str]]:
+    def organize(self) -> tuple[int, list[str]]:
         """
         Organize files from *source* into *target* according to the provided options.
 
@@ -42,11 +43,11 @@ class MediaOrganizer:
         failed_files = []
         success_count = 0
 
-        if options.dry_run:
+        if self.options.dry_run:
             print("[yellow]Dry run mode enabled - no actual file operations will be performed[/yellow]")
 
         # Prepare iteration
-        file_iter = self.media_list if options.no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
+        file_iter = self.media_list if self.options.no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
 
         for media_item in file_iter:
             file_path = str(media_item.path)
@@ -58,7 +59,7 @@ class MediaOrganizer:
                 continue
 
             # Determine date and original timestamp
-            if options.exif and media_item.is_image:
+            if self.options.exif and media_item.is_image:
                 creation_date = media_item.creation_date_from_exif_or_file
                 year, month, day = creation_date.year, creation_date.month, creation_date.day
                 original_timestamp = creation_date.timestamp()
@@ -67,17 +68,16 @@ class MediaOrganizer:
                 original_timestamp = media_item.creation_time.timestamp()
 
             # Build target path
-            target_folder = self._build_target_folder_path(self.target, year, month, day, options.no_year, options.daily)
+            target_folder = self._build_target_folder_path(self.target, year, month, day)
             target_path = os.path.join(target_folder, os.path.basename(sanitized_path))
 
-            if not options.dry_run:
+            if not self.options.dry_run:
                 self._ensure_directory_exists(target_folder)
 
             # Handle existing files (duplicates/conflicts)
             if os.path.exists(target_path):
-                if self._handle_existing_file(file_path, target_path, options.delete_duplicates, options.dry_run):
+                if self._handle_existing_file(file_path, target_path):
                      # Continue means we skipped or deleted, so we move to next file
-                     # If handle_existing_file returns True, it means "skip/handled", continue loop
                      continue
                 else:
                     # If returns False, it means conflict error
@@ -85,35 +85,33 @@ class MediaOrganizer:
                     continue
 
             # Execute move or copy
-            if self._execute_transfer(file_path, target_path, target_folder, options.copy, options.dry_run, original_timestamp):
+            if self._execute_transfer(file_path, target_path, target_folder, original_timestamp):
                 success_count += 1
-                if options.no_progress:
+                if self.options.no_progress:
                      print(f"Processed {file_path} -> {target_path}")
             else:
                 failed_files.append(file_path)
 
         # Cleanup progress bar
-        if not options.no_progress and hasattr(file_iter, "close"):
+        if not self.options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
         print(f"Organized {success_count} files")
         return success_count, failed_files
 
-    def _build_target_folder_path(self, base_target: str, year: int, month: int, day: int,
-                                  no_year: bool, daily: bool) -> str:
+    def _build_target_folder_path(self, base_target: str, year: int, month: int, day: int) -> str:
         """Constructs the target folder path based on date options."""
         folder_parts = [base_target]
-        if no_year:
+        if self.options.no_year:
             folder_parts.append(f"{str(year)}-{month:02d}")
         else:
             folder_parts.append(str(year))
             folder_parts.append(f"{month:02d}")
-        if daily:
+        if self.options.daily:
             folder_parts.append(f"{day:02d}")
         return os.path.join(*folder_parts)
 
-    def _handle_existing_file(self, source_path: str, target_path: str,
-                              delete_duplicates: bool, dry_run: bool) -> bool:
+    def _handle_existing_file(self, source_path: str, target_path: str) -> bool:
         """
         Checks if file exists and handles duplicates.
         Returns True if the file loop should continue (skipped or deleted),
@@ -124,16 +122,13 @@ class MediaOrganizer:
 
         if source_hash == target_hash:
             # Exact match - handle as duplicate
-            if delete_duplicates:
+            if self.options.delete_duplicates:
                 try:
-                    if not dry_run:
+                    if not self.options.dry_run:
                         os.remove(source_path)
                     print(f"[cyan]Deleted duplicate '{source_path}' (matches existing)[/cyan]")
                 except Exception as e:
                     print(f"[red]Error deleting duplicate '{source_path}': {e}[/red]")
-                    # Return False to treat as failure because we couldn't delete as requested
-                    # But technically we might want to just skip?
-                    # The original logic appended to failed_files if delete failed.
                     return False 
             else:
                 print(f"[cyan]Skipping '{source_path}': Identical file already exists[/cyan]")
@@ -143,18 +138,17 @@ class MediaOrganizer:
             print(f"[red]File conflict: '{target_path}' already exists but is different[/red]")
             return False
 
-    def _execute_transfer(self, source_path: str, target_path: str, target_folder: str,
-                          copy: bool, dry_run: bool, original_timestamp: float) -> bool:
+    def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float) -> bool:
         """
         Moves or copies the file and restores timestamps.
         Returns True on success, False on error.
         """
         try:
-            if not dry_run:
+            if not self.options.dry_run:
                 if not os.access(target_folder, os.W_OK):
                     raise PermissionError(f"Write permission denied for {target_folder}")
 
-                if copy:
+                if self.options.copy:
                     shutil.copy2(source_path, target_path)
                 else:
                     shutil.move(source_path, target_path)

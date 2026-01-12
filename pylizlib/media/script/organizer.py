@@ -103,5 +103,5 @@ def organizer(
         exif=True
     )
 
-    MediaOrganizer(media_global, output).organize(options)
+    MediaOrganizer(media_global, output, options).organize()
 
