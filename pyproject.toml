@@ -10,6 +10,7 @@ authors = [
 dependencies = [
     "pillow>=12.0.0",
     "psutil>=7.1.0",
+    "pydantic>=2.12.3",
     "python-dotenv>=1.1.0",
     "pywin32>=1.0 ; sys_platform == 'win32'",
     "requests>=2.32.3",
@@ -21,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 pyliz = "pylizlib.core.cli:app"
+pylizmedia = "pylizlib.media.cli:app"
 qtliz = "pylizlib.qt.cli:app"
 
 [project.optional-dependencies]
