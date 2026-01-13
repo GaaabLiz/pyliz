@@ -17,12 +17,33 @@ from pylizlib.media.util.video import VideoUtils
 # noinspection DuplicatedCode
 @dataclass
 class LizMedia:
+
+    """
+    Represents a media file (Image, Video, Audio) and provides access to its metadata and properties.
+
+    This class serves as a wrapper around a file path, offering utility properties to access
+    common file attributes (size, dates), media-specific data (EXIF, video duration), and
+    integration with other tools like Eagle (metadata).
+
+    Attributes:
+        path (Path): The file system path to the media file.
+        eagle_metadata_path (Path | None): Optional path to an associated Eagle metadata file.
+        eagle_metadata (Metadata | None): Optional loaded Eagle metadata object.
+    """
     path: Path
     eagle_metadata_path: Path | None = None
     eagle_metadata: Metadata | None = None
 
 
     def __post_init__(self):
+        """
+        Validates the media file after initialization.
+
+        Checks if the provided path corresponds to a recognized media file type.
+
+        Raises:
+            ValueError: If the file at `self.path` is not identified as a valid media file.
+        """
         if not is_media_file(self.path.__str__()):
             raise ValueError(f"File {self.path} is not a media file.")
 
@@ -31,54 +52,134 @@ class LizMedia:
 
     @property
     def file_name(self) -> str:
+        """
+        Gets the name of the file including the extension.
+
+        Returns:
+            str: The filename (e.g., "image.png").
+        """
         return self.path.name
 
     @property
     def extension(self) -> str:
+        """
+        Gets the file extension in lowercase.
+
+        Returns:
+            str: The file extension (e.g., ".jpg").
+        """
         return self.path.suffix.lower()
 
     @property
     def creation_time(self) -> datetime:
+        """
+        Gets the creation date and time of the file.
+
+        Uses the file system's creation time metadata.
+
+        Returns:
+            datetime: The creation timestamp as a datetime object.
+        """
         return get_file_c_date(self.path.__str__())
 
     @property
     def creation_time_timestamp(self) -> float:
+        """
+        Gets the creation time as a POSIX timestamp.
+
+        Returns:
+            float: The creation time in seconds since the epoch.
+        """
         return self.creation_time.timestamp()
 
     @property
     def year(self) -> int:
+        """
+        Gets the year component of the file's creation date.
+
+        Returns:
+            int: The year (e.g., 2023).
+        """
         return self.creation_time.year
 
     @property
     def month(self) -> int:
+        """
+        Gets the month component of the file's creation date.
+
+        Returns:
+            int: The month (1-12).
+        """
         return self.creation_time.month
 
     @property
     def day(self) -> int:
+        """
+        Gets the day component of the file's creation date.
+
+        Returns:
+            int: The day of the month (1-31).
+        """
         return self.creation_time.day
 
     @property
     def size_byte(self) -> int:
+        """
+        Gets the file size in bytes.
+
+        Returns:
+            int: The size of the file in bytes.
+        """
         return os.path.getsize(self.path.__str__())
 
     @property
     def size_mb(self) -> float:
+        """
+        Gets the file size in megabytes.
+
+        Returns:
+            float: The size of the file in MB.
+        """
         return self.size_byte / (1024 * 1024)
 
     @property
     def type(self) -> FileType:
+        """
+        Determines the type of the media file (Image, Video, etc.).
+
+        Returns:
+            FileType: An enum representing the file type.
+        """
         return get_file_type(self.path.__str__())
 
     @property
     def is_image(self) -> bool:
+        """
+        Checks if the file is an image.
+
+        Returns:
+            bool: True if the file is an image, False otherwise.
+        """
         return self.type == FileType.IMAGE
 
     @property
     def is_video(self) -> bool:
+        """
+        Checks if the file is a video.
+
+        Returns:
+            bool: True if the file is a video, False otherwise.
+        """
         return self.type == FileType.VIDEO
 
     @property
     def is_audio(self) -> bool:
+        """
+        Checks if the file is an audio file.
+
+        Returns:
+            bool: True if the file is audio, False otherwise.
+        """
         return self.type == FileType.AUDIO
 
 
@@ -87,6 +188,15 @@ class LizMedia:
 
     @property
     def stable_diffusion_metadata(self) -> PromptInfo | None:
+        """
+        Attempts to retrieve Stable Diffusion generation metadata from the image.
+
+        Uses `sd_parsers` to extract prompt information from supported image formats.
+        Logs an error if parsing fails.
+
+        Returns:
+            PromptInfo | None: The parsed prompt information if available, otherwise None.
+        """
         if not self.is_image:
             return None
         try:
@@ -100,6 +210,13 @@ class LizMedia:
 
     @property
     def creation_date_from_exif_or_file(self) -> datetime:
+        """
+        Retrieves the creation date from EXIF data (DateTimeOriginal) if available.
+        Falls back to the file system creation time if EXIF data is missing or unreadable.
+
+        Returns:
+            datetime: The determined creation date.
+        """
         if self.is_image:
             try:
                 with Image.open(self.path) as img:
@@ -116,6 +233,12 @@ class LizMedia:
 
     @property
     def has_exif_data(self) -> bool:
+        """
+        Checks if the image file contains any EXIF metadata.
+
+        Returns:
+            bool: True if EXIF data is present, False otherwise (or if not an image).
+        """
         if self.is_image:
             try:
                 with Image.open(self.path) as img:
@@ -130,6 +253,14 @@ class LizMedia:
 
     @property
     def ai_generated(self) -> bool:
+        """
+        Determines if the media file is likely AI-generated.
+
+        Currently checks for the presence of Stable Diffusion metadata.
+
+        Returns:
+            bool: True if AI generation metadata is found, False otherwise.
+        """
         metadata = self.stable_diffusion_metadata
         return metadata is not None
 
@@ -139,12 +270,24 @@ class LizMedia:
 
     @property
     def duration_sec(self) -> float | None:
+        """
+        Gets the duration of the video in seconds.
+
+        Returns:
+            float | None: The duration in seconds, or None if not a video or duration cannot be determined.
+        """
         if not self.is_video:
             return None
         return VideoUtils.get_video_duration_seconds(self.path.__str__())
 
     @property
     def duration_min(self) -> float | None:
+        """
+        Gets the duration of the video in minutes.
+
+        Returns:
+            float | None: The duration in minutes, or None if not a video.
+        """
         if not self.is_video:
             return None
         duration = self.duration_sec
@@ -154,6 +297,12 @@ class LizMedia:
 
     @property
     def frame_rate(self) -> float | None:
+        """
+        Gets the frame rate (FPS) of the video.
+
+        Returns:
+            float | None: The frame rate, or None if not a video or cannot be determined.
+        """
         if not self.is_video:
             return None
         return VideoUtils.get_video_frame_rate(self.path.__str__())
@@ -165,13 +314,18 @@ class LizMedia:
 
     def attach_eagle_metadata_path(self, eagle_metadata_path: Path):
         """
-        Attaches Eagle metadata file path to the LizMedia instance.
+        Attaches the path of an associated Eagle metadata file to this instance.
+
+        Args:
+            eagle_metadata_path (Path): The path to the metadata file.
         """
         self.eagle_metadata_path = eagle_metadata_path
 
     def attach_eagle_metadata(self, metadata: Metadata):
         """
-        Attaches Eagle metadata to the LizMedia instance.
+        Attaches a loaded Eagle metadata object to this instance.
+
+        Args:
+            metadata (Metadata): The metadata object to attach.
         """
         self.eagle_metadata = metadata
-
