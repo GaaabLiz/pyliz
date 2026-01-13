@@ -9,7 +9,7 @@ from pylizlib.core.domain.operation import Operation
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
 
-image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg']
+image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg', '.heic', '.heif', '.webp', '.ico', '.dng']
 video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']
 audio_extensions = ['.mp3', '.wav', '.ogg', '.flac', '.wma', '.aac', '.m4a']
 text_extensions = ['.txt', '.doc', '.docx', '.pdf', '.odt', '.rtf', '.tex']
