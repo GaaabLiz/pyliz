@@ -1,7 +1,8 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 from PIL import Image, ExifTags
 from sd_parsers import ParserManager
@@ -14,10 +15,30 @@ from pylizlib.eaglecool.model.metadata import Metadata
 from pylizlib.media.util.video import VideoUtils
 
 
+@dataclass
+class MediaListResult:
+    """
+    Represents a collection of media files, distinguishing between those successfully found
+    and those that were skipped during a search or process.
+
+    Attributes:
+        media_list (List[LizMedia]): Successfully identified and processed media files.
+        skipped (List[LizMedia]): Media files that were identified but skipped for various reasons.
+    """
+    media_list: List['LizMedia'] = field(default_factory=list)
+    skipped: List['LizMedia'] = field(default_factory=list)
+
+    @property
+    def total_count(self) -> int:
+        """
+        Returns the total number of media files processed (found + skipped).
+        """
+        return len(self.media_list) + len(self.skipped)
+
+
 # noinspection DuplicatedCode
 @dataclass
 class LizMedia:
-
     """
     Represents a media file (Image, Video, Audio) and provides access to its metadata and properties.
 
@@ -34,7 +55,6 @@ class LizMedia:
     eagle_metadata_path: Path | None = None
     eagle_metadata: Metadata | None = None
 
-
     def __post_init__(self):
         """
         Validates the media file after initialization.
@@ -46,7 +66,6 @@ class LizMedia:
         """
         if not is_media_file(self.path.__str__()):
             raise ValueError(f"File {self.path} is not a media file.")
-
 
     # ---- GENERAL FILE INFO
 
@@ -182,8 +201,6 @@ class LizMedia:
         """
         return self.type == FileType.AUDIO
 
-
-
     # ---- IMAGE FILE INFO
 
     @property
@@ -247,8 +264,6 @@ class LizMedia:
                 logger.error(f"Error checking EXIF data for {self.path}: {e}")
         return False
 
-
-
     # ----  IMAGE/VIDEO INFO
 
     @property
@@ -263,8 +278,6 @@ class LizMedia:
         """
         metadata = self.stable_diffusion_metadata
         return metadata is not None
-
-
 
     # ---- VIDEO FILE INFO
 
@@ -306,9 +319,6 @@ class LizMedia:
         if not self.is_video:
             return None
         return VideoUtils.get_video_frame_rate(self.path.__str__())
-
-
-
 
     # IMAGE UTILS
 

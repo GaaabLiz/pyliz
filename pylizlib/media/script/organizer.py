@@ -5,8 +5,8 @@ from rich import print
 
 from pylizlib.media import media_app
 from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
-from pylizlib.media.compute.searcher import MediaSearcher
-from pylizlib.media.lizmedia2 import LizMedia
+from pylizlib.media.compute.searcher import MediaSearcher, MediaSearcherResultLogger
+from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 
 
 @media_app.command()
@@ -49,6 +49,16 @@ def organizer(
             "--exclude", "-ex",
             help="Regex pattern to exclude files (-ex '.*\\.tmp' -ex '.*\\.temp')"
         ),
+        list_accepted: bool = typer.Option(
+            False,
+            "--list-accepted", "-lac",
+            help="List accepted file during search."
+        ),
+        list_skipped: bool = typer.Option(
+            False,
+            "--list-skipped", "-lskip",
+            help="List skipped files during search."
+        )
 ):
     """
     Organize files in the filesystem by applying metadata and filters.
@@ -78,17 +88,30 @@ def organizer(
         typer.echo("📝 XMP Metadata writing enabled")
     if exclude:
         typer.echo(f"🚫 Exclude pattern: {exclude})")
+    typer.echo("\n")
 
     # Searching file to organize
     searcher = MediaSearcher(path)
-    if eaglecatalog:
-        media_global: List[LizMedia] = searcher.search_eagle_catalog(eagletag)
-    else:
-        media_global: List[LizMedia] = searcher.search_file_system(exclude, dry)
+    search_result: MediaListResult = searcher.search_eagle_catalog(eagletag) if eaglecatalog else searcher.search_file_system(exclude, dry)
+
+    # Print summary
     print("\n")
-    print(f"Found {len(media_global)} files to process.")
+    print(f"Processed {search_result.total_count} files.")
+    print(f"Found {len(search_result.media_list)} media files to organize.")
+    print(f"Skipped {len(search_result.skipped)} files.")
+
+    # Print detailed summary if requested
+    result_logger = MediaSearcherResultLogger(search_result)
+    if list_accepted and search_result.media_list:
+        result_logger.printAcceptedAsTable()
+    if list_skipped and search_result.skipped:
+        result_logger.printSkippedAsTable()
+
+    if search_result.skipped:
+        input("")
     print("\n\n")
-    if not media_global:
+
+    if not search_result.media_list:
         print("No files to process. Exiting.")
         raise typer.Exit(code=0)
 
@@ -103,5 +126,5 @@ def organizer(
         exif=True
     )
 
-    MediaOrganizer(media_global, output, options).organize()
+    MediaOrganizer(search_result.media_list, output, options).organize()
 
