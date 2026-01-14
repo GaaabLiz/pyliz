@@ -20,9 +20,14 @@ class MediaSearcher:
 
     def __init__(self, path: str):
         self.path = path
+        self._result = MediaListResult()
+        self._console = Console()
 
-    def search_file_system(self, exclude: str = None, dry: bool = False) -> MediaListResult:
-        result = MediaListResult()
+    def get_result(self) -> MediaListResult:
+        return self._result
+
+    def run_search_system(self, exclude: str = None, dry: bool = False):
+        self._result = MediaListResult()  # Reset result
         exclude_regex = None
 
         if exclude:
@@ -41,20 +46,19 @@ class MediaSearcher:
                     if dry:
                         print(f"  Skipping (regex match): {file}")
                     try:
-                        result.skipped.append(LizMedia(file_path))
+                        self._result.skipped.append(LizMedia(file_path))
                     except ValueError:
                         pass
                     continue
 
                 try:
-                    result.media_list.append(LizMedia(file_path))
+                    self._result.media_list.append(LizMedia(file_path))
                 except ValueError:
                     # Not a media file, skip silently or log if needed
                     pass
-        return result
 
-    def search_eagle_catalog(self, eagletag: Optional[List[str]] = None) -> MediaListResult:
-        result = MediaListResult()
+    def run_search_eagle(self, eagletag: Optional[List[str]] = None):
+        self._result = MediaListResult()  # Reset result
         reader = EagleMediaReader(Path(self.path))
         eagles = reader.run()
 
@@ -64,45 +68,41 @@ class MediaSearcher:
                     if not eagle.metadata:
                         print("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                         try:
-                            result.skipped.append(LizMedia(eagle.media_path))
+                            self._result.skipped.append(LizMedia(eagle.media_path))
                         except ValueError:
                             pass
                         continue
                     if not any(tag in eagle.metadata.tags for tag in eagletag):
                         print(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                         try:
-                            result.skipped.append(LizMedia(eagle.media_path))
+                            self._result.skipped.append(LizMedia(eagle.media_path))
                         except ValueError:
                             pass
                         continue
 
                 lizmedia = LizMedia(eagle.media_path)
                 lizmedia.attach_eagle_metadata(eagle.metadata)
-                result.media_list.append(lizmedia)
+                self._result.media_list.append(lizmedia)
                 print(f"[green]Added Eagle media: {eagle.media_path}[/green]")
             except ValueError as e:
                 print(f"[red]Error: {eagle.media_path}: {e}[/red]")
-                result.skipped.append(LizMedia(eagle.media_path))
-        return result
-
-
-class MediaSearcherResultLogger:
-    def __init__(self, result: MediaListResult):
-        self.result = result
-        self.console = Console()
+                try:
+                    self._result.skipped.append(LizMedia(eagle.media_path))
+                except ValueError:
+                    pass
 
     def printAcceptedAsTable(self):
-        if not self.result.media_list:
+        if not self._result.media_list:
             print("[yellow]No accepted media files found.[/yellow]")
             return
 
-        table = Table(title=f"Accepted Media Files ({len(self.result.media_list)})")
+        table = Table(title=f"Accepted Media Files ({len(self._result.media_list)})")
         table.add_column("Filename", style="cyan", no_wrap=True)
         table.add_column("Path", style="magenta")
         table.add_column("Size (MB)", justify="right", style="green")
         table.add_column("Date", justify="right", style="blue")
 
-        for media in self.result.media_list:
+        for media in self._result.media_list:
             table.add_row(
                 media.file_name,
                 str(media.path),
@@ -110,21 +110,21 @@ class MediaSearcherResultLogger:
                 media.creation_time.strftime("%Y-%m-%d %H:%M:%S")
             )
 
-        self.console.print(table)
+        self._console.print(table)
 
     def printSkippedAsTable(self):
-        if not self.result.skipped:
+        if not self._result.skipped:
             print("[green]No media files were skipped.[/green]")
             return
 
-        table = Table(title=f"Skipped Media Files ({len(self.result.skipped)})")
+        table = Table(title=f"Skipped Media Files ({len(self._result.skipped)})")
         table.add_column("Filename", style="red", no_wrap=True)
         table.add_column("Path", style="magenta")
-        
-        for media in self.result.skipped:
+
+        for media in self._result.skipped:
             table.add_row(
                 media.file_name,
                 str(media.path)
             )
 
-        self.console.print(table)
+        self._console.print(table)

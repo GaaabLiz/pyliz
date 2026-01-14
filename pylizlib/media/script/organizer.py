@@ -5,7 +5,7 @@ from rich import print
 
 from pylizlib.media import media_app
 from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
-from pylizlib.media.compute.searcher import MediaSearcher, MediaSearcherResultLogger
+from pylizlib.media.compute.searcher import MediaSearcher
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 
 
@@ -92,26 +92,22 @@ def organizer(
 
     # Searching file to organize
     searcher = MediaSearcher(path)
-    search_result: MediaListResult = searcher.search_eagle_catalog(eagletag) if eaglecatalog else searcher.search_file_system(exclude, dry)
+    if eaglecatalog:
+        searcher.run_search_eagle(eagletag)
+    else:
+        searcher.run_search_system(exclude, dry)
+    
+    search_result = searcher.get_result()
+    media_global = search_result.media_list
 
-    # Print summary
+    # Logging search results
     print("\n")
-    print(f"Processed {search_result.total_count} files.")
-    print(f"Found {len(search_result.media_list)} media files to organize.")
-    print(f"Skipped {len(search_result.skipped)} files.")
-
-    # Print detailed summary if requested
-    result_logger = MediaSearcherResultLogger(search_result)
-    if list_accepted and search_result.media_list:
-        result_logger.printAcceptedAsTable()
-    if list_skipped and search_result.skipped:
-        result_logger.printSkippedAsTable()
-
-    if search_result.skipped:
-        input("")
+    searcher.printAcceptedAsTable() if list_accepted else None
+    print("\n")
+    searcher.printSkippedAsTable() if list_skipped else None
     print("\n\n")
 
-    if not search_result.media_list:
+    if not media_global:
         print("No files to process. Exiting.")
         raise typer.Exit(code=0)
 
