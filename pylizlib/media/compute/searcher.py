@@ -12,22 +12,15 @@ from pylizlib.eaglecool.reader import EagleMediaReader
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 
 
-class MediaSearcher:
+class FileSystemSearcher:
     """
-    Utility class to search for media files in a directory, optionally integrating with Eagle library
-    or filtering by regex.
+    Strategy class to search for media files in the file system.
     """
-
     def __init__(self, path: str):
         self.path = path
-        self._result = MediaListResult()
-        self._console = Console()
 
-    def get_result(self) -> MediaListResult:
-        return self._result
-
-    def run_search_system(self, exclude: str = None, dry: bool = False):
-        self._result = MediaListResult()  # Reset result
+    def search(self, exclude: str = None, dry: bool = False) -> MediaListResult:
+        result = MediaListResult()
         exclude_regex = None
 
         if exclude:
@@ -46,19 +39,28 @@ class MediaSearcher:
                     if dry:
                         print(f"  Skipping (regex match): {file}")
                     try:
-                        self._result.skipped.append(LizMedia(file_path))
+                        result.skipped.append(LizMedia(file_path))
                     except ValueError:
                         pass
                     continue
 
                 try:
-                    self._result.media_list.append(LizMedia(file_path))
+                    result.media_list.append(LizMedia(file_path))
                 except ValueError:
                     # Not a media file, skip silently or log if needed
                     pass
+        return result
 
-    def run_search_eagle(self, eagletag: Optional[List[str]] = None):
-        self._result = MediaListResult()  # Reset result
+
+class EagleCatalogSearcher:
+    """
+    Strategy class to search for media files using the Eagle library.
+    """
+    def __init__(self, path: str):
+        self.path = path
+
+    def search(self, eagletag: Optional[List[str]] = None) -> MediaListResult:
+        result = MediaListResult()
         reader = EagleMediaReader(Path(self.path))
         eagles = reader.run()
 
@@ -68,28 +70,52 @@ class MediaSearcher:
                     if not eagle.metadata:
                         print("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                         try:
-                            self._result.skipped.append(LizMedia(eagle.media_path))
+                            result.skipped.append(LizMedia(eagle.media_path))
                         except ValueError:
                             pass
                         continue
                     if not any(tag in eagle.metadata.tags for tag in eagletag):
                         print(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                         try:
-                            self._result.skipped.append(LizMedia(eagle.media_path))
+                            result.skipped.append(LizMedia(eagle.media_path))
                         except ValueError:
                             pass
                         continue
 
                 lizmedia = LizMedia(eagle.media_path)
                 lizmedia.attach_eagle_metadata(eagle.metadata)
-                self._result.media_list.append(lizmedia)
+                result.media_list.append(lizmedia)
                 print(f"[green]Added Eagle media: {eagle.media_path}[/green]")
             except ValueError as e:
                 print(f"[red]Error: {eagle.media_path}: {e}[/red]")
                 try:
-                    self._result.skipped.append(LizMedia(eagle.media_path))
+                    result.skipped.append(LizMedia(eagle.media_path))
                 except ValueError:
                     pass
+        return result
+
+
+class MediaSearcher:
+    """
+    Utility class to search for media files in a directory, optionally integrating with Eagle library
+    or filtering by regex. Acts as a facade for specific search strategies.
+    """
+
+    def __init__(self, path: str):
+        self.path = path
+        self._result = MediaListResult()
+        self._console = Console()
+
+    def get_result(self) -> MediaListResult:
+        return self._result
+
+    def run_search_system(self, exclude: str = None, dry: bool = False):
+        searcher = FileSystemSearcher(self.path)
+        self._result = searcher.search(exclude, dry)
+
+    def run_search_eagle(self, eagletag: Optional[List[str]] = None):
+        searcher = EagleCatalogSearcher(self.path)
+        self._result = searcher.search(eagletag)
 
     def printAcceptedAsTable(self):
         if not self._result.media_list:
