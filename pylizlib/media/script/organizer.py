@@ -58,6 +58,13 @@ def organizer(
             False,
             "--list-skipped", "-lskip",
             help="List skipped files during search."
+        ),
+        list_custom_order_index: int = typer.Option(
+            0,
+            "--list-custom-order-index", "-loi",
+            help="Index of the column to sort by (0-4). Default is 0 (Filename). Columns: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
+            min=0,
+            max=4
         )
 ):
     """
@@ -102,9 +109,9 @@ def organizer(
 
     # Logging search results
     print("\n")
-    searcher.printAcceptedAsTable() if list_accepted else None
+    searcher.printAcceptedAsTable(list_custom_order_index) if list_accepted else None
     print("\n")
-    searcher.printSkippedAsTable() if list_skipped else None
+    searcher.printSkippedAsTable(list_custom_order_index) if list_skipped else None
     print("\n\n")
 
     if not media_global:

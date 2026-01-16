@@ -117,40 +117,73 @@ class MediaSearcher:
         searcher = EagleCatalogSearcher(self.path)
         self._result = searcher.search(eagletag)
 
-    def printAcceptedAsTable(self):
+    def printAcceptedAsTable(self, sort_index: int = 0):
         if not self._result.media_list:
             print("[yellow]No accepted media files found.[/yellow]")
             return
+        
+        # Sort media list based on index
+        sorted_media = self._sort_media_list(self._result.media_list, sort_index)
 
         table = Table(title=f"Accepted Media Files ({len(self._result.media_list)})")
         table.add_column("Filename", style="cyan", no_wrap=True)
-        table.add_column("Path", style="magenta")
+        table.add_column("Creation Date", style="blue")
+        table.add_column("Has EXIF", justify="center", style="magenta")
+        table.add_column("Ext", justify="center", style="yellow")
         table.add_column("Size (MB)", justify="right", style="green")
-        table.add_column("Date", justify="right", style="blue")
 
-        for media in self._result.media_list:
+        for media in sorted_media:
+            has_exif = "Yes" if media.has_exif_data else "No"
+            creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
+            
             table.add_row(
                 media.file_name,
-                str(media.path),
-                f"{media.size_mb:.2f}",
-                media.creation_time.strftime("%Y-%m-%d %H:%M:%S")
+                creation_date,
+                has_exif,
+                media.extension,
+                f"{media.size_mb:.2f}"
             )
 
         self._console.print(table)
 
-    def printSkippedAsTable(self):
+    def printSkippedAsTable(self, sort_index: int = 0):
         if not self._result.skipped:
             print("[green]No media files were skipped.[/green]")
             return
+            
+        # Sort skipped list based on index
+        sorted_skipped = self._sort_media_list(self._result.skipped, sort_index)
 
         table = Table(title=f"Skipped Media Files ({len(self._result.skipped)})")
         table.add_column("Filename", style="red", no_wrap=True)
-        table.add_column("Path", style="magenta")
+        table.add_column("Creation Date", style="blue")
+        table.add_column("Has EXIF", justify="center", style="magenta")
+        table.add_column("Ext", justify="center", style="yellow")
+        table.add_column("Size (MB)", justify="right", style="green")
 
-        for media in self._result.skipped:
+        for media in sorted_skipped:
+            has_exif = "Yes" if media.has_exif_data else "No"
+            creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
+
             table.add_row(
                 media.file_name,
-                str(media.path)
+                creation_date,
+                has_exif,
+                media.extension,
+                f"{media.size_mb:.2f}"
             )
 
         self._console.print(table)
+
+    def _sort_media_list(self, media_list: List[LizMedia], sort_index: int) -> List[LizMedia]:
+        if sort_index == 1:
+            return sorted(media_list, key=lambda x: x.creation_date_from_exif_or_file)
+        elif sort_index == 2:
+            return sorted(media_list, key=lambda x: x.has_exif_data)
+        elif sort_index == 3:
+            return sorted(media_list, key=lambda x: x.extension)
+        elif sort_index == 4:
+            return sorted(media_list, key=lambda x: x.size_mb)
+        else:
+            # Default to filename (index 0 or invalid)
+            return sorted(media_list, key=lambda x: x.file_name)
