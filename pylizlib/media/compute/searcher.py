@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from pylizlib.eaglecool.reader import EagleMediaReader
-from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
+from pylizlib.media.lizmedia2 import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
 
 
 class FileSystemSearcher:
@@ -33,21 +33,34 @@ class FileSystemSearcher:
         print(f"Scanning directory: {self.path} ...")
         for root, _, files in os.walk(self.path):
             for file in files:
-                # Check exclude pattern
                 file_path = Path(root) / file
+                
+                # Check exclude pattern
                 if exclude_regex and exclude_regex.search(file):
                     if dry:
                         print(f"  Skipping (regex match): {file}")
                     try:
-                        result.skipped.append(LizMedia(file_path))
+                        liz_media = LizMedia(file_path)
+                        result.skipped.append(LizMediaSearchResult(
+                            status=MediaStatus.SKIPPED,
+                            media=liz_media,
+                            reason="Excluded by regex pattern"
+                        ))
                     except ValueError:
-                        pass
+                         # Not a media file, so we ignore it even for skipped list usually? 
+                         # Or we can track it as skipped non-media. 
+                         # But LizMedia constructor raises ValueError if not media.
+                         pass
                     continue
 
                 try:
-                    result.media_list.append(LizMedia(file_path))
+                    liz_media = LizMedia(file_path)
+                    result.accepted.append(LizMediaSearchResult(
+                        status=MediaStatus.ACCEPTED,
+                        media=liz_media
+                    ))
                 except ValueError:
-                    # Not a media file, skip silently or log if needed
+                    # Not a media file, skip silently
                     pass
         return result
 
@@ -70,26 +83,42 @@ class EagleCatalogSearcher:
                     if not eagle.metadata:
                         print("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                         try:
-                            result.skipped.append(LizMedia(eagle.media_path))
+                            result.skipped.append(LizMediaSearchResult(
+                                status=MediaStatus.SKIPPED,
+                                media=LizMedia(eagle.media_path),
+                                reason="Missing metadata for tag filtering"
+                            ))
                         except ValueError:
                             pass
                         continue
                     if not any(tag in eagle.metadata.tags for tag in eagletag):
                         print(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                         try:
-                            result.skipped.append(LizMedia(eagle.media_path))
+                            result.skipped.append(LizMediaSearchResult(
+                                status=MediaStatus.SKIPPED,
+                                media=LizMedia(eagle.media_path),
+                                reason="Tag mismatch"
+                            ))
                         except ValueError:
                             pass
                         continue
 
                 lizmedia = LizMedia(eagle.media_path)
                 lizmedia.attach_eagle_metadata(eagle.metadata)
-                result.media_list.append(lizmedia)
+                
+                result.accepted.append(LizMediaSearchResult(
+                    status=MediaStatus.ACCEPTED,
+                    media=lizmedia
+                ))
                 print(f"[green]Added Eagle media: {eagle.media_path}[/green]")
             except ValueError as e:
                 print(f"[red]Error: {eagle.media_path}: {e}[/red]")
                 try:
-                    result.skipped.append(LizMedia(eagle.media_path))
+                    result.skipped.append(LizMediaSearchResult(
+                        status=MediaStatus.SKIPPED,
+                        media=LizMedia(eagle.media_path),
+                        reason=f"Error loading media: {e}"
+                    ))
                 except ValueError:
                     pass
         return result
@@ -118,21 +147,23 @@ class MediaSearcher:
         self._result = searcher.search(eagletag)
 
     def printAcceptedAsTable(self, sort_index: int = 0):
-        if not self._result.media_list:
+        if not self._result.accepted:
             print("[yellow]No accepted media files found.[/yellow]")
             return
         
         # Sort media list based on index
-        sorted_media = self._sort_media_list(self._result.media_list, sort_index)
+        # We need to extract the LizMedia object for sorting
+        sorted_results = self._sort_result_list(self._result.accepted, sort_index)
 
-        table = Table(title=f"Accepted Media Files ({len(self._result.media_list)})")
+        table = Table(title=f"Accepted Media Files ({len(self._result.accepted)})")
         table.add_column("Filename", style="cyan", no_wrap=True)
         table.add_column("Creation Date", style="blue")
         table.add_column("Has EXIF", justify="center", style="magenta")
         table.add_column("Ext", justify="center", style="yellow")
         table.add_column("Size (MB)", justify="right", style="green")
 
-        for media in sorted_media:
+        for item in sorted_results:
+            media = item.media
             has_exif = "Yes" if media.has_exif_data else "No"
             creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
             
@@ -152,16 +183,17 @@ class MediaSearcher:
             return
             
         # Sort skipped list based on index
-        sorted_skipped = self._sort_media_list(self._result.skipped, sort_index)
+        sorted_results = self._sort_result_list(self._result.skipped, sort_index)
 
         table = Table(title=f"Skipped Media Files ({len(self._result.skipped)})")
         table.add_column("Filename", style="red", no_wrap=True)
         table.add_column("Creation Date", style="blue")
         table.add_column("Has EXIF", justify="center", style="magenta")
-        table.add_column("Ext", justify="center", style="yellow")
         table.add_column("Size (MB)", justify="right", style="green")
+        table.add_column("Skip reason", style="white")
 
-        for media in sorted_skipped:
+        for item in sorted_results:
+            media = item.media
             has_exif = "Yes" if media.has_exif_data else "No"
             creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -169,21 +201,21 @@ class MediaSearcher:
                 media.file_name,
                 creation_date,
                 has_exif,
-                media.extension,
-                f"{media.size_mb:.2f}"
+                f"{media.size_mb:.2f}",
+                item.reason
             )
 
         self._console.print(table)
 
-    def _sort_media_list(self, media_list: List[LizMedia], sort_index: int) -> List[LizMedia]:
+    def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int) -> List[LizMediaSearchResult]:
         if sort_index == 1:
-            return sorted(media_list, key=lambda x: x.creation_date_from_exif_or_file)
+            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file)
         elif sort_index == 2:
-            return sorted(media_list, key=lambda x: x.has_exif_data)
+            return sorted(results, key=lambda x: x.media.has_exif_data)
         elif sort_index == 3:
-            return sorted(media_list, key=lambda x: x.extension)
+            return sorted(results, key=lambda x: x.media.extension)
         elif sort_index == 4:
-            return sorted(media_list, key=lambda x: x.size_mb)
+            return sorted(results, key=lambda x: x.media.size_mb)
         else:
             # Default to filename (index 0 or invalid)
-            return sorted(media_list, key=lambda x: x.file_name)
+            return sorted(results, key=lambda x: x.media.file_name)

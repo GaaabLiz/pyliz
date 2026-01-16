@@ -20,8 +20,7 @@ class EagleMediaReader:
         images_dir = self.catalogue / "images"
 
         if not images_dir.exists():
-            print(f"[red]Directory not found: {images_dir}[/red]")
-            return
+            raise ValueError(f"Eagle catalogue 'images' directory not found: {images_dir}")
 
         for folder in images_dir.iterdir():
             if folder.is_dir():

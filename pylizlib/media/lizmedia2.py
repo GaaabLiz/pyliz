@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import List
 
@@ -16,6 +17,18 @@ from pylizlib.eaglecool.model.metadata import Metadata
 from pylizlib.media.util.video import VideoUtils
 
 
+class MediaStatus(str, Enum):
+    ACCEPTED = "accepted"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class LizMediaSearchResult:
+    status: MediaStatus
+    media: 'LizMedia'
+    reason: str = ""
+
+
 @dataclass
 class MediaListResult:
     """
@@ -23,18 +36,18 @@ class MediaListResult:
     and those that were skipped during a search or process.
 
     Attributes:
-        media_list (List[LizMedia]): Successfully identified and processed media files.
-        skipped (List[LizMedia]): Media files that were identified but skipped for various reasons.
+        accepted (List[LizMediaSearchResult]): Successfully identified and processed media files.
+        skipped (List[LizMediaSearchResult]): Media files that were identified but skipped for various reasons.
     """
-    media_list: List['LizMedia'] = field(default_factory=list)
-    skipped: List['LizMedia'] = field(default_factory=list)
+    accepted: List[LizMediaSearchResult] = field(default_factory=list)
+    skipped: List[LizMediaSearchResult] = field(default_factory=list)
 
     @property
     def total_count(self) -> int:
         """
         Returns the total number of media files processed (found + skipped).
         """
-        return len(self.media_list) + len(self.skipped)
+        return len(self.accepted) + len(self.skipped)
 
 
 # noinspection DuplicatedCode

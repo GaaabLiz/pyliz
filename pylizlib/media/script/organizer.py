@@ -105,7 +105,7 @@ def organizer(
         searcher.run_search_system(exclude, dry)
     
     search_result = searcher.get_result()
-    media_global = search_result.media_list
+    media_global = search_result.accepted
 
     # Logging search results
     print("\n")
@@ -129,5 +129,7 @@ def organizer(
         exif=True
     )
 
-    MediaOrganizer(search_result.media_list, output, options).organize()
+    # Extract LizMedia objects from LizMediaSearchResult for the organizer
+    media_to_organize = [item.media for item in media_global]
+    MediaOrganizer(media_to_organize, output, options).organize()
 
