@@ -25,7 +25,7 @@ class EagleMediaReader:
 
         for folder in images_dir.iterdir():
             if folder.is_dir():
-                print(f"Processing folder: [cyan]{folder}[/cyan]")
+                #print(f"Processing folder: [cyan]{folder}[/cyan]")
                 result = self.__handle_eagle_folder(folder)
                 if result:
                     yield result

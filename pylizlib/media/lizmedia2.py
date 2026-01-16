@@ -4,7 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-from PIL import Image, ExifTags
+import exifread
+from PIL import Image
 from sd_parsers import ParserManager
 from sd_parsers.data import PromptInfo
 
@@ -230,19 +231,22 @@ class LizMedia:
         """
         Retrieves the creation date from EXIF data (DateTimeOriginal) if available.
         Falls back to the file system creation time if EXIF data is missing or unreadable.
+        Uses 'exifread' library for robust parsing.
 
         Returns:
             datetime: The determined creation date.
         """
         if self.is_image:
             try:
-                with Image.open(self.path) as img:
-                    exif = img._getexif()
-                    if exif:
-                        for tag, value in exif.items():
-                            decoded = ExifTags.TAGS.get(tag, tag)
-                            if decoded == 'DateTimeOriginal':
-                                return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+                with open(self.path, 'rb') as f:
+                    tags = exifread.process_file(f, details=False)
+                    # Try common creation date tags
+                    for tag_key in ['EXIF DateTimeOriginal', 'Image DateTime', 'EXIF DateTimeDigitized']:
+                        if tag_key in tags:
+                            try:
+                                return datetime.strptime(str(tags[tag_key]), "%Y:%m:%d %H:%M:%S")
+                            except ValueError:
+                                continue
             except Exception as e:
                 logger.error(f"Error reading EXIF data from {self.path}: {e}")
 
@@ -258,8 +262,9 @@ class LizMedia:
         """
         if self.is_image:
             try:
-                with Image.open(self.path) as img:
-                    return img._getexif() is not None
+                with open(self.path, 'rb') as f:
+                    tags = exifread.process_file(f, details=False)
+                    return bool(tags)
             except Exception as e:
                 logger.error(f"Error checking EXIF data for {self.path}: {e}")
         return False

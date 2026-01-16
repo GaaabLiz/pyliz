@@ -8,6 +8,7 @@ authors = [
     {name = "Gabliz", email = "gabliz.dev@gmail.com"},
 ]
 dependencies = [
+    "exifread>=3.5.1",
     "pillow>=12.0.0",
     "psutil>=7.1.0",
     "pydantic>=2.12.3",
