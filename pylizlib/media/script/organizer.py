@@ -54,10 +54,10 @@ def organizer(
             "--list-accepted", "-lac",
             help="List accepted file during search."
         ),
-        list_skipped: bool = typer.Option(
+        list_rejected: bool = typer.Option(
             False,
-            "--list-skipped", "-lskip",
-            help="List skipped files during search."
+            "--list-rejected", "-lrej",
+            help="List rejected files during search."
         ),
         list_custom_order_index: int = typer.Option(
             0,
@@ -111,7 +111,7 @@ def organizer(
     print("\n")
     searcher.printAcceptedAsTable(list_custom_order_index) if list_accepted else None
     print("\n")
-    searcher.printSkippedAsTable(list_custom_order_index) if list_skipped else None
+    searcher.printRejectedAsTable(list_custom_order_index) if list_rejected else None
     print("\n\n")
 
     if not media_global:

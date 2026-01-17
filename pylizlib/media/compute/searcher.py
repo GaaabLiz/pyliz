@@ -44,10 +44,10 @@ class FileSystemSearcher:
                             tqdm.write(f"  Skipping (regex match): {file}")
                         try:
                             liz_media = LizMedia(file_path)
-                            result.skipped.append(LizMediaSearchResult(
-                                status=MediaStatus.SKIPPED,
+                            result.rejected.append(LizMediaSearchResult(
+                                status=MediaStatus.REJECTED,
                                 media=liz_media,
-                                reason="Excluded by regex pattern"
+                                reason="Rejected by regex pattern"
                             ))
                         except ValueError:
                              pass
@@ -94,8 +94,8 @@ class EagleCatalogSearcher:
                         if not eagle.metadata:
                             # tqdm.write("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                             try:
-                                result.skipped.append(LizMediaSearchResult(
-                                    status=MediaStatus.SKIPPED,
+                                result.rejected.append(LizMediaSearchResult(
+                                    status=MediaStatus.REJECTED,
                                     media=LizMedia(eagle.media_path),
                                     reason="Missing metadata for tag filtering"
                                 ))
@@ -106,8 +106,8 @@ class EagleCatalogSearcher:
                         if not any(tag in eagle.metadata.tags for tag in eagletag):
                             # tqdm.write(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                             try:
-                                result.skipped.append(LizMediaSearchResult(
-                                    status=MediaStatus.SKIPPED,
+                                result.rejected.append(LizMediaSearchResult(
+                                    status=MediaStatus.REJECTED,
                                     media=LizMedia(eagle.media_path),
                                     reason="Tag mismatch"
                                 ))
@@ -127,8 +127,8 @@ class EagleCatalogSearcher:
                 except ValueError as e:
                     tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
                     try:
-                        result.skipped.append(LizMediaSearchResult(
-                            status=MediaStatus.SKIPPED,
+                        result.rejected.append(LizMediaSearchResult(
+                            status=MediaStatus.REJECTED,
                             media=LizMedia(eagle.media_path),
                             reason=f"Error loading media: {e}"
                         ))
@@ -195,20 +195,20 @@ class MediaSearcher:
 
         self._console.print(table)
 
-    def printSkippedAsTable(self, sort_index: int = 0):
-        if not self._result.skipped:
-            print("[green]No media files were skipped.[/green]")
+    def printRejectedAsTable(self, sort_index: int = 0):
+        if not self._result.rejected:
+            print("[green]No media files were rejected.[/green]")
             return
             
-        # Sort skipped list based on index
-        sorted_results = self._sort_result_list(self._result.skipped, sort_index)
+        # Sort rejected list based on index
+        sorted_results = self._sort_result_list(self._result.rejected, sort_index)
 
-        table = Table(title=f"Skipped Media Files ({len(self._result.skipped)})")
+        table = Table(title=f"Rejected Media Files ({len(self._result.rejected)})")
         table.add_column("Filename", style="red", no_wrap=True)
         table.add_column("Creation Date", style="blue")
         table.add_column("Has EXIF", justify="center", style="magenta")
         table.add_column("Size (MB)", justify="right", style="green")
-        table.add_column("Skip reason", style="white")
+        table.add_column("Reject reason", style="white")
 
         for item in sorted_results:
             media = item.media

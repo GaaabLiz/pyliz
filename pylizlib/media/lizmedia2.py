@@ -19,7 +19,7 @@ from pylizlib.media.util.video import VideoUtils
 
 class MediaStatus(str, Enum):
     ACCEPTED = "accepted"
-    SKIPPED = "skipped"
+    REJECTED = "rejected"
 
 
 @dataclass
@@ -33,21 +33,21 @@ class LizMediaSearchResult:
 class MediaListResult:
     """
     Represents a collection of media files, distinguishing between those successfully found
-    and those that were skipped during a search or process.
+    and those that were rejected during a search or process.
 
     Attributes:
         accepted (List[LizMediaSearchResult]): Successfully identified and processed media files.
-        skipped (List[LizMediaSearchResult]): Media files that were identified but skipped for various reasons.
+        rejected (List[LizMediaSearchResult]): Media files that were identified but rejected for various reasons.
     """
     accepted: List[LizMediaSearchResult] = field(default_factory=list)
-    skipped: List[LizMediaSearchResult] = field(default_factory=list)
+    rejected: List[LizMediaSearchResult] = field(default_factory=list)
 
     @property
     def total_count(self) -> int:
         """
-        Returns the total number of media files processed (found + skipped).
+        Returns the total number of media files processed (found + rejected).
         """
-        return len(self.accepted) + len(self.skipped)
+        return len(self.accepted) + len(self.rejected)
 
 
 # noinspection DuplicatedCode

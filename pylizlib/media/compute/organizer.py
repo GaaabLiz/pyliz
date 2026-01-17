@@ -55,7 +55,7 @@ class MediaOrganizer:
             try:
                 sanitized_path = self._sanitize_path(file_path)
             except ValueError:
-                print(f"[yellow]Skipped invalid path: {file_path}[/yellow]")
+                print(f"[yellow]Rejected invalid path: {file_path}[/yellow]")
                 continue
 
             # Determine date and original timestamp
@@ -77,7 +77,7 @@ class MediaOrganizer:
             # Handle existing files (duplicates/conflicts)
             if os.path.exists(target_path):
                 if self._handle_existing_file(file_path, target_path):
-                     # Continue means we skipped or deleted, so we move to next file
+                     # Continue means we rejected or deleted, so we move to next file
                      continue
                 else:
                     # If returns False, it means conflict error
@@ -114,7 +114,7 @@ class MediaOrganizer:
     def _handle_existing_file(self, source_path: str, target_path: str) -> bool:
         """
         Checks if file exists and handles duplicates.
-        Returns True if the file loop should continue (skipped or deleted),
+        Returns True if the file loop should continue (rejected or deleted),
         False if it's a conflict/error that should be logged as failure.
         """
         source_hash = self._get_file_hash(source_path)
