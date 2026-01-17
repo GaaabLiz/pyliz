@@ -82,20 +82,22 @@ def organizer(
         raise typer.Exit(code=1)
 
     # Log parameters
-    typer.echo("\n")
+    typer.echo("\n" + "─" * 50)
     typer.echo(f"📁 Source: {path}")
     typer.echo(f"📁 Output: {output}")
-    if dry:
-        typer.echo("🔍 Running in DRY-RUN mode")
+    typer.echo(f"🔍 Dry-run: {'Yes' if dry else 'No'}")
+    typer.echo(f"🦅 Eagle Catalog: {'Yes' if eaglecatalog else 'No'}")
     if eaglecatalog:
-        typer.echo("🦅 Eagle Catalog: enabled")
-    if eagletag:
-        typer.echo(f"🏷️  Eagle Tags: {', '.join(eagletag)}")
-    if xmp:
-        typer.echo("📝 XMP Metadata writing enabled")
-    if exclude:
-        typer.echo(f"🚫 Exclude pattern: {exclude})")
-    typer.echo("\n")
+        typer.echo(f"🏷️  Eagle Tags: {', '.join(eagletag) if eagletag else 'None'}")
+    typer.echo(f"📝 XMP Metadata: {'Yes' if xmp else 'No'}")
+    typer.echo(f"🚫 Exclude pattern: {exclude if exclude else 'None'}")
+    typer.echo(f"✅ List accepted: {'Yes' if list_accepted else 'No'}")
+    typer.echo(f"❌ List rejected: {'Yes' if list_rejected else 'No'}")
+    
+    column_names = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
+    sort_col = column_names[list_custom_order_index]
+    typer.echo(f"🔢 List sort column: {sort_col} (index {list_custom_order_index})")
+    typer.echo("─" * 50 + "\n")
 
     # Searching file to organize
     searcher = MediaSearcher(path)
