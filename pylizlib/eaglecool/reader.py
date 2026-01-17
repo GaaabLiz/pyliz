@@ -1,8 +1,10 @@
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator, List, Optional
 
 from rich import print
+from tqdm import tqdm
 from pylizlib.eaglecool.model.metadata import Metadata
 
 
@@ -15,19 +17,23 @@ class EagleMedia:
 class EagleMediaReader:
     def __init__(self, catalogue: Path):
         self.catalogue = catalogue
+        self.media_found: List[EagleMedia] = []
+        self.error_paths: List[Path] = []
+        self.scanned_folders_count: int = 0
 
-    def run(self) -> Generator[EagleMedia, None, None]:
+    def run(self):
         images_dir = self.catalogue / "images"
 
         if not images_dir.exists():
             raise ValueError(f"Eagle catalogue 'images' directory not found: {images_dir}")
 
-        for folder in images_dir.iterdir():
+        folders = list(images_dir.iterdir())
+        for folder in tqdm(folders, desc="Scanning Eagle Library folders", unit="folders"):
             if folder.is_dir():
-                #print(f"Processing folder: [cyan]{folder}[/cyan]")
+                self.scanned_folders_count += 1
                 result = self.__handle_eagle_folder(folder)
                 if result:
-                    yield result
+                    self.media_found.append(result)
 
     def __handle_eagle_folder(self, folder: Path) -> Optional[EagleMedia]:
         metadata_obj = None
@@ -47,10 +53,16 @@ class EagleMediaReader:
                         metadata_obj = Metadata.from_json(data)
                 except Exception as e:
                     print(f"[red]Error reading metadata from {file_path}: {e}[/red]")
+                    self.error_paths.append(folder)
+                    return None
             else:
                 # Assuming any other file that is not a thumbnail and not metadata.json is the media file
                 media_file = file_path
 
+        # Requirement: every valid media must have a media file and its metadata.json
         if metadata_obj and media_file:
             return EagleMedia(media_file, metadata_obj)
+        
+        # If media file or metadata.json is missing, it's an error
+        self.error_paths.append(folder)
         return None

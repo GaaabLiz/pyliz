@@ -82,17 +82,18 @@ class EagleCatalogSearcher:
         result = MediaListResult()
         reader = EagleMediaReader(Path(self.path))
         
-        # reader.run() is a generator, so we can wrap it with tqdm
-        # We don't know the total length beforehand easily without scanning first
-        with tqdm(desc="Scanning Eagle Catalog", unit="items") as pbar:
-            for eagle in reader.run():
+        # Run the reader to populate findings (blocking operation with its own progress bar)
+        reader.run()
+        
+        # Process found media with progress bar
+        with tqdm(reader.media_found, desc="Filtering Eagle Media", unit="items") as pbar:
+            for eagle in pbar:
                 # Update description to show current file
-                pbar.set_description(f"Processing {eagle.media_path.name}")
+                pbar.set_description(f"Filtering {eagle.media_path.name}")
                 
                 try:
                     if eagletag:
                         if not eagle.metadata:
-                            # tqdm.write("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                             try:
                                 result.rejected.append(LizMediaSearchResult(
                                     status=MediaStatus.REJECTED,
@@ -104,7 +105,6 @@ class EagleCatalogSearcher:
                             pbar.update(1)
                             continue
                         if not any(tag in eagle.metadata.tags for tag in eagletag):
-                            # tqdm.write(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                             try:
                                 result.rejected.append(LizMediaSearchResult(
                                     status=MediaStatus.REJECTED,
@@ -123,7 +123,6 @@ class EagleCatalogSearcher:
                         status=MediaStatus.ACCEPTED,
                         media=lizmedia
                     ))
-                    # tqdm.write(f"[green]Added Eagle media: {eagle.media_path}[/green]")
                 except ValueError as e:
                     tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
                     try:
@@ -138,6 +137,27 @@ class EagleCatalogSearcher:
                 pbar.update(1)
             
             pbar.set_description("Scanning complete")
+
+        # Handle errors found during reading
+        for error_path in reader.error_paths:
+            try:
+                # Attempt to create a LizMedia object even if it failed before, to log it
+                # If it's a folder, LizMedia might fail if it expects a file.
+                # LizMedia expects a file path. `error_path` from reader is the *folder* path.
+                # We need to construct a dummy or handle it.
+                # LizMedia raises ValueError if not media file.
+                # So we might need a placeholder or just log the path string in reason.
+                # But LizMediaSearchResult requires a LizMedia object.
+                # I'll try to find a file inside or just point to the folder if allowed (LizMedia might strict check).
+                # Actually, LizMedia checks `is_media_file`. A folder is not.
+                # So we can't create LizMedia(folder).
+                # We should probably skip adding these to `rejected` list of `LizMediaSearchResult` 
+                # OR we accept that we can't represent them as LizMedia.
+                # However, the user asked to store "path in cui sono verificati errori".
+                # I will log them to console for now or skip them if they can't be wrapped.
+                tqdm.write(f"[red]Reader Error at: {error_path}[/red]")
+            except Exception:
+                pass
 
         return result
 
