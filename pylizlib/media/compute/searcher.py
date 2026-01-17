@@ -77,9 +77,13 @@ class EagleCatalogSearcher:
     """
     def __init__(self, path: str):
         self.path = path
+        self._result = MediaListResult()
 
-    def search(self, eagletag: Optional[List[str]] = None) -> MediaListResult:
-        result = MediaListResult()
+    def get_result(self) -> MediaListResult:
+        return self._result
+
+    def search(self, eagletag: Optional[List[str]] = None):
+        self._result = MediaListResult() # Reset result on new search
         reader = EagleMediaReader(Path(self.path))
         
         # Run the reader to populate findings (blocking operation with its own progress bar)
@@ -92,41 +96,18 @@ class EagleCatalogSearcher:
                 pbar.set_description(f"Filtering {eagle.media_path.name}")
                 
                 try:
-                    if eagletag:
-                        if not eagle.metadata:
-                            try:
-                                result.rejected.append(LizMediaSearchResult(
-                                    status=MediaStatus.REJECTED,
-                                    media=LizMedia(eagle.media_path),
-                                    reason="Missing metadata for tag filtering"
-                                ))
-                            except ValueError:
-                                pass
-                            pbar.update(1)
-                            continue
-                        if not any(tag in eagle.metadata.tags for tag in eagletag):
-                            try:
-                                result.rejected.append(LizMediaSearchResult(
-                                    status=MediaStatus.REJECTED,
-                                    media=LizMedia(eagle.media_path),
-                                    reason="Tag mismatch"
-                                ))
-                            except ValueError:
-                                pass
-                            pbar.update(1)
-                            continue
-
-                    lizmedia = LizMedia(eagle.media_path)
-                    lizmedia.attach_eagle_metadata(eagle.metadata)
-                    
-                    result.accepted.append(LizMediaSearchResult(
-                        status=MediaStatus.ACCEPTED,
-                        media=lizmedia
-                    ))
+                    if self._filter_by_tag(eagle, eagletag):
+                        lizmedia = LizMedia(eagle.media_path)
+                        lizmedia.attach_eagle_metadata(eagle.metadata)
+                        
+                        self._result.accepted.append(LizMediaSearchResult(
+                            status=MediaStatus.ACCEPTED,
+                            media=lizmedia
+                        ))
                 except ValueError as e:
                     tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
                     try:
-                        result.rejected.append(LizMediaSearchResult(
+                        self._result.rejected.append(LizMediaSearchResult(
                             status=MediaStatus.REJECTED,
                             media=LizMedia(eagle.media_path),
                             reason=f"Error loading media: {e}"
@@ -141,25 +122,41 @@ class EagleCatalogSearcher:
         # Handle errors found during reading
         for error_path in reader.error_paths:
             try:
-                # Attempt to create a LizMedia object even if it failed before, to log it
-                # If it's a folder, LizMedia might fail if it expects a file.
-                # LizMedia expects a file path. `error_path` from reader is the *folder* path.
-                # We need to construct a dummy or handle it.
-                # LizMedia raises ValueError if not media file.
-                # So we might need a placeholder or just log the path string in reason.
-                # But LizMediaSearchResult requires a LizMedia object.
-                # I'll try to find a file inside or just point to the folder if allowed (LizMedia might strict check).
-                # Actually, LizMedia checks `is_media_file`. A folder is not.
-                # So we can't create LizMedia(folder).
-                # We should probably skip adding these to `rejected` list of `LizMediaSearchResult` 
-                # OR we accept that we can't represent them as LizMedia.
-                # However, the user asked to store "path in cui sono verificati errori".
-                # I will log them to console for now or skip them if they can't be wrapped.
                 tqdm.write(f"[red]Reader Error at: {error_path}[/red]")
             except Exception:
                 pass
 
-        return result
+    def _filter_by_tag(self, eagle, eagletag: Optional[List[str]]) -> bool:
+        """
+        Checks if the eagle media matches the tag criteria.
+        Returns True if accepted, False if rejected (and appends to self._result.rejected).
+        """
+        if not eagletag:
+            return True
+
+        if not eagle.metadata:
+            try:
+                self._result.rejected.append(LizMediaSearchResult(
+                    status=MediaStatus.REJECTED,
+                    media=LizMedia(eagle.media_path),
+                    reason="Missing metadata for tag filtering"
+                ))
+            except ValueError:
+                pass
+            return False
+
+        if not any(tag in eagle.metadata.tags for tag in eagletag):
+            try:
+                self._result.rejected.append(LizMediaSearchResult(
+                    status=MediaStatus.REJECTED,
+                    media=LizMedia(eagle.media_path),
+                    reason="Tag mismatch"
+                ))
+            except ValueError:
+                pass
+            return False
+            
+        return True
 
 
 class MediaSearcher:
@@ -182,7 +179,8 @@ class MediaSearcher:
 
     def run_search_eagle(self, eagletag: Optional[List[str]] = None):
         searcher = EagleCatalogSearcher(self.path)
-        self._result = searcher.search(eagletag)
+        searcher.search(eagletag)
+        self._result = searcher.get_result()
 
     def printAcceptedAsTable(self, sort_index: int = 0):
         if not self._result.accepted:
