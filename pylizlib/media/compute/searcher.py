@@ -9,7 +9,8 @@ from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
 
-from pylizlib.eaglecool.reader import EagleMediaReader
+from pylizlib.core.domain.os import FileType
+from pylizlib.eaglecool.reader import EagleCoolReader
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
 
 
@@ -84,20 +85,20 @@ class EagleCatalogSearcher:
 
     def search(self, eagletag: Optional[List[str]] = None):
         self._result = MediaListResult() # Reset result on new search
-        reader = EagleMediaReader(Path(self.path))
+        reader = EagleCoolReader(Path(self.path), file_types=[FileType.IMAGE, FileType.VIDEO, FileType.AUDIO])
         
         # Run the reader to populate findings (blocking operation with its own progress bar)
         reader.run()
         
         # Process found media with progress bar
-        with tqdm(reader.media_found, desc="Filtering Eagle Media", unit="items") as pbar:
+        with tqdm(reader.file_found, desc="Filtering Eagle Media", unit="items") as pbar:
             for eagle in pbar:
                 # Update description to show current file
-                pbar.set_description(f"Filtering {eagle.media_path.name}")
+                pbar.set_description(f"Filtering {eagle.file_path.name}")
                 
                 try:
                     if self._filter_by_tag(eagle, eagletag):
-                        lizmedia = LizMedia(eagle.media_path)
+                        lizmedia = LizMedia(eagle.file_path)
                         lizmedia.attach_eagle_metadata(eagle.metadata)
                         
                         self._result.accepted.append(LizMediaSearchResult(
@@ -105,11 +106,11 @@ class EagleCatalogSearcher:
                             media=lizmedia
                         ))
                 except ValueError as e:
-                    tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
+                    tqdm.write(f"[red]Error: {eagle.file_path}: {e}[/red]")
                     try:
                         self._result.rejected.append(LizMediaSearchResult(
                             status=MediaStatus.REJECTED,
-                            media=LizMedia(eagle.media_path),
+                            media=LizMedia(eagle.file_path),
                             reason=f"Error loading media: {e}"
                         ))
                     except ValueError:
@@ -135,7 +136,7 @@ class EagleCatalogSearcher:
             try:
                 self._result.rejected.append(LizMediaSearchResult(
                     status=MediaStatus.REJECTED,
-                    media=LizMedia(eagle.media_path),
+                    media=LizMedia(eagle.file_path),
                     reason="Missing metadata for tag filtering"
                 ))
             except ValueError:
@@ -146,7 +147,7 @@ class EagleCatalogSearcher:
             try:
                 self._result.rejected.append(LizMediaSearchResult(
                     status=MediaStatus.REJECTED,
-                    media=LizMedia(eagle.media_path),
+                    media=LizMedia(eagle.file_path),
                     reason="Tag mismatch"
                 ))
             except ValueError:

@@ -5,20 +5,25 @@ from typing import Generator, List, Optional, Tuple
 
 from rich import print
 from tqdm import tqdm
+from pylizlib.core.domain.os import FileType
+from pylizlib.core.os.file import is_media_file
 from pylizlib.eaglecool.model.metadata import Metadata
 
 
-class EagleMedia:
-    def __init__(self, media_path: Path, metadata: Metadata):
-        self.media_path = media_path
+class EagleItem:
+    def __init__(self, file_path: Path, metadata: Metadata):
+        self.file_path = file_path
         self.metadata = metadata
 
 
-class EagleMediaReader:
-    def __init__(self, catalogue: Path):
+class EagleCoolReader:
+    def __init__(self, catalogue: Path, include_deleted: bool = False, file_types: List[FileType] = None):
         self.catalogue = catalogue
-        self.media_found: List[EagleMedia] = []
+        self.include_deleted = include_deleted
+        self.file_types = file_types if file_types else [FileType.IMAGE, FileType.VIDEO, FileType.AUDIO]
+        self.file_found: List[EagleItem] = []
         self.error_paths: List[Tuple[Path, str]] = []
+        self.skipped_path: List[Tuple[Path, str]] = []
         self.scanned_folders_count: int = 0
 
     def run(self):
@@ -33,9 +38,43 @@ class EagleMediaReader:
                 self.scanned_folders_count += 1
                 result = self.__handle_eagle_folder(folder)
                 if result:
-                    self.media_found.append(result)
+                    self.file_found.append(result)
 
-    def __handle_eagle_folder(self, folder: Path) -> Optional[EagleMedia]:
+    def __handle_eagle_folder(self, folder: Path) -> Optional[EagleItem]:
+        metadata_obj, media_file, error_occurred = self.__scan_folder_contents(folder)
+
+        if error_occurred:
+            return None
+
+        # Check missing components
+        if not metadata_obj or not media_file:
+            reason = []
+            if not metadata_obj:
+                reason.append("Missing metadata.json")
+            if not media_file:
+                reason.append("Missing media file")
+            self.error_paths.append((folder, ", ".join(reason)))
+            return None
+
+        # Check for deleted items
+        if metadata_obj.isDeleted and not self.include_deleted:
+            self.skipped_path.append((folder, "Item is deleted"))
+            return None
+
+        # Check file type
+        if is_media_file(str(media_file)):
+            # TODO: Implement stricter checking based on self.file_types
+            return EagleItem(media_file, metadata_obj)
+        else:
+            # TODO: Handle other file types
+            self.skipped_path.append((folder, f"Unsupported file type: {media_file.suffix}"))
+            return None
+
+    def __scan_folder_contents(self, folder: Path) -> Tuple[Optional[Metadata], Optional[Path], bool]:
+        """
+        Scans the folder to find the metadata file and the media file.
+        Returns (Metadata object, Media file path, Error occurred flag).
+        """
         metadata_obj = None
         media_file = None
 
@@ -47,28 +86,20 @@ class EagleMediaReader:
                 continue
 
             if file_path.name == "metadata.json":
-                try:
-                    with file_path.open('r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        metadata_obj = Metadata.from_json(data)
-                except Exception as e:
-                    print(f"[red]Error reading metadata from {file_path}: {e}[/red]")
-                    self.error_paths.append((folder, f"Error reading metadata: {e}"))
-                    return None
+                metadata_obj = self.__load_metadata(file_path, folder)
+                if metadata_obj is None:
+                    return None, None, True
             else:
-                # Assuming any other file that is not a thumbnail and not metadata.json is the media file
                 media_file = file_path
+        
+        return metadata_obj, media_file, False
 
-        # Requirement: every valid media must have a media file and its metadata.json
-        if metadata_obj and media_file:
-            return EagleMedia(media_file, metadata_obj)
-        
-        # If media file or metadata.json is missing, it's an error
-        reason = []
-        if not metadata_obj:
-            reason.append("Missing metadata.json")
-        if not media_file:
-            reason.append("Missing media file")
-        
-        self.error_paths.append((folder, ", ".join(reason)))
-        return None
+    def __load_metadata(self, file_path: Path, folder: Path) -> Optional[Metadata]:
+        try:
+            with file_path.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+                return Metadata.from_json(data)
+        except Exception as e:
+            print(f"[red]Error reading metadata from {file_path}: {e}[/red]")
+            self.error_paths.append((folder, f"Error reading metadata: {e}"))
+            return None
