@@ -7,6 +7,7 @@ import typer
 from rich import print
 from rich.console import Console
 from rich.table import Table
+from tqdm import tqdm
 
 from pylizlib.eaglecool.reader import EagleMediaReader
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
@@ -30,15 +31,16 @@ class FileSystemSearcher:
                 print(f"Error compiling regex '{exclude}': {e}")
                 raise typer.Exit(code=1)
 
-        print(f"Scanning directory: {self.path} ...")
+        # Use tqdm for progress indication
         for root, _, files in os.walk(self.path):
-            for file in files:
+            for file in tqdm(files, desc=f"Scanning {os.path.basename(root)}", leave=False):
                 file_path = Path(root) / file
                 
                 # Check exclude pattern
                 if exclude_regex and exclude_regex.search(file):
                     if dry:
-                        print(f"  Skipping (regex match): {file}")
+                        # Using tqdm.write to not interfere with the bar
+                        tqdm.write(f"  Skipping (regex match): {file}")
                     try:
                         liz_media = LizMedia(file_path)
                         result.skipped.append(LizMediaSearchResult(
@@ -75,13 +77,19 @@ class EagleCatalogSearcher:
     def search(self, eagletag: Optional[List[str]] = None) -> MediaListResult:
         result = MediaListResult()
         reader = EagleMediaReader(Path(self.path))
-        eagles = reader.run()
+        
+        # reader.run() is a generator, so we can wrap it with tqdm
+        # We don't know the total length beforehand easily without scanning first
+        eagles_iter = tqdm(reader.run(), desc="Scanning Eagle Catalog", unit="items")
 
-        for eagle in eagles:
+        for eagle in eagles_iter:
+            # Update description to show current file
+            eagles_iter.set_description(f"Processing {eagle.media_path.name}")
+            
             try:
                 if eagletag:
                     if not eagle.metadata:
-                        print("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
+                        # tqdm.write("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
                         try:
                             result.skipped.append(LizMediaSearchResult(
                                 status=MediaStatus.SKIPPED,
@@ -92,7 +100,7 @@ class EagleCatalogSearcher:
                             pass
                         continue
                     if not any(tag in eagle.metadata.tags for tag in eagletag):
-                        print(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
+                        # tqdm.write(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
                         try:
                             result.skipped.append(LizMediaSearchResult(
                                 status=MediaStatus.SKIPPED,
@@ -110,9 +118,9 @@ class EagleCatalogSearcher:
                     status=MediaStatus.ACCEPTED,
                     media=lizmedia
                 ))
-                print(f"[green]Added Eagle media: {eagle.media_path}[/green]")
+                # tqdm.write(f"[green]Added Eagle media: {eagle.media_path}[/green]")
             except ValueError as e:
-                print(f"[red]Error: {eagle.media_path}: {e}[/red]")
+                tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
                 try:
                     result.skipped.append(LizMediaSearchResult(
                         status=MediaStatus.SKIPPED,
