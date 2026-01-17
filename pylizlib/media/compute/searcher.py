@@ -31,39 +31,43 @@ class FileSystemSearcher:
                 print(f"Error compiling regex '{exclude}': {e}")
                 raise typer.Exit(code=1)
 
-        # Use tqdm for progress indication
-        for root, _, files in os.walk(self.path):
-            for file in tqdm(files, desc=f"Scanning {os.path.basename(root)}", leave=False):
-                file_path = Path(root) / file
-                
-                # Check exclude pattern
-                if exclude_regex and exclude_regex.search(file):
-                    if dry:
-                        # Using tqdm.write to not interfere with the bar
-                        tqdm.write(f"  Skipping (regex match): {file}")
+        # Use a single tqdm bar for the entire scanning process
+        with tqdm(desc="Initializing scan...", unit="files") as pbar:
+            for root, _, files in os.walk(self.path):
+                for file in files:
+                    file_path = Path(root) / file
+                    pbar.set_description(f"Scanning {file}")
+                    
+                    # Check exclude pattern
+                    if exclude_regex and exclude_regex.search(file):
+                        if dry:
+                            tqdm.write(f"  Skipping (regex match): {file}")
+                        try:
+                            liz_media = LizMedia(file_path)
+                            result.skipped.append(LizMediaSearchResult(
+                                status=MediaStatus.SKIPPED,
+                                media=liz_media,
+                                reason="Excluded by regex pattern"
+                            ))
+                        except ValueError:
+                             pass
+                        pbar.update(1)
+                        continue
+
                     try:
                         liz_media = LizMedia(file_path)
-                        result.skipped.append(LizMediaSearchResult(
-                            status=MediaStatus.SKIPPED,
-                            media=liz_media,
-                            reason="Excluded by regex pattern"
+                        result.accepted.append(LizMediaSearchResult(
+                            status=MediaStatus.ACCEPTED,
+                            media=liz_media
                         ))
                     except ValueError:
-                         # Not a media file, so we ignore it even for skipped list usually? 
-                         # Or we can track it as skipped non-media. 
-                         # But LizMedia constructor raises ValueError if not media.
-                         pass
-                    continue
-
-                try:
-                    liz_media = LizMedia(file_path)
-                    result.accepted.append(LizMediaSearchResult(
-                        status=MediaStatus.ACCEPTED,
-                        media=liz_media
-                    ))
-                except ValueError:
-                    # Not a media file, skip silently
-                    pass
+                        # Not a media file, skip silently
+                        pass
+                    
+                    pbar.update(1)
+            
+            pbar.set_description("Scanning complete")
+        
         return result
 
 
@@ -80,55 +84,61 @@ class EagleCatalogSearcher:
         
         # reader.run() is a generator, so we can wrap it with tqdm
         # We don't know the total length beforehand easily without scanning first
-        eagles_iter = tqdm(reader.run(), desc="Scanning Eagle Catalog", unit="items")
-
-        for eagle in eagles_iter:
-            # Update description to show current file
-            eagles_iter.set_description(f"Processing {eagle.media_path.name}")
-            
-            try:
-                if eagletag:
-                    if not eagle.metadata:
-                        # tqdm.write("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
-                        try:
-                            result.skipped.append(LizMediaSearchResult(
-                                status=MediaStatus.SKIPPED,
-                                media=LizMedia(eagle.media_path),
-                                reason="Missing metadata for tag filtering"
-                            ))
-                        except ValueError:
-                            pass
-                        continue
-                    if not any(tag in eagle.metadata.tags for tag in eagletag):
-                        # tqdm.write(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
-                        try:
-                            result.skipped.append(LizMediaSearchResult(
-                                status=MediaStatus.SKIPPED,
-                                media=LizMedia(eagle.media_path),
-                                reason="Tag mismatch"
-                            ))
-                        except ValueError:
-                            pass
-                        continue
-
-                lizmedia = LizMedia(eagle.media_path)
-                lizmedia.attach_eagle_metadata(eagle.metadata)
+        with tqdm(desc="Scanning Eagle Catalog", unit="items") as pbar:
+            for eagle in reader.run():
+                # Update description to show current file
+                pbar.set_description(f"Processing {eagle.media_path.name}")
                 
-                result.accepted.append(LizMediaSearchResult(
-                    status=MediaStatus.ACCEPTED,
-                    media=lizmedia
-                ))
-                # tqdm.write(f"[green]Added Eagle media: {eagle.media_path}[/green]")
-            except ValueError as e:
-                tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
                 try:
-                    result.skipped.append(LizMediaSearchResult(
-                        status=MediaStatus.SKIPPED,
-                        media=LizMedia(eagle.media_path),
-                        reason=f"Error loading media: {e}"
+                    if eagletag:
+                        if not eagle.metadata:
+                            # tqdm.write("[yellow]Warning: Eagle media without metadata, skipping tag filter.[/yellow]")
+                            try:
+                                result.skipped.append(LizMediaSearchResult(
+                                    status=MediaStatus.SKIPPED,
+                                    media=LizMedia(eagle.media_path),
+                                    reason="Missing metadata for tag filtering"
+                                ))
+                            except ValueError:
+                                pass
+                            pbar.update(1)
+                            continue
+                        if not any(tag in eagle.metadata.tags for tag in eagletag):
+                            # tqdm.write(f"[cyan]Eagle media {eagle.metadata.name} does not match specified tags, skipping.[/cyan]")
+                            try:
+                                result.skipped.append(LizMediaSearchResult(
+                                    status=MediaStatus.SKIPPED,
+                                    media=LizMedia(eagle.media_path),
+                                    reason="Tag mismatch"
+                                ))
+                            except ValueError:
+                                pass
+                            pbar.update(1)
+                            continue
+
+                    lizmedia = LizMedia(eagle.media_path)
+                    lizmedia.attach_eagle_metadata(eagle.metadata)
+                    
+                    result.accepted.append(LizMediaSearchResult(
+                        status=MediaStatus.ACCEPTED,
+                        media=lizmedia
                     ))
-                except ValueError:
-                    pass
+                    # tqdm.write(f"[green]Added Eagle media: {eagle.media_path}[/green]")
+                except ValueError as e:
+                    tqdm.write(f"[red]Error: {eagle.media_path}: {e}[/red]")
+                    try:
+                        result.skipped.append(LizMediaSearchResult(
+                            status=MediaStatus.SKIPPED,
+                            media=LizMedia(eagle.media_path),
+                            reason=f"Error loading media: {e}"
+                        ))
+                    except ValueError:
+                        pass
+                
+                pbar.update(1)
+            
+            pbar.set_description("Scanning complete")
+
         return result
 
 
