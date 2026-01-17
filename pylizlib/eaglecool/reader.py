@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generator, List, Optional
+from typing import Generator, List, Optional, Tuple
 
 from rich import print
 from tqdm import tqdm
@@ -18,7 +18,7 @@ class EagleMediaReader:
     def __init__(self, catalogue: Path):
         self.catalogue = catalogue
         self.media_found: List[EagleMedia] = []
-        self.error_paths: List[Path] = []
+        self.error_paths: List[Tuple[Path, str]] = []
         self.scanned_folders_count: int = 0
 
     def run(self):
@@ -53,7 +53,7 @@ class EagleMediaReader:
                         metadata_obj = Metadata.from_json(data)
                 except Exception as e:
                     print(f"[red]Error reading metadata from {file_path}: {e}[/red]")
-                    self.error_paths.append(folder)
+                    self.error_paths.append((folder, f"Error reading metadata: {e}"))
                     return None
             else:
                 # Assuming any other file that is not a thumbnail and not metadata.json is the media file
@@ -64,5 +64,11 @@ class EagleMediaReader:
             return EagleMedia(media_file, metadata_obj)
         
         # If media file or metadata.json is missing, it's an error
-        self.error_paths.append(folder)
+        reason = []
+        if not metadata_obj:
+            reason.append("Missing metadata.json")
+        if not media_file:
+            reason.append("Missing media file")
+        
+        self.error_paths.append((folder, ", ".join(reason)))
         return None

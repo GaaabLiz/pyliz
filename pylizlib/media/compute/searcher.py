@@ -120,11 +120,8 @@ class EagleCatalogSearcher:
             pbar.set_description("Scanning complete")
 
         # Handle errors found during reading
-        for error_path in reader.error_paths:
-            try:
-                tqdm.write(f"[red]Reader Error at: {error_path}[/red]")
-            except Exception:
-                pass
+        for error_path, reason in reader.error_paths:
+            print(f"[red]SKIPPED Eagle Directory {error_path} because of error: {reason}[/red]")
 
     def _filter_by_tag(self, eagle, eagletag: Optional[List[str]]) -> bool:
         """
