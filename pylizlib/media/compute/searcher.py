@@ -84,26 +84,29 @@ class EagleCatalogSearcher:
 
     def search(self, eagletag: Optional[List[str]] = None):
         self._result = MediaListResult() # Reset result on new search
-        reader = EagleCoolReader(Path(self.path), file_types=[FileType.IMAGE, FileType.VIDEO, FileType.AUDIO])
+        reader = EagleCoolReader(
+            Path(self.path), 
+            file_types=[FileType.IMAGE, FileType.VIDEO, FileType.AUDIO],
+            filter_tags=eagletag
+        )
         
         # Run the reader to populate findings (blocking operation with its own progress bar)
         reader.run()
         
         # Process found media with progress bar
-        with tqdm(reader.items, desc="Filtering Eagle Media", unit="items") as pbar:
+        with tqdm(reader.items, desc="Processing Eagle Media", unit="items") as pbar:
             for eagle in pbar:
                 # Update description to show current file
-                pbar.set_description(f"Filtering {eagle.file_path.name}")
+                pbar.set_description(f"Processing {eagle.file_path.name}")
                 
-                if self._filter_by_tag(eagle, eagletag):
-                    lizmedia = LizMedia(eagle.file_path)
-                    lizmedia.attach_eagle_metadata(eagle.metadata)
-                    
-                    self._result.accepted.append(LizMediaSearchResult(
-                        status=MediaStatus.ACCEPTED,
-                        path=eagle.file_path,
-                        media=lizmedia
-                    ))
+                lizmedia = LizMedia(eagle.file_path)
+                lizmedia.attach_eagle_metadata(eagle.metadata)
+                
+                self._result.accepted.append(LizMediaSearchResult(
+                    status=MediaStatus.ACCEPTED,
+                    path=eagle.file_path,
+                    media=lizmedia
+                ))
                 
                 pbar.update(1)
             
@@ -119,47 +122,28 @@ class EagleCatalogSearcher:
             ))
 
         # Add reader skipped items to rejected
-        for skipped_path, reason in reader.skipped_path:
+        for eagle_item, reason in reader.items_skipped:
             media_obj = None
             try:
-                media_obj = LizMedia(skipped_path)
+                media_obj = LizMedia(eagle_item.file_path)
             except ValueError:
                 pass
 
             self._result.rejected.append(LizMediaSearchResult(
                 status=MediaStatus.REJECTED,
-                path=skipped_path,
+                path=eagle_item.file_path,
                 media=media_obj,
                 reason=reason
             ))
 
-    def _filter_by_tag(self, eagle, eagletag: Optional[List[str]]) -> bool:
-        """
-        Checks if the eagle media matches the tag criteria.
-        Returns True if accepted, False if rejected (and appends to self._result.rejected).
-        """
-        if not eagletag:
-            return True
-
-        if not eagle.metadata:
-            self._result.rejected.append(LizMediaSearchResult(
-                status=MediaStatus.REJECTED,
-                path=eagle.file_path,
-                media=None,
-                reason="Missing metadata for tag filtering"
-            ))
-            return False
-
-        if not any(tag in eagle.metadata.tags for tag in eagletag):
-            self._result.rejected.append(LizMediaSearchResult(
-                status=MediaStatus.REJECTED,
-                path=eagle.file_path,
-                media=None,
-                reason="Tag mismatch"
-            ))
-            return False
-            
-        return True
+        print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
+        print(f"  Scanned folders: {reader.scanned_folders_count}")
+        print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
+        print(f"  Eagle Items created: {len(reader.items) + len(reader.items_skipped)}")
+        print(f"  Accepted items: {len(self._result.accepted)}")
+        print(f"  Rejected items: {len(self._result.rejected)}")
+        print(f"  Skipped in reader: {len(reader.items_skipped)}")
+        print(f"  Errors in reader: {len(reader.error_paths)}")
 
 
 class MediaSearcher:

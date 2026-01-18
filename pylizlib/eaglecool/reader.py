@@ -17,13 +17,14 @@ class EagleItem:
 
 
 class EagleCoolReader:
-    def __init__(self, catalogue: Path, include_deleted: bool = False, file_types: List[FileType] = None):
+    def __init__(self, catalogue: Path, include_deleted: bool = False, file_types: List[FileType] = None, filter_tags: Optional[List[str]] = None):
         self.catalogue = catalogue
         self.include_deleted = include_deleted
         self.file_types = file_types if file_types else [FileType.IMAGE, FileType.VIDEO, FileType.AUDIO]
+        self.filter_tags = filter_tags
         self.items: List[EagleItem] = []
         self.error_paths: List[Tuple[Path, str]] = []
-        self.skipped_path: List[Tuple[Path, str]] = []
+        self.items_skipped: List[Tuple[EagleItem, str]] = []
         self.scanned_folders_count: int = 0
 
     def run(self):
@@ -56,19 +57,28 @@ class EagleCoolReader:
             self.error_paths.append((folder, ", ".join(reason)))
             return None
 
+        eagle_item = EagleItem(media_file, metadata_obj)
+
         # Check for deleted items
         if metadata_obj.isDeleted and not self.include_deleted:
-            self.skipped_path.append((media_file, "Item is deleted"))
+            self.items_skipped.append((eagle_item, "Item is deleted"))
             return None
 
         # Check file type
-        if is_media_file(str(media_file)):
-            # TODO: Implement stricter checking based on self.file_types
-            return EagleItem(media_file, metadata_obj)
-        else:
+        if not is_media_file(str(media_file)):
             # TODO: Handle other file types
-            self.skipped_path.append((media_file, f"Unsupported file type: {media_file.suffix}"))
+            self.items_skipped.append((eagle_item, f"Unsupported file type: {media_file.suffix}"))
             return None
+            
+        # Check tags
+        if self.filter_tags:
+            if not any(tag in metadata_obj.tags for tag in self.filter_tags):
+                self.items_skipped.append((eagle_item, "Tag mismatch"))
+                return None
+
+        # TODO: Implement stricter checking based on self.file_types (e.g. separate Audio, Video, Image)
+        
+        return eagle_item
 
     def __scan_folder_contents(self, folder: Path) -> Tuple[Optional[Metadata], Optional[Path], bool]:
         """
