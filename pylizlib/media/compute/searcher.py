@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -112,17 +113,9 @@ class EagleCatalogSearcher:
             
             pbar.set_description("Scanning complete")
 
-        # Add reader errors to rejected
-        for error_path, reason in reader.error_paths:
-            self._result.rejected.append(LizMediaSearchResult(
-                status=MediaStatus.REJECTED,
-                path=error_path,
-                media=None,
-                reason=reason
-            ))
-
         # Add reader skipped items to rejected
-        for eagle_item, reason in reader.items_skipped:
+        for eagle_item, reason in tqdm(reader.items_skipped, desc="Processing Skipped Items", unit="items"):
+            time.sleep(0.0005) # Simulate delay
             media_obj = None
             try:
                 media_obj = LizMedia(eagle_item.file_path)
@@ -133,6 +126,16 @@ class EagleCatalogSearcher:
                 status=MediaStatus.REJECTED,
                 path=eagle_item.file_path,
                 media=media_obj,
+                reason=reason
+            ))
+
+        # Add reader errors to rejected
+        for error_path, reason in tqdm(reader.error_paths, desc="Processing Reader Errors", unit="errors"):
+            time.sleep(0.0005)
+            self._result.rejected.append(LizMediaSearchResult(
+                status=MediaStatus.REJECTED,
+                path=error_path,
+                media=None,
                 reason=reason
             ))
 

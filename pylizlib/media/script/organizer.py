@@ -59,10 +59,17 @@ def organizer(
             "--list-rejected", "-lrej",
             help="List rejected files during search."
         ),
-        list_custom_order_index: int = typer.Option(
+        list_accepted_order_index: int = typer.Option(
             0,
-            "--list-custom-order-index", "-loi",
-            help="Index of the column to sort by (0-4). Default is 0 (Filename). Columns: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
+            "--list-accepted-order-index", "-laoi",
+            help="Index of the column to sort accepted list by (0-4). Default is 0 (Filename). Columns: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
+            min=0,
+            max=4
+        ),
+        list_rejected_order_index: int = typer.Option(
+            0,
+            "--list-rejected-order-index", "-lroi",
+            help="Index of the column to sort rejected list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size. (Note: Extension is not shown in rejected table)",
             min=0,
             max=4
         )
@@ -95,8 +102,10 @@ def organizer(
     typer.echo(f"❌ List rejected: {'Yes' if list_rejected else 'No'}")
     
     column_names = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
-    sort_col = column_names[list_custom_order_index]
-    typer.echo(f"🔢 List sort column: {sort_col} (index {list_custom_order_index})")
+    sort_col_acc = column_names[list_accepted_order_index]
+    sort_col_rej = column_names[list_rejected_order_index]
+    typer.echo(f"🔢 Accepted list sort: {sort_col_acc} (index {list_accepted_order_index})")
+    typer.echo(f"🔢 Rejected list sort: {sort_col_rej} (index {list_rejected_order_index})")
     typer.echo("─" * 50 + "\n")
 
     # Searching file to organize
@@ -111,9 +120,9 @@ def organizer(
 
     # Logging search results
     print("\n")
-    searcher.printAcceptedAsTable(list_custom_order_index) if list_accepted else None
+    searcher.printAcceptedAsTable(list_accepted_order_index) if list_accepted else None
     print("\n")
-    searcher.printRejectedAsTable(list_custom_order_index) if list_rejected else None
+    searcher.printRejectedAsTable(list_rejected_order_index) if list_rejected else None
     print("\n\n")
 
     if not media_global:
