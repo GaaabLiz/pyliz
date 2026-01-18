@@ -46,16 +46,18 @@ class MediaListResult:
     Attributes:
         accepted (List[LizMediaSearchResult]): Successfully identified and processed media files.
         rejected (List[LizMediaSearchResult]): Media files that were identified but rejected for various reasons.
+        errored (List[LizMediaSearchResult]): Media files that encountered errors during processing.
     """
     accepted: List[LizMediaSearchResult] = field(default_factory=list)
     rejected: List[LizMediaSearchResult] = field(default_factory=list)
+    errored: List[LizMediaSearchResult] = field(default_factory=list)
 
     @property
     def total_count(self) -> int:
         """
-        Returns the total number of media files processed (found + rejected).
+        Returns the total number of media files processed (found + rejected + errored).
         """
-        return len(self.accepted) + len(self.rejected)
+        return len(self.accepted) + len(self.rejected) + len(self.errored)
 
 
 # noinspection DuplicatedCode

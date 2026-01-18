@@ -129,10 +129,10 @@ class EagleCatalogSearcher:
                 reason=reason
             ))
 
-        # Add reader errors to rejected
+        # Add reader errors to errored
         for error_path, reason in tqdm(reader.error_paths, desc="Processing Reader Errors", unit="errors"):
             time.sleep(0.0005)
-            self._result.rejected.append(LizMediaSearchResult(
+            self._result.errored.append(LizMediaSearchResult(
                 status=MediaStatus.REJECTED,
                 path=error_path,
                 media=None,
@@ -145,8 +145,7 @@ class EagleCatalogSearcher:
         print(f"  Eagle Items created: {len(reader.items) + len(reader.items_skipped)}")
         print(f"  Accepted items: {len(self._result.accepted)}")
         print(f"  Rejected items: {len(self._result.rejected)}")
-        print(f"  Skipped in reader: {len(reader.items_skipped)}")
-        print(f"  Errors in reader: {len(reader.error_paths)}")
+        print(f"  Errored items: {len(self._result.errored)}")
 
 
 class MediaSearcher:
@@ -236,6 +235,31 @@ class MediaSearcher:
                 creation_date,
                 has_exif,
                 size_mb,
+                item.reason
+            )
+
+        self._console.print(table)
+
+    def printErroredAsTable(self, sort_index: int = 0):
+        if not self._result.errored:
+            print("[green]No media files were errored.[/green]")
+            return
+            
+        # Sort errored list based on index
+        sorted_results = self._sort_result_list(self._result.errored, sort_index)
+
+        table = Table(title=f"Errored Media Files ({len(self._result.errored)})")
+        table.add_column("Filename", style="red", no_wrap=True)
+        table.add_column("Path", style="magenta")
+        table.add_column("Error reason", style="white")
+
+        for item in sorted_results:
+            filename = item.path.name
+            path_str = str(item.path)
+            
+            table.add_row(
+                filename,
+                path_str,
                 item.reason
             )
 
