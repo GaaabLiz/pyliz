@@ -121,8 +121,20 @@ class EagleCatalogSearcher:
             pbar.set_description("Scanning complete")
 
         # Handle errors found during reading
+        print("\n")
         for error_path, reason in reader.error_paths:
             print(f"[red]SKIPPED Eagle Directory {error_path} because of error: {reason}[/red]")
+        for skipped_path, reason in reader.skipped_path:
+            print(f"[yellow]SKIPPED Eagle Directory {skipped_path} because: {reason}[/yellow]")
+
+        print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
+        print(f"  Scanned folders: {reader.scanned_folders_count}")
+        print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
+        print(f"  Eagle Items created: {len(reader.file_found)}")
+        print(f"  Accepted items: {len(self._result.accepted)}")
+        print(f"  Rejected items: {len(self._result.rejected)}")
+        print(f"  Skipped in reader: {len(reader.skipped_path)}")
+        print(f"  Errors in reader: {len(reader.error_paths)}")
 
     def _filter_by_tag(self, eagle, eagletag: Optional[List[str]]) -> bool:
         """

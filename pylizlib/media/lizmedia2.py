@@ -1,3 +1,4 @@
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,6 +16,9 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.file import get_file_type, is_media_file, get_file_c_date
 from pylizlib.eaglecool.model.metadata import Metadata
 from pylizlib.media.util.video import VideoUtils
+
+# Suppress exifread logging
+logging.getLogger('exifread').setLevel(logging.CRITICAL)
 
 
 class MediaStatus(str, Enum):
@@ -261,7 +265,8 @@ class LizMedia:
                             except ValueError:
                                 continue
             except Exception as e:
-                logger.error(f"Error reading EXIF data from {self.path}: {e}")
+                # logger.error(f"Error reading EXIF data from {self.path}: {e}")
+                pass
 
         return self.creation_time
 
@@ -279,7 +284,8 @@ class LizMedia:
                     tags = exifread.process_file(f, details=False)
                     return bool(tags)
             except Exception as e:
-                logger.error(f"Error checking EXIF data for {self.path}: {e}")
+                # logger.error(f"Error checking EXIF data for {self.path}: {e}")
+                pass
         return False
 
     # ----  IMAGE/VIDEO INFO
