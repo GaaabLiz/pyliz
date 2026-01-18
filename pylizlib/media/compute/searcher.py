@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -43,15 +44,12 @@ class FileSystemSearcher:
                     if exclude_regex and exclude_regex.search(file):
                         if dry:
                             tqdm.write(f"  Skipping (regex match): {file}")
-                        try:
-                            liz_media = LizMedia(file_path)
-                            result.rejected.append(LizMediaSearchResult(
-                                status=MediaStatus.REJECTED,
-                                media=liz_media,
-                                reason="Rejected by regex pattern"
-                            ))
-                        except ValueError:
-                             pass
+                        result.rejected.append(LizMediaSearchResult(
+                            status=MediaStatus.REJECTED,
+                            path=file_path,
+                            media=None,
+                            reason="Rejected by regex pattern"
+                        ))
                         pbar.update(1)
                         continue
 
@@ -59,6 +57,7 @@ class FileSystemSearcher:
                         liz_media = LizMedia(file_path)
                         result.accepted.append(LizMediaSearchResult(
                             status=MediaStatus.ACCEPTED,
+                            path=file_path,
                             media=liz_media
                         ))
                     except ValueError:
@@ -96,45 +95,37 @@ class EagleCatalogSearcher:
                 # Update description to show current file
                 pbar.set_description(f"Filtering {eagle.file_path.name}")
                 
-                try:
-                    if self._filter_by_tag(eagle, eagletag):
-                        lizmedia = LizMedia(eagle.file_path)
-                        lizmedia.attach_eagle_metadata(eagle.metadata)
-                        
-                        self._result.accepted.append(LizMediaSearchResult(
-                            status=MediaStatus.ACCEPTED,
-                            media=lizmedia
-                        ))
-                except ValueError as e:
-                    tqdm.write(f"[red]Error: {eagle.file_path}: {e}[/red]")
-                    try:
-                        self._result.rejected.append(LizMediaSearchResult(
-                            status=MediaStatus.REJECTED,
-                            media=LizMedia(eagle.file_path),
-                            reason=f"Error loading media: {e}"
-                        ))
-                    except ValueError:
-                        pass
+                if self._filter_by_tag(eagle, eagletag):
+                    lizmedia = LizMedia(eagle.file_path)
+                    lizmedia.attach_eagle_metadata(eagle.metadata)
+                    
+                    self._result.accepted.append(LizMediaSearchResult(
+                        status=MediaStatus.ACCEPTED,
+                        path=eagle.file_path,
+                        media=lizmedia
+                    ))
                 
                 pbar.update(1)
             
             pbar.set_description("Scanning complete")
 
-        # Handle errors found during reading
-        print("\n")
+        # Add reader errors to rejected
         for error_path, reason in reader.error_paths:
-            print(f"[red]SKIPPED Eagle Directory {error_path} because of error: {reason}[/red]")
-        for skipped_path, reason in reader.skipped_path:
-            print(f"[yellow]SKIPPED Eagle Directory {skipped_path} because: {reason}[/yellow]")
+            self._result.rejected.append(LizMediaSearchResult(
+                status=MediaStatus.REJECTED,
+                path=error_path,
+                media=None,
+                reason=reason
+            ))
 
-        print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
-        print(f"  Scanned folders: {reader.scanned_folders_count}")
-        print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
-        print(f"  Eagle Items created: {len(reader.items)}")
-        print(f"  Accepted items: {len(self._result.accepted)}")
-        print(f"  Rejected items: {len(self._result.rejected)}")
-        print(f"  Skipped in reader: {len(reader.skipped_path)}")
-        print(f"  Errors in reader: {len(reader.error_paths)}")
+        # Add reader skipped items to rejected
+        for skipped_path, reason in reader.skipped_path:
+            self._result.rejected.append(LizMediaSearchResult(
+                status=MediaStatus.REJECTED,
+                path=skipped_path,
+                media=None,
+                reason=reason
+            ))
 
     def _filter_by_tag(self, eagle, eagletag: Optional[List[str]]) -> bool:
         """
@@ -145,25 +136,21 @@ class EagleCatalogSearcher:
             return True
 
         if not eagle.metadata:
-            try:
-                self._result.rejected.append(LizMediaSearchResult(
-                    status=MediaStatus.REJECTED,
-                    media=LizMedia(eagle.file_path),
-                    reason="Missing metadata for tag filtering"
-                ))
-            except ValueError:
-                pass
+            self._result.rejected.append(LizMediaSearchResult(
+                status=MediaStatus.REJECTED,
+                path=eagle.file_path,
+                media=None,
+                reason="Missing metadata for tag filtering"
+            ))
             return False
 
         if not any(tag in eagle.metadata.tags for tag in eagletag):
-            try:
-                self._result.rejected.append(LizMediaSearchResult(
-                    status=MediaStatus.REJECTED,
-                    media=LizMedia(eagle.file_path),
-                    reason="Tag mismatch"
-                ))
-            except ValueError:
-                pass
+            self._result.rejected.append(LizMediaSearchResult(
+                status=MediaStatus.REJECTED,
+                path=eagle.file_path,
+                media=None,
+                reason="Tag mismatch"
+            ))
             return False
             
         return True
@@ -240,14 +227,22 @@ class MediaSearcher:
 
         for item in sorted_results:
             media = item.media
-            has_exif = "Yes" if media.has_exif_data else "No"
-            creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
+            if media:
+                filename = media.file_name
+                has_exif = "Yes" if media.has_exif_data else "No"
+                creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
+                size_mb = f"{media.size_mb:.2f}"
+            else:
+                filename = item.path.name
+                has_exif = "N/A"
+                creation_date = "N/A"
+                size_mb = "N/A"
 
             table.add_row(
-                media.file_name,
+                filename,
                 creation_date,
                 has_exif,
-                f"{media.size_mb:.2f}",
+                size_mb,
                 item.reason
             )
 
@@ -255,13 +250,13 @@ class MediaSearcher:
 
     def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int) -> List[LizMediaSearchResult]:
         if sort_index == 1:
-            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file)
+            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file if x.media else datetime.min)
         elif sort_index == 2:
-            return sorted(results, key=lambda x: x.media.has_exif_data)
+            return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
         elif sort_index == 3:
-            return sorted(results, key=lambda x: x.media.extension)
+            return sorted(results, key=lambda x: x.media.extension if x.media else x.path.suffix.lower())
         elif sort_index == 4:
-            return sorted(results, key=lambda x: x.media.size_mb)
+            return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
         else:
             # Default to filename (index 0 or invalid)
-            return sorted(results, key=lambda x: x.media.file_name)
+            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)

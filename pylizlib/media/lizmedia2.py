@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import exifread
 from PIL import Image
@@ -29,8 +29,12 @@ class MediaStatus(str, Enum):
 @dataclass
 class LizMediaSearchResult:
     status: MediaStatus
-    media: 'LizMedia'
+    path: Path
+    media: Optional['LizMedia'] = None
     reason: str = ""
+
+    def has_lizmedia(self) -> bool:
+        return self.media is not None
 
 
 @dataclass
