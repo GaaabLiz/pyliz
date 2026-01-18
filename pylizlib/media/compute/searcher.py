@@ -91,7 +91,7 @@ class EagleCatalogSearcher:
         reader.run()
         
         # Process found media with progress bar
-        with tqdm(reader.file_found, desc="Filtering Eagle Media", unit="items") as pbar:
+        with tqdm(reader.items, desc="Filtering Eagle Media", unit="items") as pbar:
             for eagle in pbar:
                 # Update description to show current file
                 pbar.set_description(f"Filtering {eagle.file_path.name}")
@@ -130,7 +130,7 @@ class EagleCatalogSearcher:
         print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
         print(f"  Scanned folders: {reader.scanned_folders_count}")
         print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
-        print(f"  Eagle Items created: {len(reader.file_found)}")
+        print(f"  Eagle Items created: {len(reader.items)}")
         print(f"  Accepted items: {len(self._result.accepted)}")
         print(f"  Rejected items: {len(self._result.rejected)}")
         print(f"  Skipped in reader: {len(reader.skipped_path)}")

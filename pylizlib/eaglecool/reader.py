@@ -21,7 +21,7 @@ class EagleCoolReader:
         self.catalogue = catalogue
         self.include_deleted = include_deleted
         self.file_types = file_types if file_types else [FileType.IMAGE, FileType.VIDEO, FileType.AUDIO]
-        self.file_found: List[EagleItem] = []
+        self.items: List[EagleItem] = []
         self.error_paths: List[Tuple[Path, str]] = []
         self.skipped_path: List[Tuple[Path, str]] = []
         self.scanned_folders_count: int = 0
@@ -38,7 +38,7 @@ class EagleCoolReader:
                 self.scanned_folders_count += 1
                 result = self.__handle_eagle_folder(folder)
                 if result:
-                    self.file_found.append(result)
+                    self.items.append(result)
 
     def __handle_eagle_folder(self, folder: Path) -> Optional[EagleItem]:
         metadata_obj, media_file, error_occurred = self.__scan_folder_contents(folder)
