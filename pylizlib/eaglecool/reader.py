@@ -58,7 +58,7 @@ class EagleCoolReader:
 
         # Check for deleted items
         if metadata_obj.isDeleted and not self.include_deleted:
-            self.skipped_path.append((folder, "Item is deleted"))
+            self.skipped_path.append((media_file, "Item is deleted"))
             return None
 
         # Check file type
@@ -67,7 +67,7 @@ class EagleCoolReader:
             return EagleItem(media_file, metadata_obj)
         else:
             # TODO: Handle other file types
-            self.skipped_path.append((folder, f"Unsupported file type: {media_file.suffix}"))
+            self.skipped_path.append((media_file, f"Unsupported file type: {media_file.suffix}"))
             return None
 
     def __scan_folder_contents(self, folder: Path) -> Tuple[Optional[Metadata], Optional[Path], bool]:

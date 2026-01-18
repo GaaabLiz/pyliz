@@ -120,10 +120,16 @@ class EagleCatalogSearcher:
 
         # Add reader skipped items to rejected
         for skipped_path, reason in reader.skipped_path:
+            media_obj = None
+            try:
+                media_obj = LizMedia(skipped_path)
+            except ValueError:
+                pass
+
             self._result.rejected.append(LizMediaSearchResult(
                 status=MediaStatus.REJECTED,
                 path=skipped_path,
-                media=None,
+                media=media_obj,
                 reason=reason
             ))
 
