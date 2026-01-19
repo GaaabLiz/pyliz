@@ -4,7 +4,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from rich import print
 from tqdm import tqdm
@@ -17,6 +17,11 @@ class OrganizerResult:
     success: bool
     media: LizMedia
     reason: str = ""
+    destination_path: Optional[str] = None
+
+    @property
+    def source_path(self) -> str:
+        return str(self.media.path)
 
 
 @dataclass
@@ -121,14 +126,14 @@ class MediaOrganizer:
                 try:
                     if not self.options.dry_run:
                         os.remove(source_path)
-                    return OrganizerResult(success=False, media=media, reason="Duplicate deleted")
+                    return OrganizerResult(success=False, media=media, reason="Duplicate deleted", destination_path=target_path)
                 except Exception as e:
-                    return OrganizerResult(success=False, media=media, reason=f"Error deleting duplicate: {e}")
+                    return OrganizerResult(success=False, media=media, reason=f"Error deleting duplicate: {e}", destination_path=target_path)
             else:
-                return OrganizerResult(success=False, media=media, reason="Duplicate skipped")
+                return OrganizerResult(success=False, media=media, reason="Duplicate skipped", destination_path=target_path)
         else:
             # Different content but same path - error
-            return OrganizerResult(success=False, media=media, reason="File conflict: target exists but content differs")
+            return OrganizerResult(success=False, media=media, reason="File conflict: target exists but content differs", destination_path=target_path)
 
     def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float, media: LizMedia) -> OrganizerResult:
         """
@@ -147,9 +152,9 @@ class MediaOrganizer:
 
                 # Explicitly set the modification time to the original creation time
                 os.utime(target_path, (original_timestamp, original_timestamp))
-            return OrganizerResult(success=True, media=media)
+            return OrganizerResult(success=True, media=media, destination_path=target_path)
         except Exception as e:
-            return OrganizerResult(success=False, media=media, reason=f"Transfer error: {e}")
+            return OrganizerResult(success=False, media=media, reason=f"Transfer error: {e}", destination_path=target_path)
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize path to prevent path traversal attacks."""
