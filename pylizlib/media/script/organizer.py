@@ -178,8 +178,8 @@ def organizer(
         table = Table(title=f"Organization Results ({len(results)})")
         table.add_column("Status", justify="center")
         table.add_column("Filename", style="cyan")
-        table.add_column("Destination", style="magenta")
-        table.add_column("Reason", style="white")
+        table.add_column("Destination", style="magenta", overflow="fold")
+        table.add_column("Reason", style="white", overflow="fold")
 
         for res in results:
             status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
