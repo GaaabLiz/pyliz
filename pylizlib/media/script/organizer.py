@@ -143,11 +143,19 @@ def organizer(
 
     # Logging search results
     print("\n")
-    searcher.printAcceptedAsTable(list_accepted_order_index) if list_accepted else None
+    if list_accepted:
+        with Console().status("[bold cyan]Generating Accepted Table...[/bold cyan]"):
+            searcher.printAcceptedAsTable(list_accepted_order_index)
+            
     print("\n")
-    searcher.printRejectedAsTable(list_rejected_order_index) if list_rejected else None
+    if list_rejected:
+        with Console().status("[bold cyan]Generating Rejected Table...[/bold cyan]"):
+            searcher.printRejectedAsTable(list_rejected_order_index)
+            
     print("\n")
-    searcher.printErroredAsTable(list_errored_order_index) if list_errored else None
+    if list_errored:
+        with Console().status("[bold cyan]Generating Errored Table...[/bold cyan]"):
+            searcher.printErroredAsTable(list_errored_order_index)
     print("\n\n")
 
     # Check if there are files to process
@@ -174,18 +182,19 @@ def organizer(
     results = MediaOrganizer(media_to_organize, output, options).organize()
 
     if print_results:
-        print("\n")
-        table = Table(title=f"Organization Results ({len(results)})")
-        table.add_column("Status", justify="center")
-        table.add_column("Filename", style="cyan")
-        table.add_column("Destination", style="magenta", overflow="fold")
-        table.add_column("Reason", style="white", overflow="fold")
+        with Console().status("[bold cyan]Generating Results Table...[/bold cyan]"):
+            print("\n")
+            table = Table(title=f"Organization Results ({len(results)})")
+            table.add_column("Status", justify="center")
+            table.add_column("Filename", style="cyan")
+            table.add_column("Destination", style="magenta", overflow="fold")
+            table.add_column("Reason", style="white", overflow="fold")
 
-        for res in results:
-            status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
-            dest = res.destination_path if res.destination_path else "N/A"
-            table.add_row(status, res.media.file_name, dest, res.reason)
-        
-        Console().print(table)
-        print("\n")
+            for res in results:
+                status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
+                dest = res.destination_path if res.destination_path else "N/A"
+                table.add_row(status, res.media.file_name, dest, res.reason)
+            
+            Console().print(table)
+            print("\n")
 
