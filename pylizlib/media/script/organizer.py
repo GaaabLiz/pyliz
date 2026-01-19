@@ -2,9 +2,11 @@ from typing import List, Optional
 import os
 import typer
 from rich import print
+from rich.console import Console
+from rich.table import Table
 
 from pylizlib.media import media_app
-from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
+from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions, OrganizerResult
 from pylizlib.media.compute.searcher import MediaSearcher
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 
@@ -84,6 +86,11 @@ def organizer(
             help="Index of the column to sort errored list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
             min=0,
             max=4
+        ),
+        print_results: bool = typer.Option(
+            False,
+            "--print-results", "-pres",
+            help="Print organization results in a table."
         )
 ):
     """
@@ -113,6 +120,7 @@ def organizer(
     typer.echo(f"✅ List accepted: {'Yes' if list_accepted else 'No'}")
     typer.echo(f"❌ List rejected: {'Yes' if list_rejected else 'No'}")
     typer.echo(f"⚠️ List errored: {'Yes' if list_errored else 'No'}")
+    typer.echo(f"📊 Print results: {'Yes' if print_results else 'No'}")
     
     column_names = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
     sort_col_acc = column_names[list_accepted_order_index]
@@ -148,7 +156,7 @@ def organizer(
         raise typer.Exit(code=0)
 
     # Wait for user confirmation
-    input("Press Enter to continue with organization...")
+    # input("Press Enter to continue with organization...")
 
     # Organizing files
     options = OrganizerOptions(
@@ -163,5 +171,21 @@ def organizer(
 
     # Extract LizMedia objects from LizMediaSearchResult for the organizer
     media_to_organize = [item.media for item in media_global]
-    MediaOrganizer(media_to_organize, output, options).organize()
+    results = MediaOrganizer(media_to_organize, output, options).organize()
+
+    if print_results:
+        print("\n")
+        table = Table(title=f"Organization Results ({len(results)})")
+        table.add_column("Status", justify="center")
+        table.add_column("Filename", style="cyan")
+        table.add_column("Destination", style="magenta")
+        table.add_column("Reason", style="white")
+
+        for res in results:
+            status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
+            dest = res.destination_path if res.destination_path else "N/A"
+            table.add_row(status, res.media.file_name, dest, res.reason)
+        
+        Console().print(table)
+        print("\n")
 
