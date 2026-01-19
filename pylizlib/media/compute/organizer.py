@@ -4,11 +4,19 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 from rich import print
 from tqdm import tqdm
 
 from pylizlib.media.lizmedia2 import LizMedia
+
+
+@dataclass
+class OrganizerResult:
+    success: bool
+    media: LizMedia
+    reason: str = ""
 
 
 @dataclass
@@ -33,18 +41,14 @@ class MediaOrganizer:
         self.target = target
         self.options = options
 
-    def organize(self) -> tuple[int, list[str]]:
+    def organize(self) -> List[OrganizerResult]:
         """
         Organize files from *source* into *target* according to the provided options.
 
         Returns:
-            tuple[int, list[str]]: (success_count, failed_files)
+            List[OrganizerResult]: List of results for each processed file.
         """
-        failed_files = []
-        success_count = 0
-
-        if self.options.dry_run:
-            print("[yellow]Dry run mode enabled - no actual file operations will be performed[/yellow]")
+        results: List[OrganizerResult] = []
 
         # Prepare iteration
         file_iter = self.media_list if self.options.no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
@@ -54,8 +58,8 @@ class MediaOrganizer:
 
             try:
                 sanitized_path = self._sanitize_path(file_path)
-            except ValueError:
-                print(f"[yellow]Rejected invalid path: {file_path}[/yellow]")
+            except ValueError as e:
+                results.append(OrganizerResult(success=False, media=media_item, reason=str(e)))
                 continue
 
             # Determine date and original timestamp
@@ -76,28 +80,20 @@ class MediaOrganizer:
 
             # Handle existing files (duplicates/conflicts)
             if os.path.exists(target_path):
-                if self._handle_existing_file(file_path, target_path):
-                     # Continue means we rejected or deleted, so we move to next file
-                     continue
-                else:
-                    # If returns False, it means conflict error
-                    failed_files.append(file_path)
+                existing_result = self._handle_existing_file(file_path, target_path, media_item)
+                if existing_result:
+                    results.append(existing_result)
                     continue
 
             # Execute move or copy
-            if self._execute_transfer(file_path, target_path, target_folder, original_timestamp):
-                success_count += 1
-                if self.options.no_progress:
-                     print(f"Processed {file_path} -> {target_path}")
-            else:
-                failed_files.append(file_path)
+            transfer_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
+            results.append(transfer_result)
 
         # Cleanup progress bar
         if not self.options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
-        print(f"Organized {success_count} files")
-        return success_count, failed_files
+        return results
 
     def _build_target_folder_path(self, base_target: str, year: int, month: int, day: int) -> str:
         """Constructs the target folder path based on date options."""
@@ -111,11 +107,10 @@ class MediaOrganizer:
             folder_parts.append(f"{day:02d}")
         return os.path.join(*folder_parts)
 
-    def _handle_existing_file(self, source_path: str, target_path: str) -> bool:
+    def _handle_existing_file(self, source_path: str, target_path: str, media: LizMedia) -> OrganizerResult | None:
         """
         Checks if file exists and handles duplicates.
-        Returns True if the file loop should continue (rejected or deleted),
-        False if it's a conflict/error that should be logged as failure.
+        Returns OrganizerResult if handled (skipped/deleted/error), None if conflict (should probably be error too?) 
         """
         source_hash = self._get_file_hash(source_path)
         target_hash = self._get_file_hash(target_path)
@@ -126,22 +121,19 @@ class MediaOrganizer:
                 try:
                     if not self.options.dry_run:
                         os.remove(source_path)
-                    print(f"[cyan]Deleted duplicate '{source_path}' (matches existing)[/cyan]")
+                    return OrganizerResult(success=False, media=media, reason="Duplicate deleted")
                 except Exception as e:
-                    print(f"[red]Error deleting duplicate '{source_path}': {e}[/red]")
-                    return False 
+                    return OrganizerResult(success=False, media=media, reason=f"Error deleting duplicate: {e}")
             else:
-                print(f"[cyan]Skipping '{source_path}': Identical file already exists[/cyan]")
-            return True
+                return OrganizerResult(success=False, media=media, reason="Duplicate skipped")
         else:
             # Different content but same path - error
-            print(f"[red]File conflict: '{target_path}' already exists but is different[/red]")
-            return False
+            return OrganizerResult(success=False, media=media, reason="File conflict: target exists but content differs")
 
-    def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float) -> bool:
+    def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float, media: LizMedia) -> OrganizerResult:
         """
         Moves or copies the file and restores timestamps.
-        Returns True on success, False on error.
+        Returns OrganizerResult.
         """
         try:
             if not self.options.dry_run:
@@ -155,10 +147,9 @@ class MediaOrganizer:
 
                 # Explicitly set the modification time to the original creation time
                 os.utime(target_path, (original_timestamp, original_timestamp))
-            return True
+            return OrganizerResult(success=True, media=media)
         except Exception as e:
-            print(f"[red]Error processing {source_path}: {e}[/red]")
-            return False
+            return OrganizerResult(success=False, media=media, reason=f"Transfer error: {e}")
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize path to prevent path traversal attacks."""
@@ -185,6 +176,5 @@ class MediaOrganizer:
                     hash_obj.update(chunk)
                     chunk = f.read(4096)
             return hash_obj.hexdigest()
-        except Exception as e:
-            print(f"[red]Error hashing {file_path}: {e}[/red]")
+        except Exception:
             return None
