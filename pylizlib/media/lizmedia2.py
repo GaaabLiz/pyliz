@@ -32,9 +32,13 @@ class LizMediaSearchResult:
     path: Path
     media: Optional['LizMedia'] = None
     reason: str = ""
+    sidecar_files: List[Path] = field(default_factory=list)
 
     def has_lizmedia(self) -> bool:
         return self.media is not None
+
+    def has_sidecars(self) -> bool:
+        return len(self.sidecar_files) > 0
 
 
 @dataclass

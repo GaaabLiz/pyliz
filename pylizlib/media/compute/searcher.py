@@ -139,6 +139,22 @@ class EagleCatalogSearcher:
                 reason=reason
             ))
 
+        # Post-process rejected items to link sidecars to accepted media
+        sidecar_extensions = {'.xmp', '.aae'}
+        accepted_map = {item.path.stem: item for item in self._result.accepted}
+        rejected_to_keep = []
+
+        for rejected_item in self._result.rejected:
+            if rejected_item.path.suffix.lower() in sidecar_extensions:
+                stem = rejected_item.path.stem
+                if stem in accepted_map:
+                    accepted_map[stem].sidecar_files.append(rejected_item.path)
+                    continue # Successfully linked, remove from rejected
+            
+            rejected_to_keep.append(rejected_item)
+        
+        self._result.rejected = rejected_to_keep
+
         print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
         print(f"  Scanned folders: {reader.scanned_folders_count}")
         print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
@@ -146,6 +162,9 @@ class EagleCatalogSearcher:
         print(f"  Accepted items: {len(self._result.accepted)}")
         print(f"  Rejected items: {len(self._result.rejected)}")
         print(f"  Errored items: {len(self._result.errored)}")
+        
+        total_sidecars = sum(len(item.sidecar_files) for item in self._result.accepted)
+        print(f"  Sidecar files linked: {total_sidecars}")
 
 
 class MediaSearcher:
@@ -186,18 +205,22 @@ class MediaSearcher:
         table.add_column("Has EXIF", justify="center", style="magenta")
         table.add_column("Ext", justify="center", style="yellow")
         table.add_column("Size (MB)", justify="right", style="green")
+        table.add_column("Sidecars", style="white")
 
         for item in sorted_results:
             media = item.media
             has_exif = "Yes" if media.has_exif_data else "No"
             creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
             
+            sidecars_str = ", ".join([s.name for s in item.sidecar_files]) if item.sidecar_files else ""
+
             table.add_row(
                 media.file_name,
                 creation_date,
                 has_exif,
                 media.extension,
-                f"{media.size_mb:.2f}"
+                f"{media.size_mb:.2f}",
+                sidecars_str
             )
 
         self._console.print(table)
