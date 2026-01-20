@@ -151,7 +151,7 @@ class MediaOrganizer:
                     shutil.move(source_path, target_path)
 
                 # Explicitly set the modification time to the original creation time
-                os.utime(target_path, (original_timestamp, original_timestamp))
+                # os.utime(target_path, (original_timestamp, original_timestamp))
             return OrganizerResult(success=True, media=media, destination_path=target_path)
         except Exception as e:
             return OrganizerResult(success=False, media=media, reason=f"Transfer error: {e}", destination_path=target_path)
