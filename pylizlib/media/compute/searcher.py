@@ -141,14 +141,22 @@ class EagleCatalogSearcher:
 
         # Post-process rejected items to link sidecars to accepted media
         sidecar_extensions = {'.xmp', '.aae'}
-        accepted_map = {item.path.stem: item for item in self._result.accepted}
+        accepted_map_by_stem = {item.path.stem: item for item in self._result.accepted}
+        accepted_map_by_name = {item.path.name: item for item in self._result.accepted}
         rejected_to_keep = []
 
         for rejected_item in self._result.rejected:
             if rejected_item.path.suffix.lower() in sidecar_extensions:
                 stem = rejected_item.path.stem
-                if stem in accepted_map:
-                    accepted_map[stem].sidecar_files.append(rejected_item.path)
+                
+                # Check match by name (e.g. image.png.xmp -> matches image.png)
+                if stem in accepted_map_by_name:
+                    accepted_map_by_name[stem].sidecar_files.append(rejected_item.path)
+                    continue
+                
+                # Check match by stem (e.g. image.xmp -> matches image.png)
+                if stem in accepted_map_by_stem:
+                    accepted_map_by_stem[stem].sidecar_files.append(rejected_item.path)
                     continue # Successfully linked, remove from rejected
             
             rejected_to_keep.append(rejected_item)
