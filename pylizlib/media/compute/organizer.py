@@ -2,26 +2,27 @@ import hashlib
 import os
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
 from rich import print
 from tqdm import tqdm
 
-from pylizlib.media.lizmedia2 import LizMedia
+from pylizlib.media.lizmedia2 import LizMedia, LizMediaSearchResult
 
 
 @dataclass
 class OrganizerResult:
     success: bool
-    media: LizMedia
+    source_file: Path
+    media: Optional[LizMedia] = None
     reason: str = ""
     destination_path: Optional[str] = None
 
     @property
     def source_path(self) -> str:
-        return str(self.media.path)
+        return str(self.source_file)
 
 
 @dataclass
@@ -41,8 +42,8 @@ class MediaOrganizer:
     based on their creation date (from EXIF or filesystem).
     """
 
-    def __init__(self, media_list: list[LizMedia], target: str, options: OrganizerOptions):
-        self.media_list = media_list
+    def __init__(self, search_results: list[LizMediaSearchResult], target: str, options: OrganizerOptions):
+        self.search_results = search_results
         self.target = target
         self.options = options
 
@@ -56,15 +57,20 @@ class MediaOrganizer:
         results: List[OrganizerResult] = []
 
         # Prepare iteration
-        file_iter = self.media_list if self.options.no_progress else tqdm(self.media_list, unit="files", desc="Organizing")
+        file_iter = self.search_results if self.options.no_progress else tqdm(self.search_results, unit="files", desc="Organizing")
 
-        for media_item in file_iter:
+        for item in file_iter:
+            if not item.has_lizmedia():
+                continue
+            
+            media_item = item.media
             file_path = str(media_item.path)
 
             try:
                 sanitized_path = self._sanitize_path(file_path)
             except ValueError as e:
-                results.append(OrganizerResult(success=False, media=media_item, reason=str(e)))
+                # print(f"[yellow]Rejected invalid path: {file_path}[/yellow]")
+                results.append(OrganizerResult(success=False, source_file=media_item.path, media=media_item, reason=str(e)))
                 continue
 
             # Determine date and original timestamp
@@ -93,6 +99,15 @@ class MediaOrganizer:
             # Execute move or copy
             transfer_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
             results.append(transfer_result)
+            
+            # Handle sidecars if media transfer was successful
+            if transfer_result.success and item.has_sidecars():
+                for sidecar_path in item.sidecar_files:
+                    sidecar_target = os.path.join(target_folder, sidecar_path.name)
+                    # Pass full path string or Path object? _execute_sidecar_transfer expects Path.
+                    # item.sidecar_files contains Path objects.
+                    sidecar_result = self._execute_sidecar_transfer(sidecar_path, sidecar_target, target_folder)
+                    results.append(sidecar_result)
 
         # Cleanup progress bar
         if not self.options.no_progress and hasattr(file_iter, "close"):
@@ -126,14 +141,14 @@ class MediaOrganizer:
                 try:
                     if not self.options.dry_run:
                         os.remove(source_path)
-                    return OrganizerResult(success=False, media=media, reason="Duplicate deleted", destination_path=target_path)
+                    return OrganizerResult(success=False, source_file=media.path, media=media, reason="Duplicate deleted", destination_path=target_path)
                 except Exception as e:
-                    return OrganizerResult(success=False, media=media, reason=f"Error deleting duplicate: {e}", destination_path=target_path)
+                    return OrganizerResult(success=False, source_file=media.path, media=media, reason=f"Error deleting duplicate: {e}", destination_path=target_path)
             else:
-                return OrganizerResult(success=False, media=media, reason="Duplicate skipped", destination_path=target_path)
+                return OrganizerResult(success=False, source_file=media.path, media=media, reason="Duplicate skipped", destination_path=target_path)
         else:
             # Different content but same path - error
-            return OrganizerResult(success=False, media=media, reason="File conflict: target exists but content differs", destination_path=target_path)
+            return OrganizerResult(success=False, source_file=media.path, media=media, reason="File conflict: target exists but content differs", destination_path=target_path)
 
     def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float, media: LizMedia) -> OrganizerResult:
         """
@@ -152,9 +167,23 @@ class MediaOrganizer:
 
                 # Explicitly set the modification time to the original creation time
                 # os.utime(target_path, (original_timestamp, original_timestamp))
-            return OrganizerResult(success=True, media=media, destination_path=target_path)
+            return OrganizerResult(success=True, source_file=media.path, media=media, destination_path=target_path)
         except Exception as e:
-            return OrganizerResult(success=False, media=media, reason=f"Transfer error: {e}", destination_path=target_path)
+            return OrganizerResult(success=False, source_file=media.path, media=media, reason=f"Transfer error: {e}", destination_path=target_path)
+
+    def _execute_sidecar_transfer(self, source_path: Path, target_path: str, target_folder: str) -> OrganizerResult:
+        """
+        Moves or copies a sidecar file. Returns OrganizerResult.
+        """
+        try:
+            if not self.options.dry_run:
+                if self.options.copy:
+                    shutil.copy2(source_path, target_path)
+                else:
+                    shutil.move(source_path, target_path)
+            return OrganizerResult(success=True, source_file=source_path, destination_path=target_path)
+        except Exception as e:
+            return OrganizerResult(success=False, source_file=source_path, reason=f"Sidecar transfer error: {e}", destination_path=target_path)
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize path to prevent path traversal attacks."""

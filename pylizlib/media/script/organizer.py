@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional
 import os
 import typer
@@ -177,9 +178,8 @@ def organizer(
         exif=True
     )
 
-    # Extract LizMedia objects from LizMediaSearchResult for the organizer
-    media_to_organize = [item.media for item in media_global]
-    results = MediaOrganizer(media_to_organize, output, options).organize()
+    # Pass LizMediaSearchResult objects directly to MediaOrganizer to preserve sidecar info
+    results = MediaOrganizer(media_global, output, options).organize()
 
     if print_results:
         with Console().status("[bold cyan]Generating Results Table...[/bold cyan]"):
@@ -187,13 +187,20 @@ def organizer(
             table = Table(title=f"Organization Results ({len(results)})")
             table.add_column("Status", justify="center")
             table.add_column("Filename", style="cyan")
+            table.add_column("Extension", style="yellow", justify="center")
             table.add_column("Destination", style="magenta", overflow="fold")
             table.add_column("Reason", style="white", overflow="fold")
 
             for res in results:
                 status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
-                dest = res.destination_path if res.destination_path else "N/A"
-                table.add_row(status, res.media.file_name, dest, res.reason)
+                
+                # Show path relative to the parent of the output directory for better readability
+                if res.destination_path:
+                    dest = os.path.relpath(res.destination_path, Path(output).parent)
+                else:
+                    dest = "N/A"
+                    
+                table.add_row(status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
             
             Console().print(table)
             print("\n")
