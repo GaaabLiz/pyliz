@@ -5,7 +5,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from rich import print
 from tqdm import tqdm
@@ -67,83 +67,115 @@ class MediaOrganizer:
             if not item.has_lizmedia():
                 continue
             
-            media_item = item.media
-            file_path = str(media_item.path)
-            logger.debug(f"Processing media item: {media_item.path}")
-
-            try:
-                sanitized_path = self._sanitize_path(file_path)
-            except ValueError as e:
-                # print(f"[yellow]Rejected invalid path: {file_path}[/yellow]")
-                logger.error(f"Rejected invalid path: {file_path}. Reason: {e}")
-                results.append(OrganizerResult(success=False, source_file=media_item.path, media=media_item, reason=str(e)))
-                continue
-
-            # Determine date and original timestamp
-            if self.options.exif and media_item.is_image:
-                creation_date = media_item.creation_date_from_exif_or_file
-                year, month, day = creation_date.year, creation_date.month, creation_date.day
-                original_timestamp = creation_date.timestamp()
-            else:
-                year, month, day = media_item.year, media_item.month, media_item.day
-                original_timestamp = media_item.creation_time.timestamp()
-
-            # Build target path
-            target_folder = self._build_target_folder_path(self.target, year, month, day)
-            target_path = os.path.join(target_folder, os.path.basename(sanitized_path))
-
-            if not self.options.dry_run:
-                self._ensure_directory_exists(target_folder)
-
-            # Handle existing files (duplicates/conflicts)
-            main_result = None
-            if os.path.exists(target_path):
-                logger.info(f"File exists at target: {target_path}. Checking for duplicates/conflicts.")
-                main_result = self._handle_existing_file(file_path, target_path, media_item)
-
-            if not main_result:
-                # Execute move or copy if not handled as existing/duplicate
-                main_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
-
-            results.append(main_result)
-            
-            # Handle sidecars logic
-            # Process sidecars if main file was transferred successfully OR if it was skipped as a duplicate (file exists at target)
-            should_process_sidecars = False
-            if main_result.success:
-                should_process_sidecars = True
-            elif main_result.reason == "Duplicate skipped":
-                should_process_sidecars = True
-            
-            if should_process_sidecars and item.has_sidecars():
-                logger.debug(f"Processing {len(item.sidecar_files)} sidecar files for: {media_item.path}. Main file result: success={main_result.success}, reason={main_result.reason}")
-                for sidecar_path in item.sidecar_files:
-                    sidecar_target = os.path.join(target_folder, sidecar_path.name)
-                    
-                    # Check if sidecar exists at target to avoid overwriting or errors
-                    if os.path.exists(sidecar_target):
-                         # If sidecar exists, we might want to check duplicate logic too, but for now let's just skip/log
-                         logger.debug(f"Sidecar already exists at target: {sidecar_target}. Skipping.")
-                         # Add a result entry for the sidecar being skipped
-                         results.append(OrganizerResult(success=False, source_file=sidecar_path, reason="Sidecar exists/Duplicate skipped", destination_path=sidecar_target))
-                         continue
-
-                    logger.debug(f"Transferring sidecar: {sidecar_path} -> {sidecar_target}")
-                    sidecar_result = self._execute_sidecar_transfer(sidecar_path, sidecar_target, target_folder)
-                    results.append(sidecar_result)
-                    
-                    if sidecar_result.success:
-                        logger.debug(f"Sidecar transfer successful: {sidecar_path}")
-                    else:
-                        logger.error(f"Sidecar transfer failed: {sidecar_path}. Reason: {sidecar_result.reason}")
-            elif not should_process_sidecars and item.has_sidecars():
-                logger.warning(f"Skipping sidecars for {media_item.path}. Main file result: success={main_result.success}, reason={main_result.reason}")
+            item_results = self._process_single_item(item)
+            results.extend(item_results)
 
         # Cleanup progress bar
         if not self.options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
         logger.info(f"Organization complete. Processed {len(results)} items.")
+        return results
+
+    def _process_single_item(self, item: LizMediaSearchResult) -> List[OrganizerResult]:
+        """
+        Process a single media item search result, including its sidecars.
+        Returns a list of results (main item + sidecars).
+        """
+        results: List[OrganizerResult] = []
+        media_item = item.media
+        file_path = str(media_item.path)
+        logger.debug(f"Processing media item: {media_item.path}")
+
+        # 1. Sanitize Path
+        try:
+            sanitized_path = self._sanitize_path(file_path)
+        except ValueError as e:
+            logger.error(f"Rejected invalid path: {file_path}. Reason: {e}")
+            return [OrganizerResult(success=False, source_file=media_item.path, media=media_item, reason=str(e))]
+
+        # 2. Determine Dates and Paths
+        year, month, day, original_timestamp = self._get_creation_details(media_item)
+        target_folder = self._build_target_folder_path(self.target, year, month, day)
+        target_path = os.path.join(target_folder, os.path.basename(sanitized_path))
+
+        # 3. Ensure Directory Exists (Effect)
+        if not self.options.dry_run:
+            self._ensure_directory_exists(target_folder)
+
+        # 4. Handle Main File Transfer
+        main_result = None
+        
+        # Check for existing file (Duplicate/Conflict Logic)
+        if os.path.exists(target_path):
+            logger.info(f"File exists at target: {target_path}. Checking for duplicates/conflicts.")
+            main_result = self._handle_existing_file(file_path, target_path, media_item)
+
+        # If not handled as existing/duplicate, perform transfer
+        if not main_result:
+            main_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
+
+        results.append(main_result)
+
+        # 5. Handle Sidecars
+        sidecar_results = self._process_sidecars(item, target_folder, main_result)
+        results.extend(sidecar_results)
+
+        return results
+
+    def _get_creation_details(self, media_item: LizMedia) -> Tuple[int, int, int, float]:
+        """
+        Extracts creation date details from EXIF or filesystem.
+        Returns: (year, month, day, timestamp)
+        """
+        if self.options.exif and media_item.is_image:
+            creation_date = media_item.creation_date_from_exif_or_file
+            return creation_date.year, creation_date.month, creation_date.day, creation_date.timestamp()
+        else:
+            return media_item.year, media_item.month, media_item.day, media_item.creation_time.timestamp()
+
+    def _process_sidecars(self, item: LizMediaSearchResult, target_folder: str, main_result: OrganizerResult) -> List[OrganizerResult]:
+        """
+        Process sidecar files associated with the main media item.
+        Sidecars are processed if the main file was successful OR skipped as a duplicate.
+        """
+        results = []
+        should_process_sidecars = False
+        
+        if main_result.success:
+            should_process_sidecars = True
+        elif main_result.reason == "Duplicate skipped":
+            should_process_sidecars = True
+
+        if should_process_sidecars and item.has_sidecars():
+            logger.debug(f"Processing {len(item.sidecar_files)} sidecar files for: {item.media.path}. Main result: {main_result.reason}")
+            
+            for sidecar_path in item.sidecar_files:
+                sidecar_target = os.path.join(target_folder, sidecar_path.name)
+                
+                # Check if sidecar exists at target
+                if os.path.exists(sidecar_target):
+                    logger.debug(f"Sidecar already exists at target: {sidecar_target}. Skipping.")
+                    results.append(OrganizerResult(
+                        success=False, 
+                        source_file=sidecar_path, 
+                        reason="Sidecar exists/Duplicate skipped", 
+                        destination_path=sidecar_target
+                    ))
+                    continue
+
+                logger.debug(f"Transferring sidecar: {sidecar_path} -> {sidecar_target}")
+                sidecar_result = self._execute_sidecar_transfer(sidecar_path, sidecar_target, target_folder)
+                results.append(sidecar_result)
+                
+                if sidecar_result.success:
+                    logger.debug(f"Sidecar transfer successful: {sidecar_path}")
+                else:
+                    logger.error(f"Sidecar transfer failed: {sidecar_path}. Reason: {sidecar_result.reason}")
+
+        elif not should_process_sidecars and item.has_sidecars():
+            logger.warning(f"Skipping sidecars for {item.media.path}. Main file result: success={main_result.success}, reason={main_result.reason}")
+            
         return results
 
     def _build_target_folder_path(self, base_target: str, year: int, month: int, day: int) -> str:
@@ -161,7 +193,7 @@ class MediaOrganizer:
     def _handle_existing_file(self, source_path: str, target_path: str, media: LizMedia) -> OrganizerResult | None:
         """
         Checks if file exists and handles duplicates.
-        Returns OrganizerResult if handled (skipped/deleted/error), None if conflict (should probably be error too?) 
+        Returns OrganizerResult if handled (skipped/deleted/error), None if conflict.
         """
         source_hash = self._get_file_hash(source_path)
         target_hash = self._get_file_hash(target_path)
