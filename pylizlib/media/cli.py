@@ -22,10 +22,16 @@ file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(file_formatter)
 
-# Create logger
-logger = logging.getLogger("pyliz_media")
-logger.setLevel(logging.INFO)
-logger.addHandler(file_handler)
+# Configure Root Logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# Remove existing handlers to avoid console output or duplicates
+if root_logger.hasHandlers():
+    root_logger.handlers.clear()
+root_logger.addHandler(file_handler)
+
+# Create logger (optional, just for this module if needed, otherwise use root)
+logger = logging.getLogger("pyliz_media") # This will now inherit from root and use the file handler
 
 
 @media_app.command()

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -10,6 +11,8 @@ from rich import print
 from tqdm import tqdm
 
 from pylizlib.media.lizmedia2 import LizMedia, LizMediaSearchResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,6 +57,7 @@ class MediaOrganizer:
         Returns:
             List[OrganizerResult]: List of results for each processed file.
         """
+        logger.info(f"Starting organization. Candidates: {len(self.search_results)}, Target: {self.target}, Options: {self.options}")
         results: List[OrganizerResult] = []
 
         # Prepare iteration
@@ -65,11 +69,13 @@ class MediaOrganizer:
             
             media_item = item.media
             file_path = str(media_item.path)
+            logger.debug(f"Processing media item: {media_item.path}")
 
             try:
                 sanitized_path = self._sanitize_path(file_path)
             except ValueError as e:
                 # print(f"[yellow]Rejected invalid path: {file_path}[/yellow]")
+                logger.error(f"Rejected invalid path: {file_path}. Reason: {e}")
                 results.append(OrganizerResult(success=False, source_file=media_item.path, media=media_item, reason=str(e)))
                 continue
 
@@ -90,29 +96,54 @@ class MediaOrganizer:
                 self._ensure_directory_exists(target_folder)
 
             # Handle existing files (duplicates/conflicts)
+            main_result = None
             if os.path.exists(target_path):
-                existing_result = self._handle_existing_file(file_path, target_path, media_item)
-                if existing_result:
-                    results.append(existing_result)
-                    continue
+                logger.info(f"File exists at target: {target_path}. Checking for duplicates/conflicts.")
+                main_result = self._handle_existing_file(file_path, target_path, media_item)
 
-            # Execute move or copy
-            transfer_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
-            results.append(transfer_result)
+            if not main_result:
+                # Execute move or copy if not handled as existing/duplicate
+                main_result = self._execute_transfer(file_path, target_path, target_folder, original_timestamp, media_item)
+
+            results.append(main_result)
             
-            # Handle sidecars if media transfer was successful
-            if transfer_result.success and item.has_sidecars():
+            # Handle sidecars logic
+            # Process sidecars if main file was transferred successfully OR if it was skipped as a duplicate (file exists at target)
+            should_process_sidecars = False
+            if main_result.success:
+                should_process_sidecars = True
+            elif main_result.reason == "Duplicate skipped":
+                should_process_sidecars = True
+            
+            if should_process_sidecars and item.has_sidecars():
+                logger.debug(f"Processing {len(item.sidecar_files)} sidecar files for: {media_item.path}. Main file result: success={main_result.success}, reason={main_result.reason}")
                 for sidecar_path in item.sidecar_files:
                     sidecar_target = os.path.join(target_folder, sidecar_path.name)
-                    # Pass full path string or Path object? _execute_sidecar_transfer expects Path.
-                    # item.sidecar_files contains Path objects.
+                    
+                    # Check if sidecar exists at target to avoid overwriting or errors
+                    if os.path.exists(sidecar_target):
+                         # If sidecar exists, we might want to check duplicate logic too, but for now let's just skip/log
+                         logger.debug(f"Sidecar already exists at target: {sidecar_target}. Skipping.")
+                         # Add a result entry for the sidecar being skipped
+                         results.append(OrganizerResult(success=False, source_file=sidecar_path, reason="Sidecar exists/Duplicate skipped", destination_path=sidecar_target))
+                         continue
+
+                    logger.debug(f"Transferring sidecar: {sidecar_path} -> {sidecar_target}")
                     sidecar_result = self._execute_sidecar_transfer(sidecar_path, sidecar_target, target_folder)
                     results.append(sidecar_result)
+                    
+                    if sidecar_result.success:
+                        logger.debug(f"Sidecar transfer successful: {sidecar_path}")
+                    else:
+                        logger.error(f"Sidecar transfer failed: {sidecar_path}. Reason: {sidecar_result.reason}")
+            elif not should_process_sidecars and item.has_sidecars():
+                logger.warning(f"Skipping sidecars for {media_item.path}. Main file result: success={main_result.success}, reason={main_result.reason}")
 
         # Cleanup progress bar
         if not self.options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
+        logger.info(f"Organization complete. Processed {len(results)} items.")
         return results
 
     def _build_target_folder_path(self, base_target: str, year: int, month: int, day: int) -> str:
@@ -137,17 +168,22 @@ class MediaOrganizer:
 
         if source_hash == target_hash:
             # Exact match - handle as duplicate
+            logger.info(f"Duplicate content detected: {source_path} == {target_path}")
             if self.options.delete_duplicates:
                 try:
                     if not self.options.dry_run:
                         os.remove(source_path)
+                    logger.info(f"Duplicate deleted: {source_path}")
                     return OrganizerResult(success=False, source_file=media.path, media=media, reason="Duplicate deleted", destination_path=target_path)
                 except Exception as e:
+                    logger.error(f"Error deleting duplicate {source_path}: {e}")
                     return OrganizerResult(success=False, source_file=media.path, media=media, reason=f"Error deleting duplicate: {e}", destination_path=target_path)
             else:
+                logger.info(f"Duplicate skipped: {source_path}")
                 return OrganizerResult(success=False, source_file=media.path, media=media, reason="Duplicate skipped", destination_path=target_path)
         else:
             # Different content but same path - error
+            logger.warning(f"File conflict detected (same name, different content). Source: {source_path}, Target: {target_path}")
             return OrganizerResult(success=False, source_file=media.path, media=media, reason="File conflict: target exists but content differs", destination_path=target_path)
 
     def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float, media: LizMedia) -> OrganizerResult:
@@ -155,6 +191,7 @@ class MediaOrganizer:
         Moves or copies the file and restores timestamps.
         Returns OrganizerResult.
         """
+        logger.debug(f"Transferring file. Source: {source_path}, Target: {target_path}, Copy: {self.options.copy}")
         try:
             if not self.options.dry_run:
                 if not os.access(target_folder, os.W_OK):
@@ -167,8 +204,10 @@ class MediaOrganizer:
 
                 # Explicitly set the modification time to the original creation time
                 # os.utime(target_path, (original_timestamp, original_timestamp))
+            logger.info(f"Transfer successful: {source_path} -> {target_path}")
             return OrganizerResult(success=True, source_file=media.path, media=media, destination_path=target_path)
         except Exception as e:
+            logger.error(f"Transfer error for {source_path}: {e}")
             return OrganizerResult(success=False, source_file=media.path, media=media, reason=f"Transfer error: {e}", destination_path=target_path)
 
     def _execute_sidecar_transfer(self, source_path: Path, target_path: str, target_folder: str) -> OrganizerResult:
@@ -183,6 +222,7 @@ class MediaOrganizer:
                     shutil.move(source_path, target_path)
             return OrganizerResult(success=True, source_file=source_path, destination_path=target_path)
         except Exception as e:
+            logger.error(f"Sidecar transfer error for {source_path}: {e}")
             return OrganizerResult(success=False, source_file=source_path, reason=f"Sidecar transfer error: {e}", destination_path=target_path)
 
     def _sanitize_path(self, path: str) -> str:
