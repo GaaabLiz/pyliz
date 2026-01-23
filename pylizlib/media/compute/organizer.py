@@ -52,6 +52,7 @@ class MediaOrganizer:
         self.target = target
         self.options = options
         self.results: List[OrganizerResult] = []
+        self.generated_xmps: List[Path] = []
 
     def organize(self) -> None:
         """
@@ -76,6 +77,65 @@ class MediaOrganizer:
             file_iter.close()
 
         logger.info(f"Organization complete. Processed {len(self.results)} items.")
+
+    def gen_xmps(self):
+        """
+        Generates XMP sidecar files for organized media if they don't exist.
+        """
+        logger.info("Generating XMP sidecar files...")
+        count = 0
+        
+        # Wrap iteration with tqdm for progress tracking
+        results_iter = self.results if self.options.no_progress else tqdm(self.results, unit="files", desc="Generating XMPs")
+        
+        for result in results_iter:
+            # Skip failed operations or if destination path is missing
+            if not result.success or not result.destination_path:
+                continue
+
+            # Skip if it's already a sidecar file (or treated as one in context of source)
+            if not result.media: 
+                continue
+            
+            # Construct expected XMP path
+            dest_path = Path(result.destination_path)
+            
+            # Check if the file itself is an XMP
+            if dest_path.suffix.lower() == '.xmp':
+                continue
+
+            xmp_path = dest_path.with_suffix('.xmp')
+
+            if not xmp_path.exists():
+                try:
+                    # Determine XMP content
+                    xmp_content = ""
+                    if result.media and result.media.eagle_metadata:
+                        try:
+                            xmp_content = result.media.eagle_metadata.to_xmp()
+                        except Exception as e:
+                            logger.error(f"Error generating XMP content for {dest_path}: {e}")
+
+                    if not self.options.dry_run:
+                        if xmp_content:
+                            with open(xmp_path, 'w', encoding='utf-8') as f:
+                                f.write(xmp_content)
+                        else:
+                            xmp_path.touch()
+                    
+                    self.generated_xmps.append(xmp_path)
+                    logger.debug(f"Created XMP sidecar: {xmp_path}")
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to create XMP for {dest_path}: {e}")
+            else:
+                logger.debug(f"XMP sidecar already exists: {xmp_path}")
+        
+        # Cleanup progress bar
+        if not self.options.no_progress and hasattr(results_iter, "close"):
+            results_iter.close()
+            
+        logger.info(f"XMP generation complete. Created {count} new XMP files.")
 
     def get_results(self) -> List[OrganizerResult]:
         """Returns the list of organization results."""
@@ -131,6 +191,54 @@ class MediaOrganizer:
                 table.add_row(status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
             
             Console().print(table)
+            print("\n")
+
+    def print_xmp_report(self):
+        """
+        Prints a report table of XMP sidecar status for processed media.
+        """
+        if not self.results:
+            return
+
+        with Console().status("[bold cyan]Generating XMP Report...[/bold cyan]"):
+            print("\n")
+            table = Table(title="XMP Sidecar Report")
+            table.add_column("Media File", style="cyan")
+            table.add_column("XMP Present", justify="center")
+            table.add_column("Newly Generated", justify="center")
+
+            count_present = 0
+            count_generated = 0
+
+            for result in self.results:
+                # Filter for successful media transfers
+                if not result.success or not result.destination_path or not result.media:
+                    continue
+                
+                # Check for XMP
+                dest_path = Path(result.destination_path)
+                
+                # Skip if the result itself is an XMP file (sidecar transfer)
+                if dest_path.suffix.lower() == '.xmp':
+                    continue
+
+                xmp_path = dest_path.with_suffix('.xmp')
+                
+                exists = xmp_path.exists()
+                was_generated = xmp_path in self.generated_xmps
+                
+                if exists:
+                    count_present += 1
+                if was_generated:
+                    count_generated += 1
+
+                present_str = "[green]Yes[/green]" if exists else "[red]No[/red]"
+                generated_str = "[green]Yes[/green]" if was_generated else "[dim]No[/dim]"
+
+                table.add_row(dest_path.name, present_str, generated_str)
+
+            Console().print(table)
+            print(f"Total Media: {len(self.results)} | XMP Present: {count_present} | Newly Generated: {count_generated}")
             print("\n")
 
     def _process_single_item(self, item: LizMediaSearchResult) -> List[OrganizerResult]:
