@@ -15,90 +15,105 @@ from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 @media_app.command()
 def organizer(
         path: str = typer.Argument(
-            ...,
+            None,
             dir_okay=True,
             readable=True,
-            help="Source path of files to organize"
+            help="Source path of files to organize",
+            envvar="PYL_M_ORG_PATH"
         ),
         output: str = typer.Argument(
-            ...,
+            None,
             dir_okay=True,
             writable=True,
             readable=True,
-            help="Destination path for organized files"
+            help="Destination path for organized files",
+            envvar="PYL_M_ORG_OUTPUT"
         ),
         eaglecatalog: bool = typer.Option(
             False,
             "--eaglecatalog",
-            help="Import metadata from Eagle catalog"
+            help="Import metadata from Eagle catalog",
+            envvar="PYL_M_ORG_EAGLECATALOG"
         ),
         eagletag: Optional[List[str]] = typer.Option(
             None,
             "--eagletag", "-et",
-            help="Eagle tags to apply (can be repeated: -et tag1 -et tag2)"
+            help="Eagle tags to apply (can be repeated: -et tag1 -et tag2)",
+            envvar="PYL_M_ORG_EAGLETAG"
         ),
         xmp: bool = typer.Option(
             False,
             "--xmp",
-            help="Generate XMP files for metadata"
+            help="Generate XMP files for metadata",
+            envvar="PYL_M_ORG_XMP"
         ),
         dry: bool = typer.Option(
             False,
             "--dry",
-            help="Run in dry-run mode (preview only)"
+            help="Run in dry-run mode (preview only)",
+            envvar="PYL_M_ORG_DRY"
         ),
         exclude: str = typer.Option(
             None,
             "--exclude", "-ex",
-            help="Regex pattern to exclude files (-ex '.*\\.tmp' -ex '.*\\.temp')"
+            help="Regex pattern to exclude files (-ex '.*\\.tmp' -ex '.*\\.temp')",
+            envvar="PYL_M_ORG_EXCLUDE"
         ),
         list_accepted: bool = typer.Option(
             False,
             "--list-accepted", "-lac",
-            help="List accepted file during search."
+            help="List accepted file during search.",
+            envvar="PYL_M_ORG_LIST_ACCEPTED"
         ),
         list_rejected: bool = typer.Option(
             False,
             "--list-rejected", "-lrej",
-            help="List rejected files during search."
+            help="List rejected files during search.",
+            envvar="PYL_M_ORG_LIST_REJECTED"
         ),
         list_errored: bool = typer.Option(
             False,
             "--list-errored", "-lerr",
-            help="List errored files during search."
+            help="List errored files during search.",
+            envvar="PYL_M_ORG_LIST_ERRORED"
         ),
         list_accepted_order_index: int = typer.Option(
             0,
             "--list-accepted-order-index", "-laoi",
             help="Index of the column to sort accepted list by (0-4). Default is 0 (Filename). Columns: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
             min=0,
-            max=4
+            max=4,
+            envvar="PYL_M_ORG_LIST_ACCEPTED_ORDER_INDEX"
         ),
         list_rejected_order_index: int = typer.Option(
             0,
             "--list-rejected-order-index", "-lroi",
             help="Index of the column to sort rejected list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size. (Note: Extension is not shown in rejected table)",
             min=0,
-            max=4
+            max=4,
+            envvar="PYL_M_ORG_LIST_REJECTED_ORDER_INDEX"
         ),
         list_errored_order_index: int = typer.Option(
             0,
             "--list-errored-order-index", "-leoi",
             help="Index of the column to sort errored list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
             min=0,
-            max=4
+            max=4,
+            envvar="PYL_M_ORG_LIST_ERRORED_ORDER_INDEX"
         ),
         print_results: bool = typer.Option(
             False,
             "--print-results", "-pres",
-            help="Print organization results in a table."
+            help="Print organization results in a table.",
+            envvar="PYL_M_ORG_PRINT_RESULTS"
         ),
         list_result_order_index: int = typer.Option(
             0,
             "--list-result-order-index", "-lresoi",
             help="Index of the column to sort results list by (0-4). Default is 0 (Status). Columns: 0=Status, 1=Filename, 2=Extension, 3=Destination, 4=Reason.",
             min=0,
-            max=4
+            max=4,
+            envvar="PYL_M_ORG_LIST_RESULT_ORDER_INDEX"
         )
 ):
     """
