@@ -92,6 +92,13 @@ def organizer(
             False,
             "--print-results", "-pres",
             help="Print organization results in a table."
+        ),
+        list_result_order_index: int = typer.Option(
+            0,
+            "--list-result-order-index", "-lresoi",
+            help="Index of the column to sort results list by (0-4). Default is 0 (Status). Columns: 0=Status, 1=Filename, 2=Extension, 3=Destination, 4=Reason.",
+            min=0,
+            max=4
         )
 ):
     """
@@ -123,13 +130,16 @@ def organizer(
     typer.echo(f"⚠️ List errored: {'Yes' if list_errored else 'No'}")
     typer.echo(f"📊 Print results: {'Yes' if print_results else 'No'}")
     
-    column_names = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
-    sort_col_acc = column_names[list_accepted_order_index]
-    sort_col_rej = column_names[list_rejected_order_index]
-    sort_col_err = column_names[list_errored_order_index]
+    column_names_search = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
+    column_names_res = ["Status", "Filename", "Extension", "Destination", "Reason"]
+    sort_col_acc = column_names_search[list_accepted_order_index]
+    sort_col_rej = column_names_search[list_rejected_order_index]
+    sort_col_err = column_names_search[list_errored_order_index]
+    sort_col_res = column_names_res[list_result_order_index]
     typer.echo(f"🔢 Accepted list sort: {sort_col_acc} (index {list_accepted_order_index})")
     typer.echo(f"🔢 Rejected list sort: {sort_col_rej} (index {list_rejected_order_index})")
     typer.echo(f"🔢 Errored list sort: {sort_col_err} (index {list_errored_order_index})")
+    typer.echo(f"🔢 Results list sort: {sort_col_res} (index {list_result_order_index})")
     typer.echo("─" * 50 + "\n")
 
     # Searching file to organize
@@ -184,6 +194,19 @@ def organizer(
     if print_results:
         with Console().status("[bold cyan]Generating Results Table...[/bold cyan]"):
             print("\n")
+            
+            # Sorting logic for results
+            if list_result_order_index == 0: # Status
+                results.sort(key=lambda x: x.success, reverse=True) # Success first
+            elif list_result_order_index == 1: # Filename
+                results.sort(key=lambda x: x.source_file.name.lower())
+            elif list_result_order_index == 2: # Extension
+                results.sort(key=lambda x: x.source_file.suffix.lower())
+            elif list_result_order_index == 3: # Destination
+                results.sort(key=lambda x: (x.destination_path or "").lower())
+            elif list_result_order_index == 4: # Reason
+                results.sort(key=lambda x: x.reason.lower())
+
             table = Table(title=f"Organization Results ({len(results)})")
             table.add_column("Status", justify="center")
             table.add_column("Filename", style="cyan")
