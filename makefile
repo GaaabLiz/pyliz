@@ -7,7 +7,7 @@
 #    $$ | \_/ $$ |$$ |  $$ |$$ | \$$\ $$$$$$$$\ $$ |      $$$$$$\ $$$$$$$$\ $$$$$$$$\
 #    \__|     \__|\__|  \__|\__|  \__|\________|\__|      \______|\________|\________|
 #
-#                                   VERSION 1.0.1
+#                                   VERSION 1.1.2
 
 include project.mk
 
@@ -75,7 +75,7 @@ clean: clean-build clean-cache clean-generated
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
 gen-project-py:
-	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+	uv run pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
 
 gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
