@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="test_local">
+    <file>test_local/test.qrc</file>
+    <file>test_local/logo/logo.ico</file>
+    <file>test_local/logo/logo.png</file>
+  </qresource>
+</RCC>
