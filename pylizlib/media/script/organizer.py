@@ -204,42 +204,9 @@ def organizer(
     )
 
     # Pass LizMediaSearchResult objects directly to MediaOrganizer to preserve sidecar info
-    results = MediaOrganizer(media_global, output, options).organize()
+    organizer_instance = MediaOrganizer(media_global, output, options)
+    organizer_instance.organize()
 
     if print_results:
-        with Console().status("[bold cyan]Generating Results Table...[/bold cyan]"):
-            print("\n")
-            
-            # Sorting logic for results
-            if list_result_order_index == 0: # Status
-                results.sort(key=lambda x: x.success, reverse=True) # Success first
-            elif list_result_order_index == 1: # Filename
-                results.sort(key=lambda x: x.source_file.name.lower())
-            elif list_result_order_index == 2: # Extension
-                results.sort(key=lambda x: x.source_file.suffix.lower())
-            elif list_result_order_index == 3: # Destination
-                results.sort(key=lambda x: (x.destination_path or "").lower())
-            elif list_result_order_index == 4: # Reason
-                results.sort(key=lambda x: x.reason.lower())
-
-            table = Table(title=f"Organization Results ({len(results)})")
-            table.add_column("Status", justify="center")
-            table.add_column("Filename", style="cyan")
-            table.add_column("Extension", style="yellow", justify="center")
-            table.add_column("Destination", style="magenta", overflow="fold")
-            table.add_column("Reason", style="white", overflow="fold")
-
-            for res in results:
-                status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
-                
-                # Show path relative to the parent of the output directory for better readability
-                if res.destination_path:
-                    dest = os.path.relpath(res.destination_path, Path(output).parent)
-                else:
-                    dest = "N/A"
-                    
-                table.add_row(status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
-            
-            Console().print(table)
-            print("\n")
+        organizer_instance.print_results_table(list_result_order_index)
 

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from rich import print
+from rich.console import Console
+from rich.table import Table
 from tqdm import tqdm
 
 from pylizlib.media.lizmedia2 import LizMedia, LizMediaSearchResult
@@ -49,16 +51,15 @@ class MediaOrganizer:
         self.search_results = search_results
         self.target = target
         self.options = options
+        self.results: List[OrganizerResult] = []
 
-    def organize(self) -> List[OrganizerResult]:
+    def organize(self) -> None:
         """
         Organize files from *source* into *target* according to the provided options.
-
-        Returns:
-            List[OrganizerResult]: List of results for each processed file.
+        Results are stored in self.results.
         """
         logger.info(f"Starting organization. Candidates: {len(self.search_results)}, Target: {self.target}, Options: {self.options}")
-        results: List[OrganizerResult] = []
+        self.results = [] # Reset results
 
         # Prepare iteration
         file_iter = self.search_results if self.options.no_progress else tqdm(self.search_results, unit="files", desc="Organizing")
@@ -68,14 +69,69 @@ class MediaOrganizer:
                 continue
             
             item_results = self._process_single_item(item)
-            results.extend(item_results)
+            self.results.extend(item_results)
 
         # Cleanup progress bar
         if not self.options.no_progress and hasattr(file_iter, "close"):
             file_iter.close()
 
-        logger.info(f"Organization complete. Processed {len(results)} items.")
-        return results
+        logger.info(f"Organization complete. Processed {len(self.results)} items.")
+
+    def get_results(self) -> List[OrganizerResult]:
+        """Returns the list of organization results."""
+        return self.results
+
+    def print_results_table(self, sort_index: int = 0):
+        """
+        Prints a table of the organization results.
+        
+        :param sort_index: Index of the column to sort by.
+                           0=Status (default), 1=Filename, 2=Extension, 3=Destination, 4=Reason
+        """
+        if not self.results:
+            print("[yellow]No results to display.[/yellow]")
+            return
+
+        with Console().status("[bold cyan]Generating Results Table...[/bold cyan]"):
+            print("\n")
+            
+            # Sorting logic for results
+            sorted_results = list(self.results) # Create a copy to avoid modifying original order if needed elsewhere
+            if sort_index == 0: # Status
+                sorted_results.sort(key=lambda x: x.success, reverse=True) # Success first
+            elif sort_index == 1: # Filename
+                sorted_results.sort(key=lambda x: x.source_file.name.lower())
+            elif sort_index == 2: # Extension
+                sorted_results.sort(key=lambda x: x.source_file.suffix.lower())
+            elif sort_index == 3: # Destination
+                sorted_results.sort(key=lambda x: (x.destination_path or "").lower())
+            elif sort_index == 4: # Reason
+                sorted_results.sort(key=lambda x: x.reason.lower())
+
+            table = Table(title=f"Organization Results ({len(sorted_results)})")
+            table.add_column("Status", justify="center")
+            table.add_column("Filename", style="cyan")
+            table.add_column("Extension", style="yellow", justify="center")
+            table.add_column("Destination", style="magenta", overflow="fold")
+            table.add_column("Reason", style="white", overflow="fold")
+
+            for res in sorted_results:
+                status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
+                
+                # Show path relative to the parent of the output directory for better readability
+                if res.destination_path:
+                    try:
+                        dest = os.path.relpath(res.destination_path, Path(self.target).parent)
+                    except ValueError:
+                        # Fallback if paths are on different drives or relativity fails
+                        dest = res.destination_path
+                else:
+                    dest = "N/A"
+                    
+                table.add_row(status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
+            
+            Console().print(table)
+            print("\n")
 
     def _process_single_item(self, item: LizMediaSearchResult) -> List[OrganizerResult]:
         """
