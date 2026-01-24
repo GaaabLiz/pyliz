@@ -89,12 +89,13 @@ class MediaOrganizer:
         results_iter = self.results if self.options.no_progress else tqdm(self.results, unit="files", desc="Generating XMPs")
         
         for result in results_iter:
-            # Skip failed operations or if destination path is missing
-            if not result.success or not result.destination_path:
+            # Check basic requirements
+            if not result.media or not result.destination_path: 
                 continue
 
-            # Skip if it's already a sidecar file (or treated as one in context of source)
-            if not result.media: 
+            # Process if successful transfer OR if it was a duplicate (skipped or source deleted)
+            # This implies the file exists at destination and content matches
+            if not result.success and "Duplicate" not in result.reason:
                 continue
             
             # Construct expected XMP path
@@ -211,8 +212,12 @@ class MediaOrganizer:
             count_generated = 0
 
             for result in self.results:
-                # Filter for successful media transfers
-                if not result.success or not result.destination_path or not result.media:
+                # Check basic requirements
+                if not result.media or not result.destination_path: 
+                    continue
+
+                # Process if successful transfer OR if it was a duplicate (skipped or source deleted)
+                if not result.success and "Duplicate" not in result.reason:
                     continue
                 
                 # Check for XMP
