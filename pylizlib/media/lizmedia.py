@@ -260,15 +260,17 @@ class LizMedia:
             logger.error(f"Error checking for AI metadata with sdParser: {str(e)}")
 
     @property
-    def creation_date_from_exif_or_file(self) -> datetime:
+    def creation_date_from_exif_or_file_or_sidecar(self) -> datetime:
         """
         Retrieves the creation date from EXIF data (DateTimeOriginal) if available.
-        Falls back to the file system creation time if EXIF data is missing or unreadable.
+        Falls back to XMP sidecar (<photoshop:DateCreated>) if present.
+        Falls back to the file system creation time if both are missing or unreadable.
         Uses 'exifread' library for robust parsing.
 
         Returns:
             datetime: The determined creation date.
         """
+        # 1. Try EXIF
         if self.is_image:
             try:
                 with open(self.path, 'rb') as f:
@@ -281,10 +283,51 @@ class LizMedia:
                             except ValueError:
                                 continue
             except Exception as e:
-                # logger.error(f"Error reading EXIF data from {self.path}: {e}")
                 pass
 
+        # 2. Try XMP Sidecar
+        xmp_date = self._get_creation_date_from_xmp()
+        if xmp_date:
+            return xmp_date
+
+        # 3. Fallback to File Creation Time
         return self.creation_time
+
+    def _get_creation_date_from_xmp(self) -> Optional[datetime]:
+        """
+        Attempts to extract the creation date from an attached XMP sidecar file.
+        Looks for the <photoshop:DateCreated> tag.
+        """
+        xmp_path = self.get_xmp_sidecar()
+        if not xmp_path or not xmp_path.exists():
+            return None
+
+        try:
+            import re
+            with open(xmp_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Simple regex search for photoshop:DateCreated
+                # Format is typically ISO 8601: YYYY-MM-DDThh:mm:ss
+                match = re.search(r'photoshop:DateCreated>([^<]+)<', content)
+                if not match:
+                    # Try attribute style
+                    match = re.search(r'photoshop:DateCreated="([^"]+)"', content)
+                
+                if match:
+                    date_str = match.group(1)
+                    # Handle potential timezone offsets or variations
+                    # Try basic ISO parsing
+                    try:
+                        dt = datetime.fromisoformat(date_str)
+                        return dt.replace(tzinfo=None)
+                    except ValueError:
+                        # Try manual parsing if fromisoformat fails (e.g. for some XMP variants)
+                        # This is a basic fallback, might need adjustment for specific formats
+                        pass
+        except Exception as e:
+            logger.warning(f"Error reading XMP date from {xmp_path}: {e}")
+        
+        return None
 
     @property
     def has_exif_data(self) -> bool:

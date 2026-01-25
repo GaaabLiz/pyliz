@@ -107,7 +107,7 @@ class MediaListResultPrinter:
         media = item.media
         if media:
             filename = media.file_name
-            creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
+            creation_date = media.creation_date_from_exif_or_file_or_sidecar.strftime("%Y-%m-%d %H:%M:%S")
             has_exif = "Yes" if media.has_exif_data else "No"
             ext = media.extension
             size_mb = f"{media.size_mb:.2f}"
@@ -137,7 +137,7 @@ class MediaListResultPrinter:
         elif sort_index == 1: # Filename
             return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
         elif sort_index == 2: # Date
-            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file if x.media else datetime.min)
+            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file_or_sidecar if x.media else datetime.min)
         elif sort_index == 3: # Exif
             return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
         elif sort_index == 4: # Ext
