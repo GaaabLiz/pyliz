@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -16,6 +17,8 @@ from pylizlib.media.lizmedia2 import LizMedia, LizMediaSearchResult
 
 logger = logging.getLogger(__name__)
 
+# Global counter for OrganizerResult index
+_result_counter = count(1)
 
 @dataclass
 class OrganizerResult:
@@ -24,6 +27,7 @@ class OrganizerResult:
     media: Optional[LizMedia] = None
     reason: str = ""
     destination_path: Optional[str] = None
+    index: int = field(default_factory=lambda: next(_result_counter), init=False)
 
     @property
     def source_path(self) -> str:
@@ -170,6 +174,7 @@ class MediaOrganizer:
                 sorted_results.sort(key=lambda x: x.reason.lower())
 
             table = Table(title=f"Organization Results ({len(sorted_results)})")
+            table.add_column("Index", justify="right")
             table.add_column("Status", justify="center")
             table.add_column("Filename", style="cyan")
             table.add_column("Extension", style="yellow", justify="center")
@@ -189,7 +194,7 @@ class MediaOrganizer:
                 else:
                     dest = "N/A"
                     
-                table.add_row(status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
+                table.add_row(str(res.index), status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
             
             Console().print(table)
             print("\n")

@@ -208,6 +208,7 @@ class MediaSearcher:
         sorted_results = self._sort_result_list(self._result.accepted, sort_index)
 
         table = Table(title=f"Accepted Media Files ({len(self._result.accepted)})")
+        table.add_column("Index", style="dim", justify="right")
         table.add_column("Filename", style="cyan", no_wrap=True)
         table.add_column("Creation Date", style="blue")
         table.add_column("Has EXIF", justify="center", style="magenta")
@@ -223,6 +224,7 @@ class MediaSearcher:
             sidecars_str = ", ".join([s.name for s in item.sidecar_files]) if item.sidecar_files else ""
 
             table.add_row(
+                str(item.index),
                 media.file_name,
                 creation_date,
                 has_exif,
@@ -242,6 +244,7 @@ class MediaSearcher:
         sorted_results = self._sort_result_list(self._result.rejected, sort_index)
 
         table = Table(title=f"Rejected Media Files ({len(self._result.rejected)})")
+        table.add_column("Index", style="dim", justify="right")
         table.add_column("Filename", style="red", no_wrap=True)
         table.add_column("Creation Date", style="blue")
         table.add_column("Has EXIF", justify="center", style="magenta")
@@ -262,6 +265,7 @@ class MediaSearcher:
                 size_mb = "N/A"
 
             table.add_row(
+                str(item.index),
                 filename,
                 creation_date,
                 has_exif,
@@ -280,6 +284,7 @@ class MediaSearcher:
         sorted_results = self._sort_result_list(self._result.errored, sort_index)
 
         table = Table(title=f"Errored Media Files ({len(self._result.errored)})")
+        table.add_column("Index", style="dim", justify="right")
         table.add_column("Filename", style="red", no_wrap=True)
         table.add_column("Path", style="magenta")
         table.add_column("Error reason", style="white")
@@ -289,6 +294,7 @@ class MediaSearcher:
             path_str = str(item.path)
             
             table.add_row(
+                str(item.index),
                 filename,
                 path_str,
                 item.reason

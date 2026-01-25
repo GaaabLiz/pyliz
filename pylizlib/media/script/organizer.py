@@ -80,25 +80,25 @@ def organizer(
         list_accepted_order_index: int = typer.Option(
             0,
             "--list-accepted-order-index", "-laoi",
-            help="Index of the column to sort accepted list by (0-4). Default is 0 (Filename). Columns: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
+            help="Index of the column to sort accepted list by (0-5). Default is 0 (Index). Columns: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Extension, 5=Size.",
             min=0,
-            max=4,
+            max=5,
             envvar="PYL_M_ORG_LIST_ACCEPTED_ORDER_INDEX"
         ),
         list_rejected_order_index: int = typer.Option(
             0,
             "--list-rejected-order-index", "-lroi",
-            help="Index of the column to sort rejected list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size. (Note: Extension is not shown in rejected table)",
+            help="Index of the column to sort rejected list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Extension, 5=Size.",
             min=0,
-            max=4,
+            max=5,
             envvar="PYL_M_ORG_LIST_REJECTED_ORDER_INDEX"
         ),
         list_errored_order_index: int = typer.Option(
             0,
             "--list-errored-order-index", "-leoi",
-            help="Index of the column to sort errored list by (0-4). Default is 0 (Filename). Sort Keys: 0=Filename, 1=Creation Date, 2=Has EXIF, 3=Extension, 4=Size.",
+            help="Index of the column to sort errored list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Extension, 5=Size.",
             min=0,
-            max=4,
+            max=5,
             envvar="PYL_M_ORG_LIST_ERRORED_ORDER_INDEX"
         ),
         print_results: bool = typer.Option(
@@ -110,9 +110,9 @@ def organizer(
         list_result_order_index: int = typer.Option(
             0,
             "--list-result-order-index", "-lresoi",
-            help="Index of the column to sort results list by (0-4). Default is 0 (Status). Columns: 0=Status, 1=Filename, 2=Extension, 3=Destination, 4=Reason.",
+            help="Index of the column to sort results list by (0-5). Default is 0 (Index). Columns: 0=Index, 1=Status, 2=Filename, 3=Extension, 4=Destination, 5=Reason.",
             min=0,
-            max=4,
+            max=5,
             envvar="PYL_M_ORG_LIST_RESULT_ORDER_INDEX"
         )
 ):
@@ -145,8 +145,8 @@ def organizer(
     typer.echo(f"⚠️ List errored: {'Yes' if list_errored else 'No'}")
     typer.echo(f"📊 Print results: {'Yes' if print_results else 'No'}")
     
-    column_names_search = ["Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
-    column_names_res = ["Status", "Filename", "Extension", "Destination", "Reason"]
+    column_names_search = ["Index", "Filename", "Creation Date", "Has EXIF", "Extension", "Size"]
+    column_names_res = ["Index", "Status", "Filename", "Extension", "Destination", "Reason"]
     sort_col_acc = column_names_search[list_accepted_order_index]
     sort_col_rej = column_names_search[list_rejected_order_index]
     sort_col_err = column_names_search[list_errored_order_index]

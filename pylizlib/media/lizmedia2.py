@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from itertools import count
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,6 +26,8 @@ class MediaStatus(str, Enum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
 
+# Global counter for LizMediaSearchResult index
+_search_result_counter = count(1)
 
 @dataclass
 class LizMediaSearchResult:
@@ -33,6 +36,7 @@ class LizMediaSearchResult:
     media: Optional['LizMedia'] = None
     reason: str = ""
     sidecar_files: List[Path] = field(default_factory=list)
+    index: int = field(default_factory=lambda: next(_search_result_counter), init=False)
 
     def has_lizmedia(self) -> bool:
         return self.media is not None
