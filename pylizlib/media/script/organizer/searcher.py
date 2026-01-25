@@ -76,6 +76,10 @@ class MediaSearcher:
                 
                 handler = MetadataHandler(item.path)
                 if handler.generate_xmp(temp_path):
+                    # If Eagle metadata is available, append it to the generated XMP
+                    if item.media.eagle_metadata:
+                        handler.append_eagle_to_xmp(item.media.eagle_metadata, temp_path)
+                        
                     # Attach to LizMedia
                     item.media.attach_sidecar_file(Path(temp_path))
                     self.generated_xmps_list.append((item.media.file_name, temp_path))

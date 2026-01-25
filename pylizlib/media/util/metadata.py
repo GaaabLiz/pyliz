@@ -1,9 +1,12 @@
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from pylizlib.core.log.pylizLogger import logger
+
+if TYPE_CHECKING:
+    from pylizlib.eaglecool.model.metadata import Metadata
 
 
 class MetadataHandler:
@@ -70,4 +73,52 @@ class MetadataHandler:
             return False
         except Exception as e:
             logger.error(f"Error executing exiftool: {e}")
+            return False
+
+    def append_eagle_to_xmp(self, metadata: "Metadata", xmp_path: str | Path) -> bool:
+        """
+        Appends Eagle tags and annotation to an existing XMP file using exiftool.
+        
+        :param metadata: The Eagle Metadata object containing tags and annotation.
+        :param xmp_path: The path to the existing XMP file to modify.
+        :return: True if successful, False otherwise.
+        """
+        xmp_path = Path(xmp_path)
+        
+        if shutil.which("exiftool") is None:
+            logger.error("Exiftool is not installed or not found in PATH.")
+            return False
+
+        if not xmp_path.exists():
+            logger.error(f"XMP file not found: {xmp_path}")
+            return False
+
+        cmd = ["exiftool", "-overwrite_original"]
+
+        # Add tags
+        if metadata.tags:
+            for tag in metadata.tags:
+                # Use -Subject+=tag to append to existing list
+                cmd.append(f"-xmp:subject+={tag}")
+        
+        # Add annotation/description
+        if metadata.annotation:
+            # Use -Description=text to set/overwrite
+            cmd.append(f"-xmp:description={metadata.annotation}")
+
+        # If no changes needed, return True
+        if len(cmd) == 2: # Only 'exiftool' and '-overwrite_original'
+            return True
+
+        cmd.append(str(xmp_path))
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logger.debug(f"Updated XMP {xmp_path.name} with Eagle metadata")
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to append Eagle metadata to {xmp_path}: {e.stderr}")
+            return False
+        except Exception as e:
+            logger.error(f"Error executing exiftool update: {e}")
             return False
