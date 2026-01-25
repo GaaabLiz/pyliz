@@ -86,7 +86,7 @@ class EagleCoolReader:
         Returns (Metadata object, Media file path, Error occurred flag).
         """
         metadata_obj = None
-        media_file = None
+        media_candidates = []
 
         for file_path in folder.iterdir():
             if not file_path.is_file():
@@ -100,9 +100,33 @@ class EagleCoolReader:
                 if metadata_obj is None:
                     return None, None, True
             else:
-                media_file = file_path
+                media_candidates.append(file_path)
+        
+        media_file = self._determine_main_file(media_candidates)
         
         return metadata_obj, media_file, False
+
+    def _determine_main_file(self, file_candidates: List[Path]) -> Optional[Path]:
+        """
+        Determines the main file from a list of candidate files.
+        Implements specific logic for HEIC and DNG files.
+        """
+        if not file_candidates:
+            return None
+            
+        # Logic 1: Handle HEIC and DNG pairs (.heic/.dng and .heic.png/.dng.png)
+        priority_extensions = ['.heic', '.dng']
+        for ext in priority_extensions:
+            target_files = [f for f in file_candidates if f.suffix.lower() == ext]
+            for target_file in target_files:
+                # Check if there is a corresponding .ext.png file
+                potential_png = target_file.with_name(target_file.name + ".png")
+                if potential_png in file_candidates:
+                    return target_file
+
+        # Default: Return the first candidate found
+        # (This preserves existing behavior for single files or unspecified priorities)
+        return file_candidates[0]
 
     def __load_metadata(self, file_path: Path, folder: Path) -> Optional[Metadata]:
         try:

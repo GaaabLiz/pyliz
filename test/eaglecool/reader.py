@@ -90,6 +90,26 @@ class TestEagleCoolReader(unittest.TestCase):
         with open(folder / "metadata.json", "w") as f:
             f.write("{invalid_json}")
 
+        # 8. HEIC priority test
+        cls.create_mock_item(
+            "item8.info", 
+            None, 
+            {"id": "item8", "name": "HEIC Test", "tags": [], "isDeleted": False}
+        )
+        folder_heic = cls.images_dir / "item8.info"
+        (folder_heic / "test.heic").touch()
+        (folder_heic / "test.heic.png").touch()
+
+        # 9. DNG priority test
+        cls.create_mock_item(
+            "item9.info", 
+            None, 
+            {"id": "item9", "name": "DNG Test", "tags": [], "isDeleted": False}
+        )
+        folder_dng = cls.images_dir / "item9.info"
+        (folder_dng / "test.dng").touch()
+        (folder_dng / "test.dng.png").touch()
+
 
     @classmethod
     def create_mock_item(cls, folder_name: str, media_name: str | None, metadata: dict):
@@ -113,6 +133,24 @@ class TestEagleCoolReader(unittest.TestCase):
         self.assertEqual(reader.catalogue, self.library_path)
         self.assertFalse(reader.include_deleted)
         self.assertIsNone(reader.filter_tags)
+
+    def test_heic_priority(self):
+        """Test that .heic files are prioritized over .heic.png files."""
+        reader = EagleCoolReader(self.library_path)
+        reader.run()
+        
+        item8 = next((i for i in reader.items if i.metadata.id == "item8"), None)
+        self.assertIsNotNone(item8)
+        self.assertEqual(item8.file_path.name, "test.heic")
+
+    def test_dng_priority(self):
+        """Test that .dng files are prioritized over .dng.png files."""
+        reader = EagleCoolReader(self.library_path)
+        reader.run()
+        
+        item9 = next((i for i in reader.items if i.metadata.id == "item9"), None)
+        self.assertIsNotNone(item9)
+        self.assertEqual(item9.file_path.name, "test.dng")
 
     def test_run_standard_scan(self):
         """Test a basic scan of the library."""
