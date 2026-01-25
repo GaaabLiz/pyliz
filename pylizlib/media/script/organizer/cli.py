@@ -210,8 +210,4 @@ def organizer(
     if print_results:
         organizer_instance.print_results_table(list_result_order_index)
 
-    if xmp:
-        organizer_instance.gen_xmps()
-        organizer_instance.print_xmp_report()
-
 
