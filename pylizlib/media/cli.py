@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pylizlib.core.app.pylizapp import PylizApp, PylizDirFoldersTemplate
 from pylizlib.media import media_app
-from pylizlib.media.script import organizer
+from pylizlib.media.script import cli
 
 # Initialize PylizApp
 app = PylizApp("pyliz_media")

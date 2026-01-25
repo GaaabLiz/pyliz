@@ -7,22 +7,21 @@ from rich.console import Console
 from rich.table import Table
 
 from pylizlib.media import media_app
-from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions, OrganizerResult
+from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
 from pylizlib.media.compute.searcher import MediaSearcher
-from pylizlib.media.lizmedia2 import LizMedia, MediaListResult
 
 
 @media_app.command()
 def organizer(
         path: str = typer.Argument(
-            None,
+            ...,
             dir_okay=True,
             readable=True,
             help="Source path of files to organize",
             envvar="PYL_M_ORG_PATH"
         ),
         output: str = typer.Argument(
-            None,
+            ...,
             dir_okay=True,
             writable=True,
             readable=True,
