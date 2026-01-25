@@ -9,7 +9,7 @@ from rich.table import Table
 from pylizlib.media import pyliz_media
 from pylizlib.media.script.organizer.domain import OrganizerOptions
 from pylizlib.media.script.organizer.media_org import MediaOrganizer
-from pylizlib.media.compute.searcher import MediaSearcher
+from pylizlib.media.script.organizer.searcher import MediaSearcher
 
 
 @pyliz_media.command()

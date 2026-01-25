@@ -1,76 +1,13 @@
-import os
-import re
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-import typer
 from rich import print
-from rich.console import Console
-from rich.table import Table
 from tqdm import tqdm
 
 from pylizlib.core.domain.os import FileType
 from pylizlib.eaglecool.reader import EagleCoolReader
 from pylizlib.media.lizmedia import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
-from pylizlib.media.view.table import MediaListResultPrinter
-
-
-class FileSystemSearcher:
-    """
-    Strategy class to search for media files in the file system.
-    """
-    def __init__(self, path: str):
-        self.path = path
-
-    def search(self, exclude: str = None, dry: bool = False) -> MediaListResult:
-        result = MediaListResult()
-        exclude_regex = None
-
-        if exclude:
-            try:
-                exclude_regex = re.compile(exclude)
-            except re.error as e:
-                print(f"Error compiling regex '{exclude}': {e}")
-                raise typer.Exit(code=1)
-
-        # Use a single tqdm bar for the entire scanning process
-        with tqdm(desc="Initializing scan...", unit="files") as pbar:
-            for root, _, files in os.walk(self.path):
-                for file in files:
-                    file_path = Path(root) / file
-                    pbar.set_description(f"Scanning {file}")
-                    
-                    # Check exclude pattern
-                    if exclude_regex and exclude_regex.search(file):
-                        if dry:
-                            tqdm.write(f"  Skipping (regex match): {file}")
-                        result.rejected.append(LizMediaSearchResult(
-                            status=MediaStatus.REJECTED,
-                            path=file_path,
-                            media=None,
-                            reason="Rejected by regex pattern"
-                        ))
-                        pbar.update(1)
-                        continue
-
-                    try:
-                        liz_media = LizMedia(file_path)
-                        result.accepted.append(LizMediaSearchResult(
-                            status=MediaStatus.ACCEPTED,
-                            path=file_path,
-                            media=liz_media
-                        ))
-                    except ValueError:
-                        # Not a media file, skip silently
-                        pass
-                    
-                    pbar.update(1)
-            
-            pbar.set_description("Scanning complete")
-        
-        return result
 
 
 class EagleCatalogSearcher:
@@ -174,39 +111,3 @@ class EagleCatalogSearcher:
         
         total_sidecars = sum(len(item.sidecar_files) for item in self._result.accepted)
         print(f"  Sidecar files linked: {total_sidecars}")
-
-
-class MediaSearcher:
-    """
-    Utility class to search for media files in a directory, optionally integrating with Eagle library
-    or filtering by regex. Acts as a facade for specific search strategies.
-    """
-
-    def __init__(self, path: str):
-        self.path = path
-        self._result = MediaListResult()
-        self._console = Console()
-
-    def get_result(self) -> MediaListResult:
-        return self._result
-
-    def run_search_system(self, exclude: str = None, dry: bool = False):
-        searcher = FileSystemSearcher(self.path)
-        self._result = searcher.search(exclude, dry)
-
-    def run_search_eagle(self, eagletag: Optional[List[str]] = None):
-        searcher = EagleCatalogSearcher(self.path)
-        searcher.search(eagletag)
-        self._result = searcher.get_result()
-
-    def printAcceptedAsTable(self, sort_index: int = 0):
-        printer = MediaListResultPrinter(self._result)
-        printer.print_accepted(sort_index)
-
-    def printRejectedAsTable(self, sort_index: int = 0):
-        printer = MediaListResultPrinter(self._result)
-        printer.print_rejected(sort_index)
-
-    def printErroredAsTable(self, sort_index: int = 0):
-        printer = MediaListResultPrinter(self._result)
-        printer.print_errored(sort_index)
