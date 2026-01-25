@@ -106,7 +106,6 @@ class EagleCatalogSearcher:
     def _process_skipped_items(self, reader: EagleCoolReader):
         """Process items skipped by the Eagle reader (e.g. deleted, wrong tag)."""
         for eagle_item, reason in tqdm(reader.items_skipped, desc="Processing Skipped Items", unit="items"):
-            time.sleep(0.0005) # Simulate delay
             media_obj = None
             try:
                 # Attempt to create LizMedia only if it's a media file, otherwise None
@@ -125,7 +124,6 @@ class EagleCatalogSearcher:
     def _process_errors(self, reader: EagleCoolReader):
         """Process errors encountered by the Eagle reader."""
         for error_path, reason in tqdm(reader.error_paths, desc="Processing Reader Errors", unit="errors"):
-            time.sleep(0.0005)
             self._result.errored.append(LizMediaSearchResult(
                 status=MediaStatus.REJECTED,
                 path=error_path,

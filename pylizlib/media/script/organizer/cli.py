@@ -184,6 +184,9 @@ def organizer(
             searcher.printErroredAsTable(list_errored_order_index)
     print("\n\n")
 
+    if xmp:
+        searcher.generate_missing_xmps()
+
     # Check if there are files to process
     if not media_global:
         print("No files to process. Exiting.")
@@ -209,5 +212,8 @@ def organizer(
 
     if print_results:
         organizer_instance.print_results_table(list_result_order_index)
+
+    if xmp:
+        searcher.cleanup_generated_xmps()
 
 
