@@ -4,7 +4,7 @@ from typing import List, Any, Callable
 from rich.console import Console
 from rich.table import Table
 
-from pylizlib.media.lizmedia2 import LizMediaSearchResult, MediaListResult
+from pylizlib.media.lizmedia import LizMediaSearchResult, MediaListResult
 
 
 class OrganizerTablePrinter:

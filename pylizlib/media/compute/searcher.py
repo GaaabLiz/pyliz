@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from pylizlib.core.domain.os import FileType
 from pylizlib.eaglecool.reader import EagleCoolReader
-from pylizlib.media.lizmedia2 import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
+from pylizlib.media.lizmedia import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
 from pylizlib.media.view.organizer import OrganizerTablePrinter
 
 

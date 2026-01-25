@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
 
-from pylizlib.media.lizmedia2 import LizMedia, LizMediaSearchResult
+from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult
 
 logger = logging.getLogger(__name__)
 
