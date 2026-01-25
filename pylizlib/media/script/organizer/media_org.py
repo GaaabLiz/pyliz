@@ -306,9 +306,10 @@ class MediaOrganizer:
             should_process_sidecars = True
 
         if should_process_sidecars and item.has_sidecars():
-            logger.debug(f"Processing {len(item.sidecar_files)} sidecar files for: {item.media.path}. Main result: {main_result.reason}")
+            # item.has_sidecars() ensures item.media is not None
+            logger.debug(f"Processing {len(item.media.attached_sidecar_files)} sidecar files for: {item.media.path}. Main result: {main_result.reason}")
             
-            for sidecar_path in item.sidecar_files:
+            for sidecar_path in item.media.attached_sidecar_files:
                 sidecar_target = os.path.join(target_folder, sidecar_path.name)
                 
                 # Check if sidecar exists at target

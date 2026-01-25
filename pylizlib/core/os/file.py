@@ -56,7 +56,7 @@ def is_media_file(path: str) -> bool:
 
 
 def is_media_sidecar_file(path: str) -> bool:
-    sidecar_extensions = ['.xmp', '.xml']
+    sidecar_extensions = ['.xmp', '.xml', ".aae"]
     return os.path.splitext(path)[1] in sidecar_extensions
 
 

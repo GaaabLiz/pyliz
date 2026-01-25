@@ -92,7 +92,8 @@ class MediaListResultPrinter:
             
             # Append extra data based on table type
             if table_type == "accepted":
-                sidecars_str = ", ".join([s.name for s in item.sidecar_files]) if item.sidecar_files else ""
+                sidecars = item.media.attached_sidecar_files if item.media and item.media.attached_sidecar_files else []
+                sidecars_str = ", ".join([s.name for s in sidecars])
                 row.append(sidecars_str)
             else: # rejected or errored
                 row.append(item.reason)
@@ -144,8 +145,12 @@ class MediaListResultPrinter:
         elif sort_index == 5: # Size
             return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
         elif sort_index == 6: # Extra (Sidecars or Reason)
-            # For Reason, we use x.reason. For Sidecars, maybe sort by number of sidecars?
-            # Let's default to sorting by the reason string if it's not accepted
-            return sorted(results, key=lambda x: (", ".join([s.name for s in x.sidecar_files]) if x.sidecar_files else "") if not x.reason else x.reason)
+            def get_extra_key(x):
+                if x.reason:
+                    return x.reason
+                if x.media and x.media.attached_sidecar_files:
+                    return ", ".join([s.name for s in x.media.attached_sidecar_files])
+                return ""
+            return sorted(results, key=get_extra_key)
         
         return results

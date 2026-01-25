@@ -35,14 +35,15 @@ class LizMediaSearchResult:
     path: Path
     media: Optional['LizMedia'] = None
     reason: str = ""
-    sidecar_files: List[Path] = field(default_factory=list)
     index: int = field(default_factory=lambda: next(_search_result_counter), init=False)
 
     def has_lizmedia(self) -> bool:
         return self.media is not None
 
     def has_sidecars(self) -> bool:
-        return len(self.sidecar_files) > 0
+        if self.media:
+            return len(self.media.attached_sidecar_files) > 0
+        return False
 
 
 @dataclass
@@ -86,6 +87,7 @@ class LizMedia:
     path: Path
     eagle_metadata_path: Path | None = None
     eagle_metadata: Metadata | None = None
+    attached_sidecar_files: List[Path] = field(default_factory=list)
 
     def __post_init__(self):
         """
@@ -377,3 +379,55 @@ class LizMedia:
             metadata (Metadata): The metadata object to attach.
         """
         self.eagle_metadata = metadata
+
+    def attach_sidecar_file(self, sidecar_path: Path):
+        """
+        :param sidecar_path:   Path to sidecar file to attach
+        :return:
+        """
+        self.attached_sidecar_files.append(sidecar_path)
+
+    def detach_sidecar_file(self, sidecar_path: Path):
+        """
+        :param sidecar_path:   Path to sidecar file to detach
+        :return:
+        """
+        if sidecar_path in self.attached_sidecar_files:
+            self.attached_sidecar_files.remove(sidecar_path)
+
+    def clear_sidecar_files(self):
+        """
+        Clears all attached sidecar files
+        :return:
+        """
+        self.attached_sidecar_files.clear()
+
+    def has_xmp_sidecar(self) -> bool:
+        """
+        Checks if there is an attached XMP sidecar file
+        :return: True if an XMP sidecar file is attached, False otherwise
+        """
+        for sidecar in self.attached_sidecar_files:
+            if sidecar.suffix.lower() == '.xmp':
+                return True
+        return False
+
+    def has_aae_sidecar(self) -> bool:
+        """
+        Checks if there is an attached AAE sidecar file
+        :return: True if an AAE sidecar file is attached, False otherwise
+        """
+        for sidecar in self.attached_sidecar_files:
+            if sidecar.suffix.lower() == '.aae':
+                return True
+        return False
+
+    def get_xmp_sidecar(self) -> Optional[Path]:
+        """
+        Retrieves the attached XMP sidecar file if it exists
+        :return: Path to the XMP sidecar file, or None if not found
+        """
+        for sidecar in self.attached_sidecar_files:
+            if sidecar.suffix.lower() == '.xmp':
+                return sidecar
+        return None

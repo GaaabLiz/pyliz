@@ -6,6 +6,7 @@ from rich import print
 from tqdm import tqdm
 
 from pylizlib.core.domain.os import FileType
+from pylizlib.core.os.file import is_media_file, is_media_sidecar_file
 from pylizlib.eaglecool.reader import EagleCoolReader
 from pylizlib.media.lizmedia import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
 
@@ -35,12 +36,30 @@ class EagleCatalogSearcher:
         self._process_accepted_items(reader)
         self._process_skipped_items(reader)
         self._process_errors(reader)
-        self._link_sidecars()
         self._print_summary(reader)
 
     def _process_accepted_items(self, reader: EagleCoolReader):
-        """Process items accepted by the Eagle reader."""
-        with tqdm(reader.items, desc="Processing Eagle Media", unit="items") as pbar:
+        """Process items accepted by the Eagle reader, handling media and sidecars."""
+        media_items = []
+        sidecar_items = []
+
+        # Split items into media and sidecars
+        for item in reader.items:
+            path_str = str(item.file_path)
+            if is_media_file(path_str):
+                media_items.append(item)
+            elif is_media_sidecar_file(path_str):
+                sidecar_items.append(item)
+            else:
+                # Should not happen given Reader filters, but fallback
+                self._result.rejected.append(LizMediaSearchResult(
+                    status=MediaStatus.REJECTED,
+                    path=item.file_path,
+                    reason="Unknown file type in accepted list"
+                ))
+
+        # Process Media Items
+        with tqdm(media_items, desc="Processing Eagle Media", unit="items") as pbar:
             for eagle in pbar:
                 pbar.set_description(f"Processing {eagle.file_path.name}")
                 
@@ -53,7 +72,36 @@ class EagleCatalogSearcher:
                     media=lizmedia
                 ))
                 pbar.update(1)
-            pbar.set_description("Scanning complete")
+            pbar.set_description("Media processing complete")
+
+        # Map for sidecar linking
+        accepted_map_by_stem = {item.path.stem: item for item in self._result.accepted}
+        accepted_map_by_name = {item.path.name: item for item in self._result.accepted}
+
+        # Process Sidecar Items
+        with tqdm(sidecar_items, desc="Linking Sidecars", unit="items") as pbar:
+            for sidecar in pbar:
+                stem = sidecar.file_path.stem
+                
+                # Check match by name (e.g. image.png.xmp -> matches image.png)
+                if stem in accepted_map_by_name:
+                    accepted_map_by_name[stem].media.attach_sidecar_file(sidecar.file_path)
+                    pbar.update(1)
+                    continue
+                
+                # Check match by stem (e.g. image.xmp -> matches image.png)
+                if stem in accepted_map_by_stem:
+                    accepted_map_by_stem[stem].media.attach_sidecar_file(sidecar.file_path)
+                    pbar.update(1)
+                    continue
+                
+                # Orphan sidecar
+                self._result.rejected.append(LizMediaSearchResult(
+                    status=MediaStatus.REJECTED,
+                    path=sidecar.file_path,
+                    reason="Orphan sidecar file (no matching media)"
+                ))
+                pbar.update(1)
 
     def _process_skipped_items(self, reader: EagleCoolReader):
         """Process items skipped by the Eagle reader (e.g. deleted, wrong tag)."""
@@ -61,7 +109,9 @@ class EagleCatalogSearcher:
             time.sleep(0.0005) # Simulate delay
             media_obj = None
             try:
-                media_obj = LizMedia(eagle_item.file_path)
+                # Attempt to create LizMedia only if it's a media file, otherwise None
+                if is_media_file(str(eagle_item.file_path)):
+                    media_obj = LizMedia(eagle_item.file_path)
             except ValueError:
                 pass
 
@@ -83,31 +133,6 @@ class EagleCatalogSearcher:
                 reason=reason
             ))
 
-    def _link_sidecars(self):
-        """Link rejected items that are sidecars (.xmp, .aae) to their accepted media files."""
-        sidecar_extensions = {'.xmp', '.aae'}
-        accepted_map_by_stem = {item.path.stem: item for item in self._result.accepted}
-        accepted_map_by_name = {item.path.name: item for item in self._result.accepted}
-        rejected_to_keep = []
-
-        for rejected_item in self._result.rejected:
-            if rejected_item.path.suffix.lower() in sidecar_extensions:
-                stem = rejected_item.path.stem
-                
-                # Check match by name (e.g. image.png.xmp -> matches image.png)
-                if stem in accepted_map_by_name:
-                    accepted_map_by_name[stem].sidecar_files.append(rejected_item.path)
-                    continue
-                
-                # Check match by stem (e.g. image.xmp -> matches image.png)
-                if stem in accepted_map_by_stem:
-                    accepted_map_by_stem[stem].sidecar_files.append(rejected_item.path)
-                    continue # Successfully linked, remove from rejected
-            
-            rejected_to_keep.append(rejected_item)
-        
-        self._result.rejected = rejected_to_keep
-
     def _print_summary(self, reader: EagleCoolReader):
         """Print a summary of the search results."""
         print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
@@ -118,5 +143,5 @@ class EagleCatalogSearcher:
         print(f"  Rejected items: {len(self._result.rejected)}")
         print(f"  Errored items: {len(self._result.errored)}")
         
-        total_sidecars = sum(len(item.sidecar_files) for item in self._result.accepted)
+        total_sidecars = sum(len(item.media.attached_sidecar_files) for item in self._result.accepted if item.media)
         print(f"  Sidecar files linked: {total_sidecars}")
