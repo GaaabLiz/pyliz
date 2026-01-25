@@ -67,8 +67,10 @@ class MediaSearcher:
              self._console.print("[green]No missing XMP files needed generation.[/green]\n")
              return
 
-        for item in tqdm(accepted_items, desc="Generating missing XMPs", unit="files"):
+        pbar = tqdm(accepted_items, desc="Generating missing XMPs", unit="files")
+        for item in pbar:
             try:
+                pbar.set_description(f"Generating XMP for {item.media.file_name}")
                 # Construct correct filename in temp dir
                 media_path = Path(item.path)
                 xmp_name = f"{media_path.stem}.xmp"
@@ -116,12 +118,12 @@ class MediaSearcher:
         print("\n")
         with tqdm(self.generated_xmps_list, desc="Cleaning up temp XMP files", unit="files") as pbar:
             for _, xmp_path in pbar:
+                pbar.set_description(f"Cleaning up {Path(xmp_path).name}")
                 try:
                     if os.path.exists(xmp_path):
                         os.remove(xmp_path)
                 except OSError as e:
                     print(f"[red]Error deleting {xmp_path}: {e}[/red]")
-                pbar.update(0) # Tqdm iterates automatically, no need manual update if iterating list
 
         # Remove the temporary directory
         if self._temp_xmp_dir and os.path.exists(self._temp_xmp_dir):

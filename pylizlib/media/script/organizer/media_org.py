@@ -44,6 +44,9 @@ class MediaOrganizer:
             if not item.has_lizmedia():
                 continue
             
+            if not self.options.no_progress:
+                file_iter.set_description(f"Organizing {item.media.file_name}")
+            
             item_results = self._process_single_item(item)
             self.results.extend(item_results)
 
