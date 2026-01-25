@@ -14,7 +14,7 @@ from tqdm import tqdm
 from pylizlib.core.domain.os import FileType
 from pylizlib.eaglecool.reader import EagleCoolReader
 from pylizlib.media.lizmedia import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
-from pylizlib.media.view.table import OrganizerTablePrinter
+from pylizlib.media.view.table import MediaListResultPrinter
 
 
 class FileSystemSearcher:
@@ -200,13 +200,13 @@ class MediaSearcher:
         self._result = searcher.get_result()
 
     def printAcceptedAsTable(self, sort_index: int = 0):
-        printer = OrganizerTablePrinter(self._result)
+        printer = MediaListResultPrinter(self._result)
         printer.print_accepted(sort_index)
 
     def printRejectedAsTable(self, sort_index: int = 0):
-        printer = OrganizerTablePrinter(self._result)
+        printer = MediaListResultPrinter(self._result)
         printer.print_rejected(sort_index)
 
     def printErroredAsTable(self, sort_index: int = 0):
-        printer = OrganizerTablePrinter(self._result)
+        printer = MediaListResultPrinter(self._result)
         printer.print_errored(sort_index)
