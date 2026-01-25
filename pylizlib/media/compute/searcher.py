@@ -204,7 +204,8 @@ class MediaSearcher:
             return
         
         # Sort media list based on index
-        sorted_results = self._sort_result_list(self._result.accepted, sort_index)
+        # We need to extract the LizMedia object for sorting
+        sorted_results = self._sort_result_list(self._result.accepted, sort_index, table_type="accepted")
 
         table = Table(title=f"Accepted Media Files ({len(self._result.accepted)})")
         table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
@@ -240,15 +241,15 @@ class MediaSearcher:
             return
             
         # Sort rejected list based on index
-        sorted_results = self._sort_result_list(self._result.rejected, sort_index)
+        sorted_results = self._sort_result_list(self._result.rejected, sort_index, table_type="rejected")
 
         table = Table(title=f"Rejected Media Files ({len(self._result.rejected)})")
         table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
         table.add_column(f"Filename{' *' if sort_index == 1 else ''}", style="red", no_wrap=True)
         table.add_column(f"Creation Date{' *' if sort_index == 2 else ''}", style="blue")
         table.add_column(f"Has EXIF{' *' if sort_index == 3 else ''}", justify="center", style="magenta")
-        table.add_column(f"Size (MB){' *' if sort_index == 5 else ''}", justify="right", style="green")
-        table.add_column("Reject reason", style="white")
+        table.add_column(f"Size (MB){' *' if sort_index == 4 else ''}", justify="right", style="green")
+        table.add_column(f"Reject reason{' *' if sort_index == 5 else ''}", style="white")
 
         for item in sorted_results:
             media = item.media
@@ -280,7 +281,7 @@ class MediaSearcher:
             return
             
         # Sort errored list based on index
-        sorted_results = self._sort_result_list(self._result.errored, sort_index)
+        sorted_results = self._sort_result_list(self._result.errored, sort_index, table_type="errored")
 
         table = Table(title=f"Errored Media Files ({len(self._result.errored)})")
         table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
@@ -301,17 +302,25 @@ class MediaSearcher:
 
         self._console.print(table)
 
-    def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int) -> List[LizMediaSearchResult]:
+    def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int, table_type: str = "accepted") -> List[LizMediaSearchResult]:
         if sort_index == 0:
             return sorted(results, key=lambda x: x.index)
+        elif sort_index == 1:
+            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
         elif sort_index == 2:
             return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file if x.media else datetime.min)
         elif sort_index == 3:
             return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
-        elif sort_index == 4:
-            return sorted(results, key=lambda x: x.media.extension if x.media else x.path.suffix.lower())
-        elif sort_index == 5:
-            return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
-        else:
-            # Default to filename (index 1 or invalid)
-            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
+        
+        if table_type == "rejected":
+            if sort_index == 4: # Size
+                return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
+            elif sort_index == 5: # Reason
+                return sorted(results, key=lambda x: x.reason)
+        else: # accepted / default
+            if sort_index == 4: # Extension
+                return sorted(results, key=lambda x: x.media.extension if x.media else x.path.suffix.lower())
+            elif sort_index == 5: # Size
+                return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
+        
+        return results # Fallback

@@ -88,7 +88,7 @@ def organizer(
         list_rejected_order_index: int = typer.Option(
             0,
             "--list-rejected-order-index", "-lroi",
-            help="Index of the column to sort rejected list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Extension, 5=Size.",
+            help="Index of the column to sort rejected list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Size, 5=Reason.",
             min=0,
             max=5,
             envvar="PYL_M_ORG_LIST_REJECTED_ORDER_INDEX"
@@ -96,7 +96,7 @@ def organizer(
         list_errored_order_index: int = typer.Option(
             0,
             "--list-errored-order-index", "-leoi",
-            help="Index of the column to sort errored list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 2=Creation Date, 3=Has EXIF, 4=Extension, 5=Size.",
+            help="Index of the column to sort errored list by (0-5). Default is 0 (Index). Sort Keys: 0=Index, 1=Filename, 4=Extension (others may not apply). Columns shown: Index, Filename, Path, Reason.",
             min=0,
             max=5,
             envvar="PYL_M_ORG_LIST_ERRORED_ORDER_INDEX"

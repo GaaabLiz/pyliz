@@ -195,8 +195,13 @@ class MediaOrganizer:
                         dest = res.destination_path
                 else:
                     dest = "N/A"
+                
+                ext = res.source_file.suffix.lower()
+                display_ext = ext
+                if ext in ['.xmp', '.aae']:
+                    display_ext = f"[bold magenta]{ext}[/bold magenta]"
                     
-                table.add_row(str(res.index), status, res.source_file.name, res.source_file.suffix.lower(), dest, res.reason)
+                table.add_row(str(res.index), status, res.source_file.name, display_ext, dest, res.reason)
             
             Console().print(table)
             print("\n")
@@ -219,7 +224,7 @@ class MediaOrganizer:
             count_generated = 0
 
             for result in self.results:
-                # Check basic requirements
+                # Filter for successful media transfers
                 if not result.media or not result.destination_path: 
                     continue
 
@@ -247,7 +252,12 @@ class MediaOrganizer:
                 present_str = "[green]Yes[/green]" if exists else "[red]No[/red]"
                 generated_str = "[green]Yes[/green]" if was_generated else "[dim]No[/dim]"
 
-                table.add_row(dest_path.name, present_str, generated_str)
+                # Colorize filename extension if it's a sidecar (unlikely here but for consistency)
+                filename = dest_path.name
+                if dest_path.suffix.lower() in ['.xmp', '.aae']:
+                    filename = f"{dest_path.stem}[bold magenta]{dest_path.suffix.lower()}[/bold magenta]"
+
+                table.add_row(filename, present_str, generated_str)
 
             Console().print(table)
             print(f"Total Media: {len(self.results)} | XMP Present: {count_present} | Newly Generated: {count_generated}")
