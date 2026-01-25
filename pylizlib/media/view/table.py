@@ -7,7 +7,7 @@ from rich.table import Table
 from pylizlib.media.lizmedia import LizMediaSearchResult, MediaListResult
 
 
-class OrganizerTablePrinter:
+class MediaListResultPrinter:
     def __init__(self, result: MediaListResult):
         self._result = result
         self._console = Console()

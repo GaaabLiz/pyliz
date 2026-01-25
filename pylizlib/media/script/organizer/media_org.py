@@ -196,7 +196,7 @@ class MediaOrganizer:
             count_generated = 0
 
             for result in self.results:
-                # Filter for successful media transfers
+                # Check basic requirements
                 if not result.media or not result.destination_path: 
                     continue
 
