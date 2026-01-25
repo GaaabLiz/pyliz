@@ -5,6 +5,7 @@ from datetime import datetime
 from pylizlib.core.app.pylizapp import PylizApp, PylizDirFoldersTemplate
 from pylizlib.media import pyliz_media
 from pylizlib.media.script.organizer import cli
+from pylizlib.media.script.temp import cli
 
 # Initialize PylizApp
 app = PylizApp("pyliz_media")
@@ -34,12 +35,7 @@ root_logger.addHandler(file_handler)
 logger = logging.getLogger("pyliz_media") # This will now inherit from root and use the file handler
 
 
-@pyliz_media.command()
-def temp():
-    """
-    Template command for media_app.
-    """
-    print("This is a temporary command in media_app.")
+
 
 
 if __name__ == "__main__":
