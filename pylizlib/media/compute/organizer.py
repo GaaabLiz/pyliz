@@ -151,7 +151,7 @@ class MediaOrganizer:
         Prints a table of the organization results.
         
         :param sort_index: Index of the column to sort by.
-                           0=Status (default), 1=Filename, 2=Extension, 3=Destination, 4=Reason
+                           0=Index, 1=Status, 2=Filename, 3=Extension, 4=Destination, 5=Reason
         """
         if not self.results:
             print("[yellow]No results to display.[/yellow]")
@@ -162,24 +162,26 @@ class MediaOrganizer:
             
             # Sorting logic for results
             sorted_results = list(self.results) # Create a copy to avoid modifying original order if needed elsewhere
-            if sort_index == 0: # Status
+            if sort_index == 0: # Index
+                sorted_results.sort(key=lambda x: x.index)
+            elif sort_index == 1: # Status
                 sorted_results.sort(key=lambda x: x.success, reverse=True) # Success first
-            elif sort_index == 1: # Filename
+            elif sort_index == 2: # Filename
                 sorted_results.sort(key=lambda x: x.source_file.name.lower())
-            elif sort_index == 2: # Extension
+            elif sort_index == 3: # Extension
                 sorted_results.sort(key=lambda x: x.source_file.suffix.lower())
-            elif sort_index == 3: # Destination
+            elif sort_index == 4: # Destination
                 sorted_results.sort(key=lambda x: (x.destination_path or "").lower())
-            elif sort_index == 4: # Reason
+            elif sort_index == 5: # Reason
                 sorted_results.sort(key=lambda x: x.reason.lower())
 
             table = Table(title=f"Organization Results ({len(sorted_results)})")
-            table.add_column("Index", justify="right")
-            table.add_column("Status", justify="center")
-            table.add_column("Filename", style="cyan")
-            table.add_column("Extension", style="yellow", justify="center")
-            table.add_column("Destination", style="magenta", overflow="fold")
-            table.add_column("Reason", style="white", overflow="fold")
+            table.add_column(f"Index{' *' if sort_index == 0 else ''}", justify="right")
+            table.add_column(f"Status{' *' if sort_index == 1 else ''}", justify="center")
+            table.add_column(f"Filename{' *' if sort_index == 2 else ''}", style="cyan")
+            table.add_column(f"Extension{' *' if sort_index == 3 else ''}", justify="center", style="yellow")
+            table.add_column(f"Destination{' *' if sort_index == 4 else ''}", style="magenta", overflow="fold")
+            table.add_column(f"Reason{' *' if sort_index == 5 else ''}", style="white", overflow="fold")
 
             for res in sorted_results:
                 status = "[green]Success[/green]" if res.success else "[red]Failed[/red]"
