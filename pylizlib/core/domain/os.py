@@ -27,6 +27,7 @@ class FileType(Enum):
     TEXT = "TEXT"
     VIDEO = "VIDEO"
     AUDIO = "AUDIO"
+    MEDIA_SIDECAR = "MEDIA_SIDECAR"
     DOCUMENT = "DOCUMENT"
     OTHER = "OTHER"
     UNKNOWN = "UNKNOWN"

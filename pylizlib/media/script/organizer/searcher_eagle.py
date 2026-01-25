@@ -25,7 +25,7 @@ class EagleCatalogSearcher:
         self._result = MediaListResult() # Reset result on new search
         reader = EagleCoolReader(
             Path(self.path), 
-            file_types=[FileType.IMAGE, FileType.VIDEO, FileType.AUDIO],
+            file_types=[FileType.IMAGE, FileType.VIDEO, FileType.AUDIO, FileType.MEDIA_SIDECAR],
             filter_tags=eagletag
         )
         

@@ -249,7 +249,7 @@ class TestEagleCoolReader(unittest.TestCase):
         skipped = next((i for i, r in reader.items_skipped if i.metadata.id == "item6"), None)
         self.assertIsNotNone(skipped)
         reason = next(r for i, r in reader.items_skipped if i.metadata.id == "item6")
-        self.assertIn("Unsupported file type", reason)
+        self.assertIn("File type not requested", reason)
 
     def test_invalid_catalogue_path(self):
         """Test that initialization with an invalid path raises or handles error."""

@@ -6,7 +6,7 @@ from typing import Generator, List, Optional, Tuple
 from rich import print
 from tqdm import tqdm
 from pylizlib.core.domain.os import FileType
-from pylizlib.core.os.file import is_media_file
+from pylizlib.core.os.file import get_file_type
 from pylizlib.eaglecool.model.metadata import Metadata
 
 
@@ -65,8 +65,12 @@ class EagleCoolReader:
             return None
 
         # Check file type
-        if not is_media_file(str(media_file)):
-            # TODO: Handle other file types
+        try:
+            detected_type = get_file_type(str(media_file))
+            if detected_type not in self.file_types:
+                self.items_skipped.append((eagle_item, f"File type not requested: {detected_type.name}"))
+                return None
+        except ValueError:
             self.items_skipped.append((eagle_item, f"Unsupported file type: {media_file.suffix}"))
             return None
             

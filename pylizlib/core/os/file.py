@@ -55,6 +55,11 @@ def is_media_file(path: str) -> bool:
     return is_image_file(path) or is_video_file(path) or is_audio_file(path)
 
 
+def is_media_sidecar_file(path: str) -> bool:
+    sidecar_extensions = ['.xmp', '.xml']
+    return os.path.splitext(path)[1] in sidecar_extensions
+
+
 def get_file_type(path: str) -> FileType:
     if is_image_file(path):
         return FileType.IMAGE
@@ -64,6 +69,8 @@ def get_file_type(path: str) -> FileType:
         return FileType.AUDIO
     elif is_text_file(path):
         return FileType.TEXT
+    elif is_media_sidecar_file(path):
+        return FileType.MEDIA_SIDECAR
     else:
         raise ValueError("Unsupported file type")
 
