@@ -6,12 +6,12 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
-from pylizlib.media import media_app
+from pylizlib.media import pyliz_media
 from pylizlib.media.compute.organizer import MediaOrganizer, OrganizerOptions
 from pylizlib.media.compute.searcher import MediaSearcher
 
 
-@media_app.command()
+@pyliz_media.command()
 def organizer(
         path: str = typer.Argument(
             ...,

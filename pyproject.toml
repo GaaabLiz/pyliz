@@ -24,7 +24,7 @@ dependencies = [
 
 [project.scripts]
 pyliz = "pylizlib.core.cli:app"
-pylizmedia = "pylizlib.media.cli:app"
+pylizmedia = "pylizlib.media.cli:pyliz_media"
 qtliz = "pylizlib.qt.cli:app"
 
 [project.optional-dependencies]
