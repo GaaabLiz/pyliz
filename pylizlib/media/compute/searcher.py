@@ -14,6 +14,7 @@ from tqdm import tqdm
 from pylizlib.core.domain.os import FileType
 from pylizlib.eaglecool.reader import EagleCoolReader
 from pylizlib.media.lizmedia2 import LizMedia, MediaListResult, LizMediaSearchResult, MediaStatus
+from pylizlib.media.view.organizer import OrganizerTablePrinter
 
 
 class FileSystemSearcher:
@@ -199,128 +200,13 @@ class MediaSearcher:
         self._result = searcher.get_result()
 
     def printAcceptedAsTable(self, sort_index: int = 0):
-        if not self._result.accepted:
-            print("[yellow]No accepted media files found.[/yellow]")
-            return
-        
-        # Sort media list based on index
-        # We need to extract the LizMedia object for sorting
-        sorted_results = self._sort_result_list(self._result.accepted, sort_index, table_type="accepted")
-
-        table = Table(title=f"Accepted Media Files ({len(self._result.accepted)})")
-        table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
-        table.add_column(f"Filename{' *' if sort_index == 1 else ''}", style="cyan", no_wrap=True)
-        table.add_column(f"Creation Date{' *' if sort_index == 2 else ''}", style="blue")
-        table.add_column(f"Has EXIF{' *' if sort_index == 3 else ''}", justify="center", style="magenta")
-        table.add_column(f"Ext{' *' if sort_index == 4 else ''}", justify="center", style="yellow")
-        table.add_column(f"Size (MB){' *' if sort_index == 5 else ''}", justify="right", style="green")
-        table.add_column("Sidecars", style="white")
-
-        for item in sorted_results:
-            media = item.media
-            has_exif = "Yes" if media.has_exif_data else "No"
-            creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
-            
-            sidecars_str = ", ".join([s.name for s in item.sidecar_files]) if item.sidecar_files else ""
-
-            table.add_row(
-                str(item.index),
-                media.file_name,
-                creation_date,
-                has_exif,
-                media.extension,
-                f"{media.size_mb:.2f}",
-                sidecars_str
-            )
-
-        self._console.print(table)
+        printer = OrganizerTablePrinter(self._result)
+        printer.print_accepted(sort_index)
 
     def printRejectedAsTable(self, sort_index: int = 0):
-        if not self._result.rejected:
-            print("[green]No media files were rejected.[/green]")
-            return
-            
-        # Sort rejected list based on index
-        sorted_results = self._sort_result_list(self._result.rejected, sort_index, table_type="rejected")
-
-        table = Table(title=f"Rejected Media Files ({len(self._result.rejected)})")
-        table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
-        table.add_column(f"Filename{' *' if sort_index == 1 else ''}", style="red", no_wrap=True)
-        table.add_column(f"Creation Date{' *' if sort_index == 2 else ''}", style="blue")
-        table.add_column(f"Has EXIF{' *' if sort_index == 3 else ''}", justify="center", style="magenta")
-        table.add_column(f"Size (MB){' *' if sort_index == 4 else ''}", justify="right", style="green")
-        table.add_column(f"Reject reason{' *' if sort_index == 5 else ''}", style="white")
-
-        for item in sorted_results:
-            media = item.media
-            if media:
-                filename = media.file_name
-                has_exif = "Yes" if media.has_exif_data else "No"
-                creation_date = media.creation_date_from_exif_or_file.strftime("%Y-%m-%d %H:%M:%S")
-                size_mb = f"{media.size_mb:.2f}"
-            else:
-                filename = item.path.name
-                has_exif = "N/A"
-                creation_date = "N/A"
-                size_mb = "N/A"
-
-            table.add_row(
-                str(item.index),
-                filename,
-                creation_date,
-                has_exif,
-                size_mb,
-                item.reason
-            )
-
-        self._console.print(table)
+        printer = OrganizerTablePrinter(self._result)
+        printer.print_rejected(sort_index)
 
     def printErroredAsTable(self, sort_index: int = 0):
-        if not self._result.errored:
-            print("[green]No media files were errored.[/green]")
-            return
-            
-        # Sort errored list based on index
-        sorted_results = self._sort_result_list(self._result.errored, sort_index, table_type="errored")
-
-        table = Table(title=f"Errored Media Files ({len(self._result.errored)})")
-        table.add_column(f"Index{' *' if sort_index == 0 else ''}", style="dim", justify="right")
-        table.add_column(f"Filename{' *' if sort_index == 1 else ''}", style="red", no_wrap=True)
-        table.add_column("Path", style="magenta")
-        table.add_column("Error reason", style="white")
-
-        for item in sorted_results:
-            filename = item.path.name
-            path_str = str(item.path)
-            
-            table.add_row(
-                str(item.index),
-                filename,
-                path_str,
-                item.reason
-            )
-
-        self._console.print(table)
-
-    def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int, table_type: str = "accepted") -> List[LizMediaSearchResult]:
-        if sort_index == 0:
-            return sorted(results, key=lambda x: x.index)
-        elif sort_index == 1:
-            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
-        elif sort_index == 2:
-            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file if x.media else datetime.min)
-        elif sort_index == 3:
-            return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
-        
-        if table_type == "rejected":
-            if sort_index == 4: # Size
-                return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
-            elif sort_index == 5: # Reason
-                return sorted(results, key=lambda x: x.reason)
-        else: # accepted / default
-            if sort_index == 4: # Extension
-                return sorted(results, key=lambda x: x.media.extension if x.media else x.path.suffix.lower())
-            elif sort_index == 5: # Size
-                return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
-        
-        return results # Fallback
+        printer = OrganizerTablePrinter(self._result)
+        printer.print_errored(sort_index)
