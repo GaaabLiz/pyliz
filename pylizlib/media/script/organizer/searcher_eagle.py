@@ -30,12 +30,18 @@ class EagleCatalogSearcher:
         )
         
         # Run the reader to populate findings (blocking operation with its own progress bar)
-        reader.run()
+        reader.run() 
         
-        # Process found media with progress bar
+        self._process_accepted_items(reader)
+        self._process_skipped_items(reader)
+        self._process_errors(reader)
+        self._link_sidecars()
+        self._print_summary(reader)
+
+    def _process_accepted_items(self, reader: EagleCoolReader):
+        """Process items accepted by the Eagle reader."""
         with tqdm(reader.items, desc="Processing Eagle Media", unit="items") as pbar:
             for eagle in pbar:
-                # Update description to show current file
                 pbar.set_description(f"Processing {eagle.file_path.name}")
                 
                 lizmedia = LizMedia(eagle.file_path)
@@ -46,12 +52,11 @@ class EagleCatalogSearcher:
                     path=eagle.file_path,
                     media=lizmedia
                 ))
-                
                 pbar.update(1)
-            
             pbar.set_description("Scanning complete")
 
-        # Add reader skipped items to rejected
+    def _process_skipped_items(self, reader: EagleCoolReader):
+        """Process items skipped by the Eagle reader (e.g. deleted, wrong tag)."""
         for eagle_item, reason in tqdm(reader.items_skipped, desc="Processing Skipped Items", unit="items"):
             time.sleep(0.0005) # Simulate delay
             media_obj = None
@@ -67,7 +72,8 @@ class EagleCatalogSearcher:
                 reason=reason
             ))
 
-        # Add reader errors to errored
+    def _process_errors(self, reader: EagleCoolReader):
+        """Process errors encountered by the Eagle reader."""
         for error_path, reason in tqdm(reader.error_paths, desc="Processing Reader Errors", unit="errors"):
             time.sleep(0.0005)
             self._result.errored.append(LizMediaSearchResult(
@@ -77,7 +83,8 @@ class EagleCatalogSearcher:
                 reason=reason
             ))
 
-        # Post-process rejected items to link sidecars to accepted media
+    def _link_sidecars(self):
+        """Link rejected items that are sidecars (.xmp, .aae) to their accepted media files."""
         sidecar_extensions = {'.xmp', '.aae'}
         accepted_map_by_stem = {item.path.stem: item for item in self._result.accepted}
         accepted_map_by_name = {item.path.name: item for item in self._result.accepted}
@@ -101,6 +108,8 @@ class EagleCatalogSearcher:
         
         self._result.rejected = rejected_to_keep
 
+    def _print_summary(self, reader: EagleCoolReader):
+        """Print a summary of the search results."""
         print("\n[bold cyan]Eagle Search Summary:[/bold cyan]")
         print(f"  Scanned folders: {reader.scanned_folders_count}")
         print(f"  File types: {', '.join([ft.name for ft in reader.file_types])}")
