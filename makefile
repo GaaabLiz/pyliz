@@ -113,7 +113,7 @@ build-installer: build-app installer
 #
 #
 
-UPGRADE_VERSION_SCRIPT = \
+define upgrade_version_impl
 	@VERSION=$$(uv version --short); \
 	if [ -f $(INNO_SETUP_FILE) ]; then \
 		echo "Inno setup script found. upgrading version to $$VERSION..."; \
@@ -121,17 +121,17 @@ UPGRADE_VERSION_SCRIPT = \
 	fi; \
 	git commit -am "bump: Bump version to $$VERSION"; \
 	git push
-
+endef
 
 upgrade-patch:
 	uv version --bump patch
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
-	$(UPGRADE_VERSION_SCRIPT)
+	$(upgrade_version_impl)
 
 upgrade-minor:
 	uv version --bump minor
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
-	$(UPGRADE_VERSION_SCRIPT)
+	$(upgrade_version_impl)
 
 
 upgrade-patch-push-tag: upgrade-patch
