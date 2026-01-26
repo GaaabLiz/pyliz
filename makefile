@@ -133,8 +133,16 @@ upgrade-minor:
 	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
 	$(upgrade_version_impl)
 
+upgrade-major:
+	uv version --bump major
+	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+	$(upgrade_version_impl)
 
-upgrade-patch-push-tag: upgrade-patch
+create-version-tag:
 	git pull
 	git tag $$(uv version --short)
 	git push origin $$(uv version --short)
+
+upgrade-patch-push-tag: upgrade-patch create-version-tag
+upgrade-minor-push-tag: upgrade-minor create-version-tag
+upgrade-major-push-tag: upgrade-major create-version-tag
