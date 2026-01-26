@@ -110,6 +110,13 @@ class TestEagleCoolReader(unittest.TestCase):
         (folder_dng / "test.dng").touch()
         (folder_dng / "test.dng.png").touch()
 
+        # 10. Sidecar acceptance test
+        cls.create_mock_item(
+            "item10.info", 
+            "image.xmp", 
+            {"id": "item10", "name": "Sidecar Test", "tags": [], "isDeleted": False}
+        )
+
 
     @classmethod
     def create_mock_item(cls, folder_name: str, media_name: str | None, metadata: dict):
@@ -151,6 +158,18 @@ class TestEagleCoolReader(unittest.TestCase):
         item9 = next((i for i in reader.items if i.metadata.id == "item9"), None)
         self.assertIsNotNone(item9)
         self.assertEqual(item9.file_path.name, "test.dng")
+
+    def test_sidecar_acceptance(self):
+        """Test that sidecar files are accepted when requested."""
+        reader = EagleCoolReader(
+            self.library_path, 
+            file_types=[FileType.MEDIA_SIDECAR]
+        )
+        reader.run()
+        
+        item10 = next((i for i in reader.items if i.metadata.id == "item10"), None)
+        self.assertIsNotNone(item10)
+        self.assertEqual(item10.file_path.suffix, ".xmp")
 
     def test_run_standard_scan(self):
         """Test a basic scan of the library."""
