@@ -303,9 +303,9 @@ class MediaOrganizer:
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize path to prevent path traversal attacks."""
-        sanitized = os.path.normpath(path)
-        if re.search(r'(\.\./|^\.\./|^\.\.)', sanitized):
+        if re.search(r'(\.\.[/\\]|^\.\.[/\\]|^\.\.)', path):
             raise ValueError("Path contains invalid traversal components")
+        sanitized = os.path.normpath(path)
         return sanitized
 
     def _ensure_directory_exists(self, folder_path: str):
