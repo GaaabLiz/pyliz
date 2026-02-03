@@ -100,6 +100,8 @@ class MetadataHandler:
             for tag in metadata.tags:
                 # Use -Subject+=tag to append to existing list
                 cmd.append(f"-xmp:subject+={tag}")
+                # Add Lightroom hierarchical subject
+                cmd.append(f"-XMP-lr:HierarchicalSubject+={tag}")
         
         # Add annotation/description
         if metadata.annotation:
