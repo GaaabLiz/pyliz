@@ -32,6 +32,9 @@ init-uv:
 	uv sync --all-groups
 	uv build
 
+install-pyinstaller:
+	uv add --group dev pyinstaller
+
 
 
 
