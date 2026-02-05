@@ -27,6 +27,11 @@ install-env:
 	uv sync
 	uv sync --all-extras
 
+init-uv:
+	uv python install 3.12
+	uv sync --all-groups
+	uv build
+
 
 
 
