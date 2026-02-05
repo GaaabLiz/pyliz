@@ -7,6 +7,8 @@
 #    $$ | \_/ $$ |$$ |  $$ |$$ | \$$\ $$$$$$$$\ $$ |      $$$$$$\ $$$$$$$$\ $$$$$$$$\
 #    \__|     \__|\__|  \__|\__|  \__|\________|\__|      \______|\________|\________|
 #
+#                               PYTHON PROJECT MAKEFILE
+#
 #                                   VERSION 1.1.2
 
 include project.mk
@@ -22,6 +24,18 @@ include project.mk
 #     | |____| |\  |  \  /   _| |_| | \ \| |__| | |  | | |____| |\  |  | |
 #     |______|_| \_|   \/   |_____|_|  \_\\____/|_|  |_|______|_| \_|  |_|
 
+
+# == PLATFORM DETECTION ==
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    OS_NAME := macos
+else ifeq ($(UNAME_S),Linux)
+    OS_NAME := linux
+else
+    OS_NAME := windows
+endif
+
+
 # Rule to create a virtual environment and install dependencies
 install-env:
 	uv sync
@@ -34,6 +48,9 @@ init-uv:
 
 install-pyinstaller:
 	uv add --group dev pyinstaller
+
+install-inno-setup:
+	choco install innosetup
 
 
 
@@ -89,22 +106,38 @@ gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
 
 installer:
+ifeq ($(filter Darwin Linux,$(shell uname)),)
 	ISCC.exe $(INNO_SETUP_FILE)
+else
+	@echo "Error: The installer can only be built on Windows."
+	@exit 1
+endif
 
 build-uv:
 	uv build
 
 build-exe:
-ifeq ($(shell uname), Darwin)
-	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICNS) --name=$(APP_NAME) $(FILE_MAIN)
-else
-	uv run pyinstaller --windowed --icon=$(FILE_MAIN_LOGO_ICO) --name=$(APP_NAME) $(FILE_MAIN)
-endif
+	$(foreach app,$(APPS_LIST),\
+		uv run pyinstaller --windowed \
+		--icon=$(if $(filter Darwin,$(shell uname)),$($(app)_ICNS),$($(app)_ICO)) \
+		--name=$($(app)_NAME)-$(OS_NAME) \
+		$($(app)_MAIN); \
+	)
+
+build-exe-onefile:
+	$(foreach app,$(APPS_LIST),\
+		uv run pyinstaller --windowed --onefile \
+		--icon=$(if $(filter Darwin,$(shell uname)),$($(app)_ICNS),$($(app)_ICO)) \
+		--name=$($(app)_NAME)-$(OS_NAME) \
+		$($(app)_MAIN); \
+	)
 
 docs-gen:
 	pdoc -o docs -d markdown $(PYTHON_MAIN_PACKAGE)
 
 build-app: clean gen-project-py build-uv build-exe
+
+build-app-onefile: clean gen-project-py build-uv build-exe-onefile
 
 build-installer: build-app installer
 
