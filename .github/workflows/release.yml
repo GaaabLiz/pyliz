@@ -95,11 +95,13 @@ jobs:
           # 'build-installer' runs 'build-app' (dir mode) then 'installer'.
           # We need the directory build for the installer sources (defined in [Files] section of .iss).
           make build-installer
+            - name: Upload Artifacts
+              uses: softprops/action-gh-release@v2
+              if: always() # Upload what we have even if one part fails
+              with:
+                files: |
+                  dist/pyliz-*
+                  dist/qtliz-*
+                  Output/*.exe
 
-      - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
-        if: always() # Upload what we have even if one part fails, though typically we want success
-        with:
-          files: |
-            dist/*
-            Output/*.exe
+      
