@@ -11,6 +11,15 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Refactor build process and add installer target
 - Update clean targets and rename build command
 - Add macOS icon support and fix FILE_MAIN path
+- Add tqdm dependency
+- Update makefile to use uv run for project generation
+- Refactor version upgrade logic and add upgrade-minor target
+- Add major upgrade and tagging targets to makefile
+- Add init-uv target to makefile
+- Add install-pyinstaller target to makefile
+- Add Inno Setup installer script
+- Refactor makefile for multi-app support and add onefile targets
+- Refactor project.mk to support multiple applications
 
 ### Bump
 
@@ -61,6 +70,16 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.69
 - Bump version to 0.3.70
 - Bump version to 0.3.71
+- Bump version to 0.4.0
+- Bump version to 0.5.0
+- Update version to 0.5.1
+- Bump version to 0.5.2
+
+### Ci
+
+- Move release workflow to temp directory and update name
+- Add PyPI release workflow
+- Add release workflow for changelog generation and asset building
 
 ### ♻️ Refactor
 
@@ -83,6 +102,45 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Introduce SnapshotSettings class for improved snapshot management
 - Removed README.md
 - Reorganize makefile and introduce project.mk for better structure
+- Move lizmedia.py to temp directory
+- Extract media search logic to MediaSearcher class
+- Extract media organization logic to MediaOrganizer class
+- Introduce OrganizerOptions dataclass for MediaOrganizer
+- Move OrganizerOptions to MediaOrganizer constructor
+- Merge result logging into MediaSearcher and update organizer
+- Extract search strategies into FileSystemSearcher and EagleCatalogSearcher classes
+- Replace PIL with exifread for EXIF parsing in LizMedia
+- Enhance media search results with status and skip reasons
+- Standardize progress bar usage in media searchers
+- Rename 'skipped' status to 'rejected' in media modules
+- Enhance organizer command parameter logging and formatting
+- Enhance Eagle media reader with error tracking and progress bars
+- Enhance Eagle media reader with error tracking and progress bars
+- Update Eagle reader to track and display error reasons
+- Rename and enhance Eagle reader with filtering capabilities
+- Rename file_found attribute to items in EagleCoolReader
+- Enhance media search result handling and error reporting
+- Move tag filtering to EagleCoolReader and improve reporting
+- Introduce OrganizerResult and remove console output from MediaOrganizer
+- Commented method
+- Enhance media organizer logging and sidecar handling
+- Decompose MediaOrganizer logic into helper methods
+- Move result table generation to MediaOrganizer class
+- Update table sorting logic and add visual indicators
+- Enhance media organizer table sorting and display
+- Rename organizer script to cli and enforce required arguments
+- Extract table printing logic to OrganizerTablePrinter
+- Move media script cli to organizer package
+- Rename lizmedia2 module to lizmedia and update imports
+- Rename media_app to pyliz_media and update entry point
+- Extract organizer domain classes and relocate temp command
+- Reorganize media organizer and view modules
+- Unify media list table printing and standardize columns
+- Reorganize media searcher classes into organizer module
+- Modularize Eagle search logic in EagleCatalogSearcher
+- Enhance sidecar handling in LizMedia and Eagle searcher
+- Remove XMP generation and reporting from media organizer
+- Extract version bump targets and simplify upgrade rules in makefile
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -100,6 +158,13 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Bump version to 0.3.17 and update release workflow for Linux and macOS builds
 - Update dependencies to include pytest and related packages
 - Add logo icon resources in various resolutions
+- Add temp_local to .gitignore
+- Add run configurations for media organizer, clean, and build-app
+- Add run configuration for upgrade-patch-push-tag
+
+### 🎨 Styling
+
+- Add overflow folding to organizer result table columns
 
 ### 🐛 Bug Fixes
 
@@ -111,6 +176,11 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Simplify folder_name property to return only the id
 - Use settings.json_filename for snapshot JSON path
 - Make folder ID and snapshot ID lengths configurable
+- Improve console output formatting in EagleMediaReader
+- Use media file path for skipped items in Eagle reader and populate media object
+- Enhance sidecar file matching logic in EagleCatalogSearcher
+- Enable XMP generation for duplicate files skipped during organization
+- Harden path sanitization in MediaOrganizer
 
 ### 📚 Documentation
 
@@ -159,6 +229,8 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Update changelog for 0.3.67
 - Update changelog for 0.3.69
 - Update changelog for 0.3.70
+- Update changelog for 0.3.71
+- Add docstrings to LizMedia class in lizmedia2.py
 
 ### 🚀 Features
 
@@ -264,8 +336,41 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - Add eaglecool optional dependency and initialize package structure
 - Add Eagle media reader and metadata models
 - Add get_creation_date method to LizMedia for EXIF metadata extraction
+- Add ImageUtils class for image validation and SD metadata parsing
+- Add video duration and frame rate retrieval methods
+- Add pydantic dependency and pylizmedia script
+- Add media organizer script and LizMedia model
+- Implement file organization logic in media organizer
+- Add heic, heif, webp, ico, and dng to image extensions in file.py
+- Enhance media search results and logging in organizer
+- Add sorting and update columns in media organizer list output
+- Add progress bars to media searchers using tqdm
+- Add summary output to Eagle searcher and suppress EXIF logs
+- Separate sort indices for accepted/rejected lists and add progress bars to Eagle searcher
+- Add support for listing errored media files in organizer
+- Add result summary table and remove confirmation in organizer
+- Add destination path field and source path property to OrganizerResult
+- Add status spinners for table generation in organizer script
+- Link sidecar files to accepted media in Eagle search results
+- Add sidecar support to media organizer and improve reporting
+- Initialize PylizApp and setup logging in media CLI
+- Add sorting functionality to organizer results table
+- Add environment variable support to organizer command
+- Add XMP generation and reporting to media organizer
+- Implement priority logic for HEIC and DNG files in Eagle reader
+- Add index column to media search and organization tables
+- Add media sidecar support and refine Eagle reader file type checks
+- Implement XMP generation for missing sidecars in media organizer
+- Add support for appending Eagle metadata to generated XMP files
+- Update progress bars to show current filename in media scripts
+- Add XMP sidecar support for creation date retrieval in LizMedia
+- Add Lightroom hierarchical subject support to XMP tags
 
 ### 🧪 Testing
 
 - Add unit tests for Snapshot and related classes
+- Add logo resources and qrc file
+- Add unit tests for EagleCool reader
+- Add unit tests for LizMedia and update EagleCool reader
+- Add unit tests for MediaOrganizer
 
