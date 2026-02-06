@@ -47,9 +47,6 @@ jobs:
             # Fetch the latest changes from the remote branch to avoid conflicts
             git fetch origin
             # Determine the branch name (assuming main or master, or current HEAD)
-            # Since we are on a tag, we need to push to the branch the tag is on.
-            # A safe bet for this project structure is 'main' or 'master'.
-            # We will try to push to HEAD:main.
             git push origin HEAD:main || echo "Failed to push changelog to main, continuing..."
           fi
 
@@ -95,13 +92,12 @@ jobs:
           # 'build-installer' runs 'build-app' (dir mode) then 'installer'.
           # We need the directory build for the installer sources (defined in [Files] section of .iss).
           make build-installer
-            - name: Upload Artifacts
-              uses: softprops/action-gh-release@v2
-              if: always() # Upload what we have even if one part fails
-              with:
-                files: |
-                  dist/pyliz-*
-                  dist/qtliz-*
-                  Output/*.exe
 
-      
+      - name: Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        if: always() # Upload what we have even if one part fails
+        with:
+          files: |
+            dist/pyliz-*
+            dist/qtliz-*
+            Output/*.exe
