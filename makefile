@@ -154,6 +154,15 @@ build-installer: build-app installer
 #
 #
 
+uv-bump-patch:
+	uv version --bump patch
+
+uv-bump-minor:
+	uv version --bump minor
+
+uv-bump-major:
+	uv version --bump major
+
 define upgrade_version_impl
 	@VERSION=$$(uv version --short); \
 	if [ -f $(INNO_SETUP_FILE) ]; then \
@@ -164,19 +173,13 @@ define upgrade_version_impl
 	git push
 endef
 
-upgrade-patch:
-	uv version --bump patch
-	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+upgrade-patch: uv-bump-patch gen-project-py
 	$(upgrade_version_impl)
 
-upgrade-minor:
-	uv version --bump minor
-	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+upgrade-minor: uv-bump-minor gen-project-py
 	$(upgrade_version_impl)
 
-upgrade-major:
-	uv version --bump major
-	pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+upgrade-major: uv-bump-major gen-project-py
 	$(upgrade_version_impl)
 
 create-version-tag:
