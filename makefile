@@ -154,6 +154,9 @@ build-installer: build-app installer
 #
 #
 
+uv-bump-patch-beta:
+	uv version --bump patch --bump beta
+
 uv-bump-patch:
 	uv version --bump patch
 
@@ -173,6 +176,9 @@ define upgrade_version_impl
 	git push
 endef
 
+upgrade-patch-beta: uv-bump-patch-beta gen-project-py
+	$(upgrade_version_impl)
+
 upgrade-patch: uv-bump-patch gen-project-py
 	$(upgrade_version_impl)
 
@@ -186,6 +192,8 @@ create-version-tag:
 	git pull
 	git tag $$(uv version --short)
 	git push origin $$(uv version --short)
+
+upgrade-patch-beta-push-tag: upgrade-patch-beta create-version-tag
 
 upgrade-patch-push-tag: upgrade-patch create-version-tag
 upgrade-minor-push-tag: upgrade-minor create-version-tag
