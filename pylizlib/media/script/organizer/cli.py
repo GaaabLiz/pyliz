@@ -193,7 +193,7 @@ def organizer(
         raise typer.Exit(code=0)
 
     # Wait for user confirmation
-    # input("Press Enter to continue with organization...")
+    input("Press Enter to continue with organization...")
 
     # Organizing files
     options = OrganizerOptions(
