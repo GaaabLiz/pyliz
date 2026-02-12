@@ -60,19 +60,19 @@ def organizer(
             envvar="PYL_M_ORG_EXCLUDE"
         ),
         list_accepted: bool = typer.Option(
-            False,
+            True,
             "--list-accepted", "-lac",
             help="List accepted file during search.",
             envvar="PYL_M_ORG_LIST_ACCEPTED"
         ),
         list_rejected: bool = typer.Option(
-            False,
+            True,
             "--list-rejected", "-lrej",
             help="List rejected files during search.",
             envvar="PYL_M_ORG_LIST_REJECTED"
         ),
         list_errored: bool = typer.Option(
-            False,
+            True,
             "--list-errored", "-lerr",
             help="List errored files during search.",
             envvar="PYL_M_ORG_LIST_ERRORED"
