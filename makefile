@@ -68,7 +68,7 @@ clean-build:
 	- rm -rf dist
 	- rm -rf build
 	- rm -rf $(PYTHON_MAIN_PACKAGE).egg-info
-	- rm -rf $(PYTHON_MAIN_PACKAGE).spec
+	- rm -f *.spec
 
 # Command to clean Python cache files
 clean-cache:
