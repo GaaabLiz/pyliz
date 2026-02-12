@@ -15,14 +15,14 @@ from pylizlib.media.script.organizer.searcher import MediaSearcher
 @pyliz_media.command()
 def organizer(
         path: str = typer.Argument(
-            ...,
+            None,
             dir_okay=True,
             readable=True,
             help="Source path of files to organize",
             envvar="PYL_M_ORG_PATH"
         ),
         output: str = typer.Argument(
-            ...,
+            None,
             dir_okay=True,
             writable=True,
             readable=True,
