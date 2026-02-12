@@ -1,3 +1,9 @@
+"""
+Core organization logic for media files.
+
+Handles the movement, copying, and conflict resolution of media files based on
+metadata-derived dates and user options.
+"""
 import hashlib
 import logging
 import os

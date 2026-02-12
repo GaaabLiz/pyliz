@@ -1,3 +1,9 @@
+"""
+Standard filesystem search strategy.
+
+Scans the filesystem recursively for media files, applying regex exclusions
+and validating files as LizMedia items.
+"""
 import os
 import re
 from pathlib import Path
@@ -13,9 +19,21 @@ class FileSystemSearcher:
     Strategy class to search for media files in the file system.
     """
     def __init__(self, path: str):
+        """
+        Initialize with the root path to scan.
+        
+        :param path: Directory path to start the recursive scan.
+        """
         self.path = path
 
     def search(self, exclude: str = None, dry: bool = False) -> MediaListResult:
+        """
+        Performs a recursive scan of the filesystem.
+        
+        :param exclude: Optional regex pattern to exclude certain files or directories.
+        :param dry: If True, simulate the scan and log exclusions.
+        :return: A MediaListResult containing accepted and rejected items.
+        """
         result = MediaListResult()
         exclude_regex = None
 

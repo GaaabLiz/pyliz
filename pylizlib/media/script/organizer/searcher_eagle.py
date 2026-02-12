@@ -1,3 +1,9 @@
+"""
+Search strategy for Eagle library catalogs.
+
+Integrates with the EagleCool reader to extract media items and metadata
+from an Eagle library folder.
+"""
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -16,13 +22,24 @@ class EagleCatalogSearcher:
     Strategy class to search for media files using the Eagle library.
     """
     def __init__(self, path: str):
+        """
+        Initialize with the path to the Eagle library.
+        
+        :param path: Base path of the Eagle library.
+        """
         self.path = path
         self._result = MediaListResult()
 
     def get_result(self) -> MediaListResult:
+        """Returns the search result object."""
         return self._result
 
     def search(self, eagletag: Optional[List[str]] = None):
+        """
+        Performs the search in the Eagle catalog.
+        
+        :param eagletag: Optional list of tags to filter by.
+        """
         self._result = MediaListResult() # Reset result on new search
         reader = EagleCoolReader(
             Path(self.path), 

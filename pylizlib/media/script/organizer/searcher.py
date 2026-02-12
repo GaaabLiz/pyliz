@@ -1,3 +1,9 @@
+"""
+Facade for media file search strategies.
+
+Coordinates searching through the filesystem or Eagle catalogs, manages
+temporary XMP generation, and provides reporting utilities.
+"""
 import os
 import shutil
 import tempfile
@@ -23,6 +29,11 @@ class MediaSearcher:
     """
 
     def __init__(self, path: str):
+        """
+        Initialize the searcher with a root path.
+        
+        :param path: The directory path to search in.
+        """
         self.path = path
         self._result = MediaListResult()
         self._console = Console()
@@ -30,26 +41,41 @@ class MediaSearcher:
         self._temp_xmp_dir: Optional[str] = None
 
     def get_result(self) -> MediaListResult:
+        """Returns the collected search results."""
         return self._result
 
     def run_search_system(self, exclude: str = None, dry: bool = False):
+        """
+        Runs a standard filesystem search.
+        
+        :param exclude: Optional regex pattern for excluding files.
+        :param dry: If True, only simulate the search.
+        """
         searcher = FileSystemSearcher(self.path)
         self._result = searcher.search(exclude, dry)
 
     def run_search_eagle(self, eagletag: Optional[List[str]] = None):
+        """
+        Runs a search using the Eagle catalog metadata.
+        
+        :param eagletag: Optional list of Eagle tags to filter by.
+        """
         searcher = EagleCatalogSearcher(self.path)
         searcher.search(eagletag)
         self._result = searcher.get_result()
 
     def printAcceptedAsTable(self, sort_index: int = 0):
+        """Prints the accepted files as a formatted table."""
         printer = MediaListResultPrinter(self._result)
         printer.print_accepted(sort_index)
 
     def printRejectedAsTable(self, sort_index: int = 0):
+        """Prints the rejected files as a formatted table."""
         printer = MediaListResultPrinter(self._result)
         printer.print_rejected(sort_index)
 
     def printErroredAsTable(self, sort_index: int = 0):
+        """Prints the files that encountered errors as a formatted table."""
         printer = MediaListResultPrinter(self._result)
         printer.print_errored(sort_index)
 

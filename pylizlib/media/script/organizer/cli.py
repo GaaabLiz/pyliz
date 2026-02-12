@@ -1,3 +1,8 @@
+"""
+Command line interface for the media organizer script.
+
+Provides the 'organizer' command for the pylizmedia CLI tool.
+"""
 from pathlib import Path
 from typing import List, Optional
 import os

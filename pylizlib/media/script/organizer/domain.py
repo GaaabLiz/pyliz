@@ -1,3 +1,8 @@
+"""
+Domain models for the media organizer.
+
+Contains dataclasses and structures representing organization results and configuration options.
+"""
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
@@ -10,6 +15,9 @@ _result_counter = count(1)
 
 @dataclass
 class OrganizerResult:
+    """
+    Represents the result of an attempt to organize a single file.
+    """
     success: bool
     source_file: Path
     media: Optional[LizMedia] = None
@@ -19,11 +27,15 @@ class OrganizerResult:
 
     @property
     def source_path(self) -> str:
+        """Returns the source file path as a string."""
         return str(self.source_file)
 
 
 @dataclass
 class OrganizerOptions:
+    """
+    Configuration options for the media organization process.
+    """
     no_progress: bool = False
     daily: bool = False
     copy: bool = False
