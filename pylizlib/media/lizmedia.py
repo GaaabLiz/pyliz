@@ -188,12 +188,12 @@ class LizMedia:
     @property
     def size_mb(self) -> float:
         """
-        Gets the file size in megabytes.
+        Gets the file size in megabytes (decimal, matching macOS Finder).
 
         Returns:
             float: The size of the file in MB.
         """
-        return self.size_byte / (1024 * 1024)
+        return self.size_byte / 1000000
 
     @property
     def type(self) -> FileType:
