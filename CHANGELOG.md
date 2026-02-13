@@ -4,6 +4,32 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.9] - 2026-02-13
+
+### Build
+
+- Update clean target to remove all spec files
+
+### Bump
+
+- Bump version to 0.5.9
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🐛 Bug Fixes
+
+- Update size_mb calculation to use decimal megabytes
+- Enable exif date extraction for all media types in organizer
+
+### 📚 Documentation
+
+- Add docstrings to media organizer package
+
+### 🚀 Features
+
+- Enable print results by default in organizer cli
 ## [0.5.8] - 2026-02-12
 
 ### Bump
