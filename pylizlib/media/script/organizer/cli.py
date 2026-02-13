@@ -107,7 +107,7 @@ def organizer(
             envvar="PYL_M_ORG_LIST_ERRORED_ORDER_INDEX"
         ),
         print_results: bool = typer.Option(
-            False,
+            True,
             "--print-results", "-pres",
             help="Print organization results in a table.",
             envvar="PYL_M_ORG_PRINT_RESULTS"
