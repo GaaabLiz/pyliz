@@ -177,7 +177,7 @@ class MediaOrganizer:
         Extracts creation date details from EXIF or filesystem.
         Returns: (year, month, day, timestamp)
         """
-        if self.options.exif and media_item.is_image:
+        if self.options.exif:
             creation_date = media_item.creation_date_from_exif_or_file_or_sidecar
             return creation_date.year, creation_date.month, creation_date.day, creation_date.timestamp()
         else:
