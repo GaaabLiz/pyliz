@@ -142,3 +142,6 @@ class PylizApp:
         else:
             logger.warning("INI file not initialized. Nothing to delete.")
 
+    def print_hw(self):
+        print("Hello from PylizApp!")
+
