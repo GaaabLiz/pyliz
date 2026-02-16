@@ -4,6 +4,28 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.12] - 2026-02-16
+
+### Bump
+
+- Bump version to 0.5.12
+
+### ♻️ Refactor
+
+- Use rich console for conflict warnings in media organizer
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🐛 Bug Fixes
+
+- Move XMP generation after user confirmation in organizer cli
+- Prevent filename collisions during temporary XMP generation
+
+### 🧪 Testing
+
+- Add unit test for XMP generation collision handling
 ## [0.5.11] - 2026-02-14
 
 ### Bump
