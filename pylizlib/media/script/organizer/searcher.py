@@ -94,13 +94,18 @@ class MediaSearcher:
              return
 
         pbar = tqdm(accepted_items, desc="Generating missing XMPs", unit="files")
-        for item in pbar:
+        for idx, item in enumerate(pbar):
             try:
                 pbar.set_description(f"Generating XMP for {item.media.file_name}")
+                
+                # Create a unique subdirectory for this specific media file's XMP to avoid filename collisions
+                item_temp_dir = os.path.join(self._temp_xmp_dir, str(idx))
+                os.makedirs(item_temp_dir, exist_ok=True)
+                
                 # Construct correct filename in temp dir
                 media_path = Path(item.path)
                 xmp_name = f"{media_path.stem}.xmp"
-                temp_path = os.path.join(self._temp_xmp_dir, xmp_name)
+                temp_path = os.path.join(item_temp_dir, xmp_name)
                 
                 handler = MetadataHandler(item.path)
                 if handler.generate_xmp(temp_path):
