@@ -33,6 +33,7 @@ class MediaOrganizer:
         self.search_results = search_results
         self.target = target
         self.options = options
+        self._console = Console()
         self.results: List[OrganizerResult] = []
 
     def organize(self) -> None:
@@ -265,7 +266,7 @@ class MediaOrganizer:
                 return OrganizerResult(success=False, source_file=media.path, media=media, reason="Duplicate skipped", destination_path=target_path)
         else:
             # Different content but same path - error
-            logger.warning(f"File conflict detected (same name, different content). Source: {source_path}, Target: {target_path}")
+            self._console.print(f"[yellow]File conflict detected (same name, different content). Source: {source_path}, Target: {target_path}[/yellow]")
             return OrganizerResult(success=False, source_file=media.path, media=media, reason="File conflict: target exists but content differs", destination_path=target_path)
 
     def _execute_transfer(self, source_path: str, target_path: str, target_folder: str, original_timestamp: float, media: LizMedia) -> OrganizerResult:

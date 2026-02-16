@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult
+from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaStatus
 from pylizlib.media.script.organizer.domain import OrganizerOptions
 from pylizlib.media.script.organizer.media_org import MediaOrganizer
 
@@ -389,7 +389,7 @@ class TestMediaOrganizer(unittest.TestCase):
             shutil.copy(real_file, temp_path)
             temp_real_files.append(temp_path)
 
-        search_results = [LizMediaSearchResult(str(p)) for p in temp_real_files]
+        search_results = [LizMediaSearchResult(status=MediaStatus.ACCEPTED, path=p) for p in temp_real_files]
         
         options = OrganizerOptions(copy=True, exif=True)
         organizer = MediaOrganizer(search_results, str(self.target_dir), options)
