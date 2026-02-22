@@ -137,6 +137,29 @@ class VideoUtils:
         cv2.destroyAllWindows()
 
     @staticmethod
+    def get_video_creation_date(path: str) -> float | None:
+        """
+        Restituisce la data di creazione del video come timestamp.
+        """
+        try:
+            from datetime import datetime
+            probe = ffmpeg.probe(path)
+            tags = probe.get('format', {}).get('tags', {})
+            # Try apple specific tag first as it is more reliable for iPhone videos
+            date_str = tags.get('com.apple.quicktime.creationdate') or tags.get('creation_time')
+            if date_str:
+                # Handle Z and other ISO formats
+                try:
+                    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    return dt.timestamp()
+                except ValueError:
+                    # Fallback for older python or slightly different formats
+                    pass
+        except Exception as e:
+            logger.error(f"Errore nel recupero della data di creazione del video: {e}")
+        return None
+
+    @staticmethod
     def get_video_duration_seconds(path: str) -> float | None:
         try:
             probe = ffmpeg.probe(path)
