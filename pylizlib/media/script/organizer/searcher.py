@@ -109,6 +109,10 @@ class MediaSearcher:
                 
                 handler = MetadataHandler(item.path)
                 if handler.generate_xmp(temp_path):
+                    # Set the creation date in the XMP file
+                    creation_date = item.media.creation_date_from_exif_or_file_or_sidecar
+                    handler.set_creation_date(creation_date, temp_path)
+                    
                     # If Eagle metadata is available, append it to the generated XMP
                     if item.media.eagle_metadata:
                         handler.append_eagle_to_xmp(item.media.eagle_metadata, temp_path)
