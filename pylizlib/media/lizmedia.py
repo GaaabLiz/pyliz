@@ -16,6 +16,7 @@ from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.file import get_file_type, is_media_file, get_file_c_date
 from pylizlib.eaglecool.model.metadata import Metadata
+from pylizlib.media.util.metadata import MetadataHandler
 from pylizlib.media.util.video import VideoUtils
 
 # Suppress exifread logging
@@ -263,14 +264,15 @@ class LizMedia:
     def creation_date_from_exif_or_file_or_sidecar(self) -> datetime:
         """
         Retrieves the creation date from EXIF data (DateTimeOriginal) if available.
+        Falls back to Video metadata (QuickTime/MP4 tags) if it's a video.
         Falls back to XMP sidecar (<photoshop:DateCreated>) if present.
         Falls back to the file system creation time if both are missing or unreadable.
-        Uses 'exifread' library for robust parsing.
+        Uses 'exifread' library for robust parsing and 'ffmpeg' for videos.
 
         Returns:
             datetime: The determined creation date.
         """
-        # 1. Try EXIF
+        # 1. Try EXIF (Standard Python library)
         if self.is_image:
             try:
                 with open(self.path, 'rb') as f:
@@ -284,13 +286,25 @@ class LizMedia:
                                 continue
             except Exception as e:
                 pass
+            
+            # 1b. Robust Exiftool Fallback for Images
+            handler = MetadataHandler(self.path)
+            exiftool_date = handler.get_image_creation_date()
+            if exiftool_date:
+                return exiftool_date
 
-        # 2. Try XMP Sidecar
+        # 2. Try Video Metadata (using ffmpeg/ffprobe)
+        if self.is_video:
+            ts = VideoUtils.get_video_creation_date(self.path.__str__())
+            if ts:
+                return datetime.fromtimestamp(ts)
+
+        # 3. Try XMP Sidecar
         xmp_date = self._get_creation_date_from_xmp()
         if xmp_date:
             return xmp_date
 
-        # 3. Fallback to File Creation Time
+        # 4. Fallback to File Creation Time
         return self.creation_time
 
     def _get_creation_date_from_xmp(self) -> Optional[datetime]:

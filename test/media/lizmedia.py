@@ -55,10 +55,10 @@ class TestLizMedia(unittest.TestCase):
     @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
     @patch("os.path.getsize")
     def test_size(self, mock_getsize, _):
-        mock_getsize.return_value = 1048576 # 1 MB
+        mock_getsize.return_value = 1000000 # 1 MB decimal
         media = LizMedia(self.mock_path)
         
-        self.assertEqual(media.size_byte, 1048576)
+        self.assertEqual(media.size_byte, 1000000)
         self.assertEqual(media.size_mb, 1.0)
 
     @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
@@ -144,6 +144,33 @@ class TestLizMedia(unittest.TestCase):
         self.assertEqual(media.duration_sec, 120.0)
         self.assertEqual(media.duration_min, 2.0)
         self.assertEqual(media.frame_rate, 30.0)
+
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    @patch("pylizlib.media.lizmedia.get_file_type", return_value=FileType.VIDEO)
+    @patch("pylizlib.media.lizmedia.VideoUtils")
+    def test_creation_date_video_metadata(self, mock_video_utils, _, __):
+        media = LizMedia(self.mock_video_path)
+        
+        # Mock VideoUtils.get_video_creation_date to return a specific timestamp
+        dt = datetime(2024, 3, 25, 10, 0, 0)
+        mock_video_utils.get_video_creation_date.return_value = dt.timestamp()
+        
+        self.assertEqual(media.creation_date_from_exif_or_file_or_sidecar, dt)
+
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    @patch("pylizlib.media.lizmedia.get_file_type", return_value=FileType.IMAGE)
+    @patch("pylizlib.media.lizmedia.MetadataHandler")
+    def test_creation_date_image_metadata_fallback(self, mock_handler_class, _, __):
+        media = LizMedia(self.mock_path)
+        
+        dt = datetime(2024, 3, 25, 10, 0, 0)
+        # Mocking the handler
+        mock_handler = mock_handler_class.return_value
+        mock_handler.get_image_creation_date.return_value = dt
+        
+        # When exifread fails (returns empty dictionary)
+        with patch("pylizlib.media.lizmedia.exifread.process_file", return_value={}):
+            self.assertEqual(media.creation_date_from_exif_or_file_or_sidecar, dt)
 
     @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
     def test_sidecar_management(self, _):
