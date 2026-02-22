@@ -1,5 +1,6 @@
 import subprocess
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -124,3 +125,69 @@ class MetadataHandler:
         except Exception as e:
             logger.error(f"Error executing exiftool update: {e}")
             return False
+
+    def set_creation_date(self, date: datetime, xmp_path: str | Path) -> bool:
+        """
+        Sets the creation date in an XMP file.
+        
+        :param date: The creation date to set.
+        :param xmp_path: The path to the XMP file to modify.
+        :return: True if successful, False otherwise.
+        """
+        xmp_path = Path(xmp_path)
+        if not xmp_path.exists():
+            return False
+            
+        date_str = date.strftime("%Y:%m:%d %H:%M:%S")
+        # photoshop:DateCreated and xmp:CreateDate are common
+        cmd = [
+            "exiftool",
+            "-overwrite_original",
+            f"-photoshop:DateCreated={date_str}",
+            f"-xmp:CreateDate={date_str}",
+            str(xmp_path)
+        ]
+        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return True
+        except Exception as e:
+            logger.error(f"Error setting creation date in XMP: {e}")
+            return False
+
+    def get_image_creation_date(self) -> Optional[datetime]:
+        """
+        Extracts the creation date from an image file using exiftool.
+        This is more robust than exifread for modern/complex formats.
+        """
+        if shutil.which("exiftool") is None:
+            return None
+
+        # Try common creation tags in order of reliability
+        tags = [
+            "-DateTimeOriginal",
+            "-CreateDate",
+            "-CreationDate",
+            "-GPSDateTime"
+        ]
+        
+        try:
+            cmd = ["exiftool", "-s3", "-d", "%Y:%m:%d %H:%M:%S"]
+            cmd.extend(tags)
+            cmd.append(str(self.file_path))
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            output = result.stdout.strip().split('\n')
+            
+            for date_str in output:
+                if date_str and ":" in date_str:
+                    try:
+                        # Exiftool output might contain multiple lines if multiple tags found
+                        # We take the first valid one
+                        return datetime.strptime(date_str.strip(), "%Y:%m:%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        except Exception as e:
+            logger.debug(f"Exiftool failed to extract date for {self.file_path}: {e}")
+            
+        return None
