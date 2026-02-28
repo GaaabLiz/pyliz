@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 
 import exifread
 from PIL import Image
@@ -15,7 +15,6 @@ from sd_parsers.data import PromptInfo
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.file import get_file_type, is_media_file, get_file_c_date
-from pylizlib.eaglecool.model.metadata import Metadata
 from pylizlib.media.util.metadata import MetadataHandler
 from pylizlib.media.util.video import VideoUtils
 
@@ -87,7 +86,7 @@ class LizMedia:
     """
     path: Path
     eagle_metadata_path: Path | None = None
-    eagle_metadata: Metadata | None = None
+    eagle_metadata: Any | None = None
     attached_sidecar_files: List[Path] = field(default_factory=list)
 
     def __post_init__(self):
@@ -428,7 +427,7 @@ class LizMedia:
         """
         self.eagle_metadata_path = eagle_metadata_path
 
-    def attach_eagle_metadata(self, metadata: Metadata):
+    def attach_eagle_metadata(self, metadata: Any):
         """
         Attaches a loaded Eagle metadata object to this instance.
 

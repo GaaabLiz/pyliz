@@ -24,7 +24,6 @@ dependencies = [
 
 [project.scripts]
 pyliz = "pylizlib.core.cli:app"
-pylizmedia = "pylizlib.media.cli:pyliz_media"
 qtliz = "pylizlib.qt.cli:app"
 
 [project.optional-dependencies]
@@ -42,9 +41,6 @@ media = [
 qtfw = [
     "pyside6>=6.9.2",
     "PySide6-Fluent-Widgets[full]>=1.9.1",
-]
-eaglecool = [
-    "pydantic>=2.11.9"
 ]
 
 [build-system]

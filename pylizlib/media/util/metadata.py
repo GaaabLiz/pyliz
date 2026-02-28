@@ -6,8 +6,6 @@ from typing import Optional, TYPE_CHECKING
 
 from pylizlib.core.log.pylizLogger import logger
 
-if TYPE_CHECKING:
-    from pylizlib.eaglecool.model.metadata import Metadata
 
 
 class MetadataHandler:

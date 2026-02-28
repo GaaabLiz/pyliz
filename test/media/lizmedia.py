@@ -6,7 +6,7 @@ import os
 
 from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaListResult, MediaStatus
 from pylizlib.core.domain.os import FileType
-from pylizlib.eaglecool.model.metadata import Metadata
+
 
 class TestLizMedia(unittest.TestCase):
 
@@ -197,7 +197,7 @@ class TestLizMedia(unittest.TestCase):
     def test_eagle_metadata(self, _):
         media = LizMedia(self.mock_path)
         meta_path = Path("metadata.json")
-        meta_obj = MagicMock(spec=Metadata)
+        meta_obj = MagicMock(spec="Metadata") #
         
         media.attach_eagle_metadata_path(meta_path)
         self.assertEqual(media.eagle_metadata_path, meta_path)
