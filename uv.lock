@@ -655,7 +655,7 @@ wheels = [
 
 [[package]]
 name = "pylizlib"
-version = "0.5.13"
+version = "0.5.14"
 source = { editable = "." }
 dependencies = [
     { name = "exifread" },
@@ -673,9 +673,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-eaglecool = [
-    { name = "pydantic" },
-]
 media = [
     { name = "ffmpeg-python" },
     { name = "numpy" },
@@ -712,7 +709,6 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'media'", specifier = ">=11.3.0" },
     { name = "psutil", specifier = ">=7.1.0" },
     { name = "pydantic", specifier = ">=2.12.3" },
-    { name = "pydantic", marker = "extra == 'eaglecool'", specifier = ">=2.11.9" },
     { name = "pydantic", marker = "extra == 'media'", specifier = ">=2.11.9" },
     { name = "pyside6", marker = "extra == 'qt'", specifier = ">=6.9.2" },
     { name = "pyside6", marker = "extra == 'qtfw'", specifier = ">=6.9.2" },
@@ -727,7 +723,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "typer", specifier = ">=0.15.2" },
 ]
-provides-extras = ["qt", "media", "qtfw", "eaglecool"]
+provides-extras = ["qt", "media", "qtfw"]
 
 [package.metadata.requires-dev]
 dev = [
