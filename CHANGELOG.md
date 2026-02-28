@@ -4,6 +4,19 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.14] - 2026-02-28
+
+### Bump
+
+- Bump version to 0.5.14
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Removed eaglecool module
 ## [0.5.13] - 2026-02-22
 
 ### Bump
