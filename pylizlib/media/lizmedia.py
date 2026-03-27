@@ -88,6 +88,7 @@ class LizMedia:
     eagle_metadata_path: Path | None = None
     eagle_metadata: Any | None = None
     attached_sidecar_files: List[Path] = field(default_factory=list)
+    base64_content: Optional[str] = None
 
     def __post_init__(self):
         """
