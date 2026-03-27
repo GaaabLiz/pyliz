@@ -1,33 +1,34 @@
 
+"""Small unit conversion helpers."""
+
 
 def convert_byte_to_mb(byte: int) -> float:
-    """
-    Convert byte to megabyte.
-    1 MB = 1024 * 1024 bytes
-    :param byte: Size in bytes
-    :return: Size in megabytes
-    """
+    """Convert bytes to megabytes using binary units (MiB-style divisor)."""
+
     return byte / (1024 * 1024)
 
 
 def get_total_sec_from_msec(msec: int) -> int:
-    """
-    Convert milliseconds to total seconds.
-    :param msec: Time in milliseconds
-    :return: Time in total seconds
-    """
+    """Convert milliseconds to whole seconds using floor division."""
+
     return msec // 1000
 
 
 def get_sec60_from_msec(msec: int) -> int:
+    """Return seconds part in range ``0-59`` from milliseconds."""
+
     return get_total_sec_from_msec(msec) % 60
 
 
 def get_min_from_msec(msec: int) -> int:
+    """Return full minutes from milliseconds."""
+
     return get_total_sec_from_msec(msec) // 60
 
 
 def convert_months_number_to_str(number: int) -> str:
+    """Convert a month number (1-12) to its English name."""
+
     months = {
         1: "January",
         2: "February",
@@ -44,7 +45,10 @@ def convert_months_number_to_str(number: int) -> str:
     }
     return months.get(number, "Invalid Month")
 
-def get_normalized_gb_mb_str(total_size: float ) -> str:
+
+def get_normalized_gb_mb_str(total_size: float) -> str:
+    """Format a byte-size value into MB or GB with 2 decimal digits."""
+
     size_mb = total_size / (1024 * 1024)
     if size_mb < 1000:
         return f"{size_mb:.2f} MB"

@@ -1,7 +1,11 @@
+"""OS and file domain enums."""
+
 from enum import Enum
 
 
 class OsType(Enum):
+    """Operating system type."""
+
     WINDOWS = "windows"
     LINUX = "linux"
     MAC = "mac"
@@ -11,17 +15,23 @@ class OsType(Enum):
 
 
 class OsTheme(Enum):
+    """Operating system or application theme."""
+
     LIGHT = "light"
     DARK = "dark"
     UNKNOWN = "unknown"
 
 
 class FileOsType(Enum):
+    """Basic filesystem node type."""
+
     DIRECTORY = "Directory"
     FILE = "File"
 
 
 class FileType(Enum):
+    """High-level file category values used by media and core utilities."""
+
     ANY = "ANY"
     IMAGE = "IMAGE"
     TEXT = "TEXT"

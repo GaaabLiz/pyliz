@@ -1,3 +1,5 @@
+"""Custom console/file logging helpers and ANSI utilities."""
+
 import logging
 import os
 from datetime import datetime
@@ -16,6 +18,17 @@ default_tag_char_end = "): "
 
 
 class Loggiz:
+    """Static helper to configure and use project loggers."""
+
+    @staticmethod
+    def _reset_handlers(target_logger: logging.Logger) -> None:
+        """Close and remove all handlers from a logger."""
+
+        for handler in list(target_logger.handlers):
+            handler.flush()
+            handler.close()
+            target_logger.removeHandler(handler)
+
     @staticmethod
     def setup(
             app_name="app",
@@ -31,6 +44,8 @@ class Loggiz:
             file_log_name="latest.log",
             use_app_timestamp_template=True,
     ):
+        """Configure console and/or file logging handlers."""
+
         if setup_file:
             if use_app_timestamp_template:
                 file_log_name = Loggiz.create_timestamp_log_file_name(app_name)
@@ -59,6 +74,9 @@ class Loggiz:
 
     @staticmethod
     def setup_console(level=default_console_log_level, log_format=default_console_log_format):
+        """Configure the root console logger."""
+
+        Loggiz._reset_handlers(rootConsoleLogger)
         rootConsoleLogger.setLevel(level)
         console_handler = logging.StreamHandler()
         console_formatter = logging.Formatter(log_format)
@@ -67,6 +85,9 @@ class Loggiz:
 
     @staticmethod
     def setup_file(level=default_file_log_level, log_format=default_file_log_format, file_path="loggiz.log"):
+        """Configure the root file logger."""
+
+        Loggiz._reset_handlers(rootFileLogger)
         rootFileLogger.setLevel(level)
         file_handler = logging.FileHandler(file_path)
         file_formatter = logging.Formatter(log_format)
@@ -75,12 +96,16 @@ class Loggiz:
 
     @staticmethod
     def create_timestamp_log_file_name(app_name):
+        """Create a timestamped log file name for an application."""
+
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_file_name = f"{app_name}_{timestamp}.log"
         return log_file_name
 
     @staticmethod
     def create_timestamp_log_file_path(app_name, log_dir):
+        """Create a timestamped log file path for an application."""
+
         log_file_name = Loggiz.create_timestamp_log_file_name(app_name)
         log_file_path = os.path.join(log_dir, log_file_name)
         return log_file_path
@@ -88,6 +113,8 @@ class Loggiz:
 
 # Config class for Loggiz
 class LoggizConfig:
+    """Runtime configuration storage for ``LoggizLogger``."""
+
     def __init__(self):
         self.enable_file_ansi = False
         self.enable_console_ansi = False
@@ -119,6 +146,8 @@ class LoggizConfig:
 
 # ANSI color codes
 class Colors:
+    """ANSI color and text-style escape codes."""
+
     BLACK = "\033[0;30m"
     RED = "\033[0;31m"
     GREEN = "\033[0;32m"
@@ -158,9 +187,12 @@ config = LoggizConfig()  # Current configuration for Loggiz
 
 
 class LoggizLogger:
+    """Tag-aware logging helper that emits to console and/or file."""
 
     @staticmethod
     def get_tag_string(tag, ansify=False):
+        """Build a tag prefix string, optionally with ANSI style."""
+
         if ansify:
             return f"{Colors.LIGHT_WHITE}{config.tag_char_start}{tag}{config.tag_char_end}{Colors.END}"
         else:
@@ -168,6 +200,8 @@ class LoggizLogger:
 
     @staticmethod
     def print_separator(sep, count):
+        """Print a separator line to the console."""
+
         string = f'{sep}' * count
         if config.enable_console_ansi:
             print(Colors.LIGHT_GRAY + string + Colors.END)
@@ -178,6 +212,8 @@ class LoggizLogger:
 
     @staticmethod
     def log_console_debug(tag, message):
+        """Write a debug message to console logger."""
+
         if config.enable_console_ansi:
             rootConsoleLogger.debug(LoggizLogger.get_tag_string(tag, True) + Colors.CYAN + f"{message}" + Colors.END)
         else:
@@ -185,6 +221,8 @@ class LoggizLogger:
 
     @staticmethod
     def log_console_info(tag, message):
+        """Write an info message to console logger."""
+
         if config.enable_console_ansi:
             rootConsoleLogger.info(LoggizLogger.get_tag_string(tag, True) + Colors.GREEN + f"{message}" + Colors.END)
         else:
@@ -192,6 +230,8 @@ class LoggizLogger:
 
     @staticmethod
     def log_console_warning(tag, message):
+        """Write a warning message to console logger."""
+
         if config.enable_console_ansi:
             rootConsoleLogger.warning(LoggizLogger.get_tag_string(tag, True) + Colors.YELLOW + f"{message}" + Colors.END)
         else:
@@ -199,6 +239,8 @@ class LoggizLogger:
 
     @staticmethod
     def log_console_error(tag, message):
+        """Write an error message to console logger."""
+
         if config.enable_console_ansi:
             rootConsoleLogger.error(LoggizLogger.get_tag_string(tag, True) + Colors.RED + f"{message}" + Colors.END)
         else:
@@ -208,24 +250,34 @@ class LoggizLogger:
 
     @staticmethod
     def log_file_debug(tag, message):
+        """Write a debug message to file logger."""
+
         rootFileLogger.debug(LoggizLogger.get_tag_string(tag) + message)
 
     @staticmethod
     def log_file_info(tag, message):
+        """Write an info message to file logger."""
+
         rootFileLogger.info(LoggizLogger.get_tag_string(tag) + message)
 
     @staticmethod
     def log_file_warning(tag, message):
+        """Write a warning message to file logger."""
+
         rootFileLogger.warning(LoggizLogger.get_tag_string(tag) + message)
 
     @staticmethod
     def log_file_error(tag, message):
+        """Write an error message to file logger."""
+
         rootFileLogger.error(LoggizLogger.get_tag_string(tag) + message)
 
     # ------------------------  LOGGING METHODS ------------------------
 
     @staticmethod
     def debug_tag(tag, message):
+        """Log debug message to enabled outputs."""
+
         if config.logger_console_enabled:
             LoggizLogger.log_console_debug(tag, message)
         if config.logger_file_enabled:
@@ -233,6 +285,8 @@ class LoggizLogger:
 
     @staticmethod
     def info_tag(tag, message):
+        """Log info message to enabled outputs."""
+
         if config.logger_console_enabled:
             LoggizLogger.log_console_info(tag, message)
         if config.logger_file_enabled:
@@ -240,6 +294,8 @@ class LoggizLogger:
 
     @staticmethod
     def warning_tag(tag, message):
+        """Log warning message to enabled outputs."""
+
         if config.logger_console_enabled:
             LoggizLogger.log_console_warning(tag, message)
         if config.logger_file_enabled:
@@ -247,6 +303,8 @@ class LoggizLogger:
 
     @staticmethod
     def error_tag(tag, message):
+        """Log error message to enabled outputs."""
+
         if config.logger_console_enabled:
             LoggizLogger.log_console_error(tag, message)
         if config.logger_file_enabled:
