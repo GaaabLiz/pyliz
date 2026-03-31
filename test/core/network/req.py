@@ -11,7 +11,7 @@ from pylizlib.core.network.req import (
     get_file_size_byte,
     is_endpoint_reachable,
     is_internet_available,
-    test_with_head,
+    test_with_head as _test_with_head,
 )
 
 
@@ -44,11 +44,11 @@ class RequestHelpersTestCase(unittest.TestCase):
     @patch("pylizlib.core.network.req.requests.head")
     def test_test_with_head_true(self, mock_head):
         mock_head.return_value.status_code = 200
-        self.assertTrue(test_with_head("https://example.com"))
+        self.assertTrue(_test_with_head("https://example.com"))
 
     @patch("pylizlib.core.network.req.requests.head", side_effect=requests.RequestException("bad"))
     def test_test_with_head_false_on_exception(self, _):
-        self.assertFalse(test_with_head("https://example.com"))
+        self.assertFalse(_test_with_head("https://example.com"))
 
     @patch("pylizlib.core.network.req.requests.get")
     def test_is_endpoint_reachable(self, mock_get):

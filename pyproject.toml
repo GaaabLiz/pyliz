@@ -51,6 +51,12 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["pylizlib*"]
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["*.py"]
+python_classes = ["*TestCase"]
+python_functions = ["test_*"]
+
 [dependency-groups]
 dev = [
     "git-cliff>=2.10.1",
