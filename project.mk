@@ -1,10 +1,18 @@
-
 # == PROJECT VARIABLES ==
 PYTHON_MAIN_PACKAGE = pylizlib
 QT_QRC_FILE := resources/resources.qrc
 QT_RESOURCE_PY := $(PYTHON_MAIN_PACKAGE)/resource/resources_rc.py
 INNO_SETUP_FILE := installer.iss
 INNO_SETUP_VERSION_VARIABLE := MyAppVersion
+
+# == GLOBAL SETTINGS ==
+# Branch dove salvare il changelog aggiornato dal workflow release.
+RELEASE_CHANGELOG_TARGET_BRANCH ?= main
+# Abilita build installer su Windows (1 = enabled, 0 = disabled).
+ENABLE_WINDOWS_INSTALLER ?= 1
+# Pattern artifact da pubblicare su GitHub Release.
+RELEASE_ARTIFACTS ?= $(foreach app,$(APPS_LIST),dist/$($(app)_NAME)-*) Output/*.exe
+
 
 # == APPLICATIONS CONFIGURATION ==
 
