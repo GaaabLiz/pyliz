@@ -22,9 +22,9 @@ dependencies = [
     "typer>=0.15.2",
 ]
 
-[project.scripts]
-pyliz = "pylizlib.core.cli:app"
-qtliz = "pylizlib.qt.cli:app"
+#[project.scripts]
+#pyliz = "pylizlib.core.cli:app"
+#qtliz = "pylizlib.qt.cli:app"
 
 [project.optional-dependencies]
 qt = [
