@@ -237,6 +237,7 @@ define upgrade_version_impl
 		sed -i "s/#define $(INNO_SETUP_VERSION_VARIABLE) \"[^\"]*\"/#define $(INNO_SETUP_VERSION_VARIABLE) \"$$VERSION\"/" $(INNO_SETUP_FILE); \
 	fi; \
 	git commit -am "bump: Bump version to $$VERSION"; \
+	git pull --rebase; \
 	git push
 endef
 

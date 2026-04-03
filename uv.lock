@@ -655,7 +655,7 @@ wheels = [
 
 [[package]]
 name = "pylizlib"
-version = "0.5.16"
+version = "0.5.17"
 source = { editable = "." }
 dependencies = [
     { name = "exifread" },
