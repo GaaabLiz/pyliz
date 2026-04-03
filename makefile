@@ -14,6 +14,21 @@
 include project.mk
 
 
+#   _____   ______   _______   _______   _____   _   _    _____    _____
+#  / ____| |  ____| |__   __| |__   __| |_   _| | \ | |  / ____|  / ____|
+# | (___   | |__       | |       | |     | |   |  \| | | |  __  | (___
+#  \___ \  |  __|      | |       | |     | |   | . ` | | | |_ |  \___ \
+#  ____) | | |____     | |       | |    _| |_  | |\  | | |__| |  ____) |
+# |_____/  |______|    |_|       |_|   |_____| |_| \_|  \_____| |_____/
+#
+# THIS SETTINGS WILL OVVERRIDE THE DEFAULT ONES IN project.mk IF NOT SET THERE.
+#
+
+RELEASE_CHANGELOG_TARGET_BRANCH ?= main
+ENABLE_WINDOWS_INSTALLER ?= 1
+RELEASE_ARTIFACTS ?= $(foreach app,$(APPS_LIST),dist/$($(app)_NAME)-*) Output/*.exe
+
+
 
 
 
@@ -100,7 +115,56 @@ clean: clean-build clean-cache clean-generated
 #      \_____|______|_| \_|______|_|  \_\/_/    \_\_|  |______|
 
 gen-project-py:
-	uv run pyliz gen-project-py $(FILE_PROJECT_TOML) $(FILE_PROJECT_PY_GENERATED)
+	@printf '%s\n' \
+		'from pathlib import Path' \
+		'import sys' \
+		'import tomllib' \
+		'pyproject_path = Path("$(FILE_PROJECT_TOML)")' \
+		'py_file = Path("$(FILE_PROJECT_PY_GENERATED)")' \
+		'try:' \
+		'    if not pyproject_path.exists():' \
+		'        raise FileNotFoundError(f"File {pyproject_path} does not exist.")' \
+		'    with pyproject_path.open("rb") as f:' \
+		'        data = tomllib.load(f)' \
+		'    project = data.get("project", {})' \
+		'    raw_authors = project.get("authors", [])' \
+		'    authors = []' \
+		'    for entry in raw_authors:' \
+		'        name = entry.get("name")' \
+		'        email = entry.get("email")' \
+		'        if name or email:' \
+		'            authors.append((name, email))' \
+		'    info = {' \
+		'        "name": project.get("name"),' \
+		'        "version": project.get("version"),' \
+		'        "description": project.get("description"),' \
+		'        "requires_python": project.get("requires-python"),' \
+		'        "authors": authors,' \
+		'    }' \
+		'    authors_repr = "[" + ", ".join(f"({repr(name)}, {repr(email)})" for name, email in info["authors"]) + "]"' \
+		'    lines = [' \
+		'        "name = " + repr(info["name"]),' \
+		'        "version = " + repr(info["version"]),' \
+		'        "description = " + repr(info["description"]),' \
+		'        "requires_python = " + repr(info["requires_python"]),' \
+		'        "authors = " + authors_repr,' \
+		'    ]' \
+		'    py_file.parent.mkdir(parents=True, exist_ok=True)' \
+		'    with py_file.open("w", encoding="utf-8") as f:' \
+		'        f.write("\n".join(lines) + "\n")' \
+		'except Exception as e:' \
+		'    print(f"Error: {e}", file=sys.stderr)' \
+		'    raise SystemExit(1)' | uv run python -
+
+# Target usati dai workflow GitHub Actions (output semplice e stabile).
+ci-print-release-target-branch:
+	@echo $(RELEASE_CHANGELOG_TARGET_BRANCH)
+
+ci-print-windows-installer-enabled:
+	@echo $(ENABLE_WINDOWS_INSTALLER)
+
+ci-print-release-artifacts:
+	@set -f; for pattern in $(RELEASE_ARTIFACTS); do printf '%s\n' "$$pattern"; done
 
 gen-qt-res-py:
 	$(QT_COMMAND_GEN_RES) $(QT_QRC_FILE) -o $(QT_RESOURCE_PY); \
@@ -198,3 +262,4 @@ upgrade-patch-beta-push-tag: upgrade-patch-beta create-version-tag
 upgrade-patch-push-tag: upgrade-patch create-version-tag
 upgrade-minor-push-tag: upgrade-minor create-version-tag
 upgrade-major-push-tag: upgrade-major create-version-tag
+
