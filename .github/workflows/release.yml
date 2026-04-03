@@ -98,6 +98,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build Executable (Onefile)
+        # Su Windows con installer abilitato, build-installer chiama build-app (che include clean)
+        # e ricostruisce in directory-mode. Non eseguire onefile per evitare che venga cancellato.
+        if: runner.os != 'Windows' || steps.ci_config.outputs.windows_installer_enabled != '1'
         run: make build-exe-onefile
 
       - name: Build Installer (Windows)
