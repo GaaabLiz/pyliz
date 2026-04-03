@@ -28,6 +28,11 @@ jobs:
       - name: Init UV
         run: make init-uv
 
+      - name: Read CI config
+        id: ci_config
+        run: |
+          echo "release_branch=$(make ci-print-release-target-branch)" >> "$GITHUB_OUTPUT"
+
       - name: Install git-cliff
         run: uv add --dev git-cliff
 
@@ -46,8 +51,7 @@ jobs:
             git commit -m "chore: update changelog [skip ci]"
             # Fetch the latest changes from the remote branch to avoid conflicts
             git fetch origin
-            # Determine the branch name (assuming main or master, or current HEAD)
-            git push origin HEAD:main || echo "Failed to push changelog to main, continuing..."
+            git push origin "HEAD:${{ steps.ci_config.outputs.release_branch }}" || echo "Failed to push changelog to target branch, continuing..."
           fi
 
       - name: Generate Release Notes
@@ -82,11 +86,22 @@ jobs:
       - name: Init UV
         run: make init-uv
 
+      - name: Read CI config
+        id: ci_config
+        shell: bash
+        run: |
+          echo "windows_installer_enabled=$(make ci-print-windows-installer-enabled)" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_artifacts<<EOF"
+            make ci-print-release-artifacts
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Executable (Onefile)
         run: make build-exe-onefile
 
       - name: Build Installer (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.ci_config.outputs.windows_installer_enabled == '1'
         run: |
           make install-inno-setup
           # 'build-installer' runs 'build-app' (dir mode) then 'installer'.
@@ -97,7 +112,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: always() # Upload what we have even if one part fails
         with:
-          files: |
-            dist/pyliz-*
-            dist/qtliz-*
-            Output/*.exe
+          files: ${{ steps.ci_config.outputs.release_artifacts }}
