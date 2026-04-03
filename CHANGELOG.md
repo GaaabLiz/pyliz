@@ -4,6 +4,27 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.15] - 2026-04-03
+
+### Bump
+
+- Bump version to 0.5.15
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Add base64_content attribute to media class
+- Add unit tests for configuration and application management. Fixed logic in souces.
+- Add unit tests for core data helpers and improve docstrings
+- Enhance documentation and improve code structure across core modules
+- Implement action classes for Git operations and command execution
+- Add unit tests for file and path utilities, enhancing test coverage
+- Enhance release workflow by adding CI config reading and conditional installer build
+- Add global settings for release workflow and Windows installer configuration
+- Add configurable release settings and enhance project generation script
 ## [0.5.14] - 2026-02-28
 
 ### Bump
