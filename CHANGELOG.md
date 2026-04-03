@@ -4,6 +4,21 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.17] - 2026-04-03
+
+### Bump
+
+- Bump version to 0.5.16
+- Bump version to 0.5.17
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Remove pyliz-media from installer configuration
+- Add conditional check to prevent onefile build on Windows with installer enabled
 ## [0.5.15] - 2026-04-03
 
 ### Bump
