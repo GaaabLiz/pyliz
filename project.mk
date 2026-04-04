@@ -40,7 +40,7 @@
 # Name of the importable Python package – the directory that contains
 # __init__.py.  Must match the name declared in [project] > name in
 # pyproject.toml (with hyphens replaced by underscores if needed).
-PYTHON_MAIN_PACKAGE ?= pyliz
+PYTHON_MAIN_PACKAGE ?= pylizlib
 
 
 # ==============================================================================
