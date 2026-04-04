@@ -4,6 +4,25 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.18] - 2026-04-04
+
+### Bump
+
+- V0.5.18
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Comment out project scripts for pyliz and qtliz
+- Remove typer dependency from project requirements
+- Remove unnecessary dependencies from project requirements
+- Add Makefile for project build and configuration management
+- Restore exifread dependency in project requirements
+- Add CI and release workflows for automated quality checks and package publishing
+- Rename main Python package to pylizlib
 ## [0.5.17] - 2026-04-03
 
 ### Bump
