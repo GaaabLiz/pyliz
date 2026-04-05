@@ -1,17 +1,4 @@
-from pydantic import BaseModel
+from pylizlib.ai.domain import AiPayloadMediaInfo
 
-
-class AiPayloadMediaInfo(BaseModel):
-    description: str
-    tags: list[str]
-    filename: str
-    text: list[str]
-    nsfw: bool | None = None
-    ocr_detected: bool | None = None
-
-    def __str__(self):
-        return f"Description: {self.description}, Tags: {self.tags}, Filename: {self.filename}, Text: {self.text}"
-
-    class Config:
-        extra = "ignore"
+__all__ = ["AiPayloadMediaInfo"]
 

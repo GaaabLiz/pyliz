@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import List, Optional, Any, TYPE_CHECKING
+from typing import List, Optional, Any
 
 import exifread
 from sd_parsers import ParserManager
@@ -17,9 +17,6 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.file import get_file_type, is_media_file, get_file_c_date
 from pylizlib.media.util.metadata import MetadataHandler
 from pylizlib.media.util.video import VideoUtils
-
-if TYPE_CHECKING:
-    from pylizlib.media.domain.ai import AiPayloadMediaInfo
 
 # Suppress exifread logging
 logging.getLogger('exifread').setLevel(logging.CRITICAL)
@@ -431,7 +428,7 @@ class LizMedia:
         """
         return json.dumps(self.to_dict_only_ai(), indent=4)
 
-    def apply_ai_info(self, ai_info: 'AiPayloadMediaInfo'):
+    def apply_ai_info(self, ai_info: Any):
         """
         Applies AI payload information to this media instance.
 
