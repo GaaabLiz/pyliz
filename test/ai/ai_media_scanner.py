@@ -117,6 +117,61 @@ class AiMediaScannerTestCase(unittest.TestCase):
 
         self.assertEqual(before, after)
 
+    def test_scan_all_tools_across_all_input_types(self):
+        """Tests 3 tools (TAGS, NSFW, OCR) across 3 input types (Path, Raw Base64, Data URI)."""
+        tags_res = AiScanResult(tags=["tag1"])
+        nsfw_res = AiScanResult(nsfw=True)
+        ocr_res = AiScanResult(ocr_text=["text1"], ocr_detected=True)
+
+        providers = [
+            _StaticProvider(AiScanTool.TAGS, tags_res),
+            _StaticProvider(AiScanTool.NSFW, nsfw_res),
+            _StaticProvider(AiScanTool.OCR, ocr_res),
+        ]
+        scanner = AiMediaScanner(providers=providers)
+        tools = ["tags", "nsfw", "ocr"]
+
+        # 1. Local Path
+        media_path = scanner.scan(media_path=self.image_path, tools=tools)
+        self.assertEqual(media_path.ai_tags, ["tag1"])
+        self.assertTrue(media_path.ai_nsfw)
+        self.assertEqual(media_path.ai_ocr_text, ["text1"])
+
+        # 2. Raw Base64
+        raw_b64 = base64.b64encode(self.image_path.read_bytes()).decode("utf-8")
+        media_b64 = scanner.scan(base64_content=raw_b64, file_name="test.png", tools=tools)
+        try:
+            self.assertEqual(media_b64.ai_tags, ["tag1"])
+            self.assertTrue(media_b64.ai_nsfw)
+            self.assertEqual(media_b64.ai_ocr_text, ["text1"])
+            self.assertEqual(media_b64.ai_file_name, "test.png")
+        finally:
+            media_b64.path.unlink(missing_ok=True)
+
+        # 3. Data URI
+        data_uri = f"data:image/png;base64,{raw_b64}"
+        media_uri = scanner.scan(base64_content=data_uri, tools=tools)
+        try:
+            self.assertEqual(media_uri.ai_tags, ["tag1"])
+            self.assertTrue(media_uri.ai_nsfw)
+            self.assertEqual(media_uri.ai_ocr_text, ["text1"])
+            self.assertTrue(media_uri.path.suffix == ".png")
+        finally:
+            media_uri.path.unlink(missing_ok=True)
+
+    def test_scan_video_input(self):
+        """Tests that AiMediaScanner correctly identifies and processes video files."""
+        video_path = Path(self.temp_dir.name) / "test.mp4"
+        video_path.write_bytes(b"fake video content")
+
+        tags_provider = _StaticProvider(AiScanTool.TAGS, AiScanResult(tags=["motion"]))
+        scanner = AiMediaScanner(providers=[tags_provider])
+
+        media = scanner.scan(media_path=video_path, tools=["tags"])
+        self.assertTrue(media.is_video)
+        self.assertEqual(media.ai_tags, ["motion"])
+        self.assertEqual(media.ai_file_name, "test.mp4")
+
 
 if __name__ == "__main__":
     unittest.main()
