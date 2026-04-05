@@ -35,13 +35,42 @@ media = [
 ]
 ai = [
     "easyocr>=1.7.2",
+    "einops>=0.8.1",
     "huggingface-hub>=0.34.4",
     "nudenet>=3.4.2",
+    "onnxruntime>=1.22.0",
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
     "pillow>=11.3.0",
     "torch>=2.8.0",
     "torchvision>=0.23.0",
+    "transformers>=4.56.0",
+]
+ai-macos = [
+    "easyocr>=1.7.2",
+    "einops>=0.8.1",
+    "huggingface-hub>=0.34.4",
+    "nudenet>=3.4.2",
+    "onnxruntime>=1.22.0",
+    "numpy>=2.3.3",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.3.0",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "transformers>=4.56.0",
+]
+ai-linux-nvidia = [
+    "easyocr>=1.7.2",
+    "einops>=0.8.1",
+    "huggingface-hub>=0.34.4",
+    "nudenet>=3.4.2",
+    "onnxruntime-gpu>=1.22.0",
+    "numpy>=2.3.3",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.3.0",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "transformers>=4.56.0",
 ]
 qtfw = [
     "pyside6>=6.9.2",
