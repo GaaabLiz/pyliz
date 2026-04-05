@@ -11,12 +11,20 @@ if TYPE_CHECKING:
 
 
 class AiScanTool(str, Enum):
+    """
+    Enum representing the supported AI scan tool categories.
+    Each category maps to a specialized provider.
+    """
     TAGS = "TAGS"
     NSFW = "NSFW"
     OCR = "OCR"
 
     @classmethod
     def from_value(cls, value: str) -> "AiScanTool":
+        """
+        Maps a string identifier to an AiScanTool enum member.
+        Handles normalization and common aliases (e.g. 'joytag' -> TAGS).
+        """
         normalized = value.strip().upper().replace("_", "-")
         aliases = {
             "TAGS": cls.TAGS,
@@ -35,6 +43,10 @@ class AiScanTool(str, Enum):
 
     @classmethod
     def normalize_many(cls, values: list[str]) -> list["AiScanTool"]:
+        """
+        Normalizes a list of string tool identifiers into a unique list of AiScanTool enums.
+        Ensures a single tool is not executed multiple times if redundant aliases are provided.
+        """
         if not values:
             raise ValueError("At least one AI scan tool must be provided.")
 
@@ -50,12 +62,16 @@ class AiScanTool(str, Enum):
 
 @dataclass(slots=True)
 class AiScanResult:
+    """
+    Data container for AI scan extraction results across different tool categories.
+    """
     tags: list[str] | None = None
     nsfw: bool | None = None
     ocr_text: list[str] | None = None
     ocr_detected: bool | None = None
 
     def merge(self, other: "AiScanResult") -> "AiScanResult":
+        """Merges another scan result into this one, overwriting non-None values."""
         if other.tags is not None:
             self.tags = other.tags
         if other.nsfw is not None:
@@ -68,6 +84,9 @@ class AiScanResult:
 
 
 class AiToolScanner(Protocol):
+    """
+    Protocol definition for an AI analysis provider plugin.
+    """
     tool: AiScanTool
 
     def scan(self, media: "LizMedia") -> AiScanResult:
@@ -75,6 +94,10 @@ class AiToolScanner(Protocol):
 
 
 class AiPayloadMediaInfo(BaseModel):
+    """
+    Standard schema for media metadata payloads (tags, description, text, nsfw status).
+    Used for serialization and API communication.
+    """
     model_config = ConfigDict(extra="ignore")
 
     description: str

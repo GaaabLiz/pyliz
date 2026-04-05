@@ -30,17 +30,41 @@ _DEFAULT_MODEL_DIR = os.getenv("PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Doc
 
 
 class BaseAiProvider(ABC):
+    """
+    Base class for AI-based media analysis providers.
+    """
     tool: AiScanTool
 
     @abstractmethod
     def scan(self, media: "LizMedia") -> AiScanResult:
+        """
+        Executes an AI scan on the provided media object.
+
+        Args:
+            media: The LizMedia instance to analyze.
+
+        Returns:
+            An AiScanResult containing the extracted metadata.
+        """
         raise NotImplementedError
 
 
 class JoyTagProvider(BaseAiProvider):
+    """
+    Provider that uses the JoyTag model to predict tags for images and video frames.
+    Requires optional AI dependencies (torch, torchvision).
+    """
     tool = AiScanTool.TAGS
 
     def __init__(self, model_dir: str | None = None, confidence_threshold: float = 0.45, video_sample_frames: int = 5):
+        """
+        Initializes the JoyTag provider.
+
+        Args:
+            model_dir: Directory to cache the model files. Defaults to PYLIZ_AI_MODELS_PATH.
+            confidence_threshold: Minimum confidence score (0-1) to include a tag.
+            video_sample_frames: Number of frames to sample from a video for analysis.
+        """
         self.model_dir = model_dir or _DEFAULT_MODEL_DIR
         self.confidence_threshold = confidence_threshold
         self.video_sample_frames = video_sample_frames
@@ -51,6 +75,15 @@ class JoyTagProvider(BaseAiProvider):
         self._torch = None
 
     def scan(self, media: "LizMedia") -> AiScanResult:
+        """
+        Analyzes the media and predicts relevant tags using JoyTag.
+
+        Args:
+            media: The media object to scan (supports Image and Video).
+
+        Returns:
+            AiScanResult with predicted tags. Returns empty list if media type is unsupported.
+        """
         if media.extension.lstrip(".") not in _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS:
             return AiScanResult(tags=[])
 
@@ -71,6 +104,16 @@ class JoyTagProvider(BaseAiProvider):
         return AiScanResult(tags=unique_preserving_order(predicted_tags))
 
     def _get_runtime(self):
+        """
+        Loads and initializes Torch, the JoyTag model, and its dependencies.
+        Downloads the model from Hugging Face Hub if not cached.
+
+        Returns:
+            A tuple of (model, tag_list, device, torchvision_functional, torch_module).
+
+        Raises:
+            ImportError: if torch/torchvision/huggingface_hub dependencies are missing.
+        """
         if self._model is not None:
             return self._model, self._tag_list, self._device, self._tvf, self._torch
 
@@ -118,6 +161,20 @@ class JoyTagProvider(BaseAiProvider):
         return self._model, self._tag_list, self._device, self._tvf, self._torch
 
     def _predict_from_image(self, image, model, tag_list, device, tvf, torch) -> list[str]:
+        """
+        Runs model inference on a single PIL Image.
+
+        Args:
+            image: PIL Image object.
+            model: Loaded JoyTag model.
+            tag_list: List of supported tag names.
+            device: Torch device.
+            tvf: torchvision.transforms.functional module.
+            torch: torch module.
+
+        Returns:
+            List of tags exceeding the confidence threshold.
+        """
         resample_mode = getattr(getattr(Image, "Resampling", Image), "BILINEAR")
 
         image = image.resize((448, 448), resample=resample_mode)
@@ -157,15 +214,35 @@ class JoyTagProvider(BaseAiProvider):
 
 
 class EasyOcrProvider(BaseAiProvider):
+    """
+    Provider that uses EasyOCR to extract text from images and video frames.
+    """
     tool = AiScanTool.OCR
 
     def __init__(self, model_dir: str | None = None, languages: list[str] | None = None, video_sample_frames: int = 5):
+        """
+        Initializes the OCR provider.
+
+        Args:
+            model_dir: Directory to cache the model files.
+            languages: List of language codes to detect (e.g. ['en', 'it']). Defaults to ['en'].
+            video_sample_frames: Number of frames to sample from a video for OCR extraction.
+        """
         self.model_dir = model_dir or _DEFAULT_MODEL_DIR
         self.languages = languages or ["en"]
         self.video_sample_frames = video_sample_frames
         self._reader = None
 
     def scan(self, media: "LizMedia") -> AiScanResult:
+        """
+        Extracts text from the media using EasyOCR.
+
+        Args:
+            media: The LizMedia object to scan.
+
+        Returns:
+            AiScanResult containing extracted OCR text and boolean detection status.
+        """
         reader = self._get_reader()
         texts: list[str] = []
 
@@ -181,6 +258,15 @@ class EasyOcrProvider(BaseAiProvider):
         return AiScanResult(ocr_text=normalized_texts, ocr_detected=bool(normalized_texts))
 
     def _get_reader(self):
+        """
+        Loads and initializes EasyOCR.
+
+        Returns:
+            An easyocr.Reader instance.
+
+        Raises:
+            ImportError: if easyocr/torch dependencies are missing.
+        """
         if self._reader is not None:
             return self._reader
 
@@ -202,6 +288,15 @@ class EasyOcrProvider(BaseAiProvider):
 
     @staticmethod
     def _extract_texts(results: list) -> list[str]:
+        """
+        Extracts raw strings from EasyOCR result tuples/lists.
+
+        Args:
+            results: Results from EasyOCR readtext call.
+
+        Returns:
+            List of extracted strings.
+        """
         texts: list[str] = []
         for result in results:
             if isinstance(result, (tuple, list)) and len(result) >= 2:
@@ -212,6 +307,9 @@ class EasyOcrProvider(BaseAiProvider):
 
 
 class NudeNetProvider(BaseAiProvider):
+    """
+    Provider that uses NudeNet to detect NSFW content in images and video frames.
+    """
     tool = AiScanTool.NSFW
 
     EXPLICIT_LABELS = {
@@ -223,11 +321,27 @@ class NudeNetProvider(BaseAiProvider):
     }
 
     def __init__(self, inference_threshold: float = 0.5, video_sample_frames: int = 5):
+        """
+        Initializes the NudeNet provider.
+
+        Args:
+            inference_threshold: Minimum confidence score (0-1) to trigger an NSFW classification.
+            video_sample_frames: Number of frames to sample from a video for analysis.
+        """
         self.inference_threshold = inference_threshold
         self.video_sample_frames = video_sample_frames
         self._detector = None
 
     def scan(self, media: "LizMedia") -> AiScanResult:
+        """
+        Detects NSFW/explicit content in the media using NudeNet.
+
+        Args:
+            media: The LizMedia object to scan.
+
+        Returns:
+            AiScanResult with nsfw boolean indicator.
+        """
         detector = self._get_detector()
 
         if media.is_image:
@@ -240,6 +354,15 @@ class NudeNetProvider(BaseAiProvider):
         return AiScanResult(nsfw=False)
 
     def _get_detector(self):
+        """
+        Loads and initializes NudeNet NudeDetector.
+
+        Returns:
+            A NudeDetector instance.
+
+        Raises:
+            ImportError: if nudenet dependencies are missing.
+        """
         if self._detector is not None:
             return self._detector
 
@@ -254,14 +377,20 @@ class NudeNetProvider(BaseAiProvider):
         return self._detector
 
     def _detect_image(self, detector, image_path: Path) -> bool:
+        """Runs detector on a specific image path."""
         return self._contains_explicit_detection(detector.detect(str(image_path)))
 
     def _detect_frame(self, detector, frame) -> bool:
+        """Saves a raw frame to temp and runs detection."""
         with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as handle:
             Image.fromarray(frame).save(handle.name)
             return self._detect_image(detector, Path(handle.name))
 
     def _contains_explicit_detection(self, detections: list[dict]) -> bool:
+        """
+        Parses NudeNet raw detections to find any matching the explicit categories
+        above the configured threshold.
+        """
         for detection in detections or []:
             label = str(detection.get("class") or detection.get("label") or "").upper()
             score = float(detection.get("score") or detection.get("confidence") or 0.0)
