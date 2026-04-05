@@ -110,10 +110,10 @@ class AiMediaScannerTestCase(unittest.TestCase):
         payload = base64.b64encode(self.image_path.read_bytes()).decode("utf-8")
         scanner = AiMediaScanner(providers=[_FailingProvider()])
 
-        before = {path for path in Path(tempfile.gettempdir()).glob("pyliz_ai_*")}
+        before = {path for path in Path(tempfile.gettempdir()).glob("pyliz_media_*")}
         with self.assertRaises(RuntimeError):
             scanner.scan(base64_content=payload, file_name="failure.png", tools=["TAGS"])
-        after = {path for path in Path(tempfile.gettempdir()).glob("pyliz_ai_*")}
+        after = {path for path in Path(tempfile.gettempdir()).glob("pyliz_media_*")}
 
         self.assertEqual(before, after)
 
