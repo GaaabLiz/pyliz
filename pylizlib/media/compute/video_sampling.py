@@ -9,6 +9,17 @@ import cv2
 def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any]:
     """
     Samples evenly distributed RGB frames from a video for downstream processing.
+    Calculates uniform intervals to ensure the selection covers the full duration.
+
+    Args:
+        video_path: Path to the source video file.
+        max_frames: Max number of frames to extract. Actual count might be lower for short videos.
+
+    Returns:
+        List of RGB frames as numpy arrays.
+
+    Raises:
+        ValueError: If the video cannot be opened.
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -34,6 +45,10 @@ def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any
 
 
 def _build_frame_indices(*, total_frames: int, max_frames: int) -> list[int]:
+    """
+    Calculates frame indices that are evenly spaced across the video.
+    Ensures the first and last frames are included if possible.
+    """
     if total_frames <= max_frames:
         return list(range(total_frames))
 

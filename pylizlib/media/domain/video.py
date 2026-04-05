@@ -8,6 +8,9 @@ from pylizlib.core.log.pylizLogger import logger
 
 
 class SceneType(Enum):
+    """
+    Enum representing the classification of a video frame within a scene.
+    """
     STATIC = "static"
     ACTION = "action"
     TRANSITION = "transition"
@@ -15,6 +18,9 @@ class SceneType(Enum):
 
 @dataclass
 class Frame:
+    """
+    Data container for a single extracted video frame and its associated metadata.
+    """
     image: np.ndarray
     timestamp: float
     scene_type: SceneType
@@ -22,8 +28,20 @@ class Frame:
 
 
 class FrameOptions:
+    """
+    Configuration for frame extraction strategies. 
+    Defines limits and density for sampling frames from a video.
+    """
 
     def __init__(self, frames_per_minute: float = 4.0, min_frames: int = 2, max_frames: int = 64):
+        """
+        Initializes frame extraction options.
+
+        Args:
+            frames_per_minute: Target number of frames to extract per minute of video.
+            min_frames: Minimum absolute number of frames to extract.
+            max_frames: Maximum absolute number of frames to extract.
+        """
         self.frames_per_minute = frames_per_minute
         self.min_frames = min_frames
         self.max_frames = max_frames

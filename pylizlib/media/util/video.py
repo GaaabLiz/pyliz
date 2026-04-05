@@ -12,9 +12,21 @@ from pylizlib.media.util.image import save_ndarrays_as_images
 
 
 class VideoUtils:
+    """
+    Utility class for video processing, including audio extraction, 
+    frame extraction, and metadata retrieval (duration, FPS, creation date).
+    """
 
     @staticmethod
-    def extract_audio(video_path, audio_path, use_existing=False):
+    def extract_audio(video_path: str, audio_path: str, use_existing: bool = False):
+        """
+        Extracts the audio track from a video file using ffmpeg.
+
+        Args:
+            video_path: Path to the source video file.
+            audio_path: Destination path for the extracted audio file.
+            use_existing: If True, skips extraction if the audio file already exists.
+        """
         if use_existing and os.path.exists(audio_path):
             logger.debug(f"Audio file for {get_filename(video_path)} already exist: {audio_path}")
             return
@@ -47,23 +59,27 @@ class VideoUtils:
 
     @staticmethod
     def extract_frame_advanced(
-            video_path,
-            frame_folder,
+            video_path: str,
+            frame_folder: str,
             frame_selector: FrameSelector,
             frame_options: FrameOptions = FrameOptions(),
-            use_existing=True
+            use_existing: bool = True
     ):
-        # # controllo se esistono già i frame
-        # if use_existing and len(os.listdir(frame_folder)) > 0:
-        #     logger.debug(f"Frames already exist in {frame_folder}. Reading existing frames...")
-        #     frames = imgutils.load_images_as_ndarrays(frame_folder)
-        #     if len(frames) > 0:
-        #         return frames
-        #     else:
-        #         logger.warning(f"Frames has been found in {frame_folder}, but no frames were loaded. Extracting frames again...")
-        #         shutil.rmtree(frame_folder)
+        """
+        Extracts a set of frames from a video using a specific selector strategy.
+        Saves the frames as images in the specified folder.
 
-        # estratto i frame con il frame selector
+        Args:
+            video_path: Path to the video file.
+            frame_folder: Destination folder for the images.
+            frame_selector: The strategy to use for selecting frames (e.g. Dynamic, Uniform).
+            frame_options: Configuration settings for the selector.
+            use_existing: Reserved for future optimization (currently always extracts).
+
+        Returns:
+            The list of extracted Frame objects.
+        """
+        # Extract frames using the provided selector
         frame_list = frame_selector.select_frames(video_path, frame_options)
         frames_list_images = [frame.image for frame in frame_list]
         save_ndarrays_as_images(frames_list_images, frame_folder)
@@ -72,37 +88,47 @@ class VideoUtils:
 
     @staticmethod
     def extract_frames_thr(
-            video_path,
-            output_folder,
-            difference_threshold=30,
-            use_existing=True
+            video_path: str,
+            output_folder: str,
+            difference_threshold: int = 30,
+            use_existing: bool = True
     ):
+        """
+        Extracts frames from a video based on a pixel difference threshold.
+        Saves the frames as JPEGs in the output folder.
+
+        Args:
+            video_path: Path to the video.
+            output_folder: Destination directory.
+            difference_threshold: Mean absolute difference threshold to trigger a frame save.
+            use_existing: If True and the folder is not empty, skips extraction.
+        """
         check_path_file(video_path)
         check_path(output_folder, True)
 
-        # Se esistono già i frame, non fare nulla
+        # Skip if frames already exist
         if use_existing and len(os.listdir(output_folder)) > 0:
             logger.debug(f"Frames already exist in {output_folder}. Exiting frame extraction.")
             return
 
-        # Apri il video
+        # Open the video
         cap = cv2.VideoCapture(video_path)
 
-        # Contatore per numerare i frame
+        # Counters for metadata
         frame_count = 0
         saved_frame_count = 0
 
-        # Leggi il primo frame
+        # Read the first frame
         ret, prev_frame = cap.read()
         if not ret:
             cap.release()
             cv2.destroyAllWindows()
-            raise Exception("OPenCV error: Error reading video")
+            raise Exception("OpenCV error: Error reading video")
 
-        # Converti il primo frame in scala di grigi
+        # Convert the first frame to grayscale
         prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
 
-        # Salva il primo frame
+        # Save the first frame
         file_name = os.path.basename(video_path).split(".")[0]
         frame_path = os.path.join(output_folder, f"{file_name}_frame_{saved_frame_count}.jpg")
         cv2.imwrite(frame_path, prev_frame)
@@ -113,20 +139,20 @@ class VideoUtils:
             if not ret:
                 break
 
-            # Converti il frame corrente in scala di grigi
+            # Convert current frame to grayscale
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Calcola la differenza assoluta media tra il frame corrente e quello precedente
+            # Calculate the absolute difference between frames
             diff = cv2.absdiff(frame_gray, prev_frame_gray)
             mean_diff = np.mean(diff)
 
-            # Se la differenza è maggiore della soglia, salva il frame
+            # Save frame if threshold is exceeded
             if mean_diff > difference_threshold:
                 file_name = os.path.basename(video_path).split(".")[0]
                 frame_path = os.path.join(output_folder, f"{file_name}_frame_{saved_frame_count}.jpg")
                 cv2.imwrite(frame_path, frame)
                 saved_frame_count += 1
-                prev_frame_gray = frame_gray  # Aggiorna il frame precedente
+                prev_frame_gray = frame_gray  # Update previous frame
                 logger.trace(f"Frame {frame_count} saved because threshold exceeded: {mean_diff}")
 
             frame_count += 1
@@ -139,7 +165,8 @@ class VideoUtils:
     @staticmethod
     def get_video_creation_date(path: str) -> float | None:
         """
-        Restituisce la data di creazione del video come timestamp.
+        Retrieves the creation date of the video as a POSIX timestamp.
+        Uses ffprobe to extract metadata tags like 'creation_time'.
         """
         try:
             from datetime import datetime
@@ -161,6 +188,9 @@ class VideoUtils:
 
     @staticmethod
     def get_video_duration_seconds(path: str) -> float | None:
+        """
+        Retrieves the duration of the video in seconds using ffprobe.
+        """
         try:
             probe = ffmpeg.probe(path)
             duration = float(probe['format']['duration'])
@@ -172,20 +202,19 @@ class VideoUtils:
     @staticmethod
     def get_video_frame_rate(path: str) -> float | None:
         """
-        Restituisce il frame rate (FPS) del video.
+        Retrieves the frame rate (FPS) of the video using OpenCV.
         """
         try:
             video = cv2.VideoCapture(path)
             if not video.isOpened():
-                logger.error("Errore: impossibile aprire il video.")
+                logger.error("Error: could not open video.")
                 return None
 
-            # Ottieni il frame rate
+            # Get frame rate
             fps = video.get(cv2.CAP_PROP_FPS)
             video.release()
 
-            # Ritorna il valore di FPS
             return fps
         except Exception as e:
-            logger.error(f"Errore nel calcolo del frame rate del video: {e}")
+            logger.error(f"Error calculating video frame rate: {e}")
             return None

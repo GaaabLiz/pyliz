@@ -9,7 +9,18 @@ from pylizlib.core.log.pylizLogger import logger
 
 
 class MetadataHandler:
+    """
+    Handles metadata extraction and modification for media files using external tools
+    like Exiftool. This class provides methods for generating sidecar files,
+    updating XMP metadata, and resolving creation dates.
+    """
     def __init__(self, file_path: str | Path):
+        """
+        Initializes the handler for a specific media file.
+
+        Args:
+            file_path: Path to the media file to process.
+        """
         self.file_path = Path(file_path)
 
     def generate_xmp(self, output_path: str | Path) -> bool:
@@ -76,11 +87,15 @@ class MetadataHandler:
 
     def append_eagle_to_xmp(self, metadata: "Metadata", xmp_path: str | Path) -> bool:
         """
-        Appends Eagle tags and annotation to an existing XMP file using exiftool.
-        
-        :param metadata: The Eagle Metadata object containing tags and annotation.
-        :param xmp_path: The path to the existing XMP file to modify.
-        :return: True if successful, False otherwise.
+        Appends Eagle-specific metadata (tags, annotations) to an existing XMP sidecar.
+        Updates standardized fields like 'Subject', 'HierarchicalSubject', and 'Description'.
+
+        Args:
+            metadata: An object containing Eagle tags and annotations.
+            xmp_path: Path to the .xmp sidecar file to update.
+
+        Returns:
+            True if the update was successful, False if Exiftool failed or file was missing.
         """
         xmp_path = Path(xmp_path)
         
@@ -126,11 +141,15 @@ class MetadataHandler:
 
     def set_creation_date(self, date: datetime, xmp_path: str | Path) -> bool:
         """
-        Sets the creation date in an XMP file.
-        
-        :param date: The creation date to set.
-        :param xmp_path: The path to the XMP file to modify.
-        :return: True if successful, False otherwise.
+        Explicitly sets the creation date in an XMP sidecar file.
+        Updates 'photoshop:DateCreated' and 'xmp:CreateDate' fields.
+
+        Args:
+            date: The datetime object to write into the metadata.
+            xmp_path: Path to the .xmp sidecar file.
+
+        Returns:
+            True if date was successfully set.
         """
         xmp_path = Path(xmp_path)
         if not xmp_path.exists():
@@ -155,8 +174,12 @@ class MetadataHandler:
 
     def get_image_creation_date(self) -> Optional[datetime]:
         """
-        Extracts the creation date from an image file using exiftool.
-        This is more robust than exifread for modern/complex formats.
+        Extracts the most reliable creation date from the image using Exiftool.
+        Iterates through multiple fields (DateTimeOriginal, CreateDate, etc.)
+        to find the most likely origin timestamp.
+
+        Returns:
+            A datetime object if found, otherwise None.
         """
         if shutil.which("exiftool") is None:
             return None

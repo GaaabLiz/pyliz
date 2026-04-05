@@ -8,11 +8,28 @@ from pylizlib.media.lizmedia import LizMediaSearchResult, MediaListResult
 
 
 class MediaListResultPrinter:
+    """
+    Utility class for printing media search and processing results in a
+    visually appealing table format using the Rich library.
+    Handles distinct tables for accepted, rejected, and errored files.
+    """
     def __init__(self, result: MediaListResult):
+        """
+        Initializes the printer with a MediaListResult container.
+
+        Args:
+            result: The container holding accepted, rejected, and errored media items.
+        """
         self._result = result
         self._console = Console()
 
     def print_accepted(self, sort_index: int = 0):
+        """
+        Prints a table of all successfully accepted media files.
+
+        Args:
+            sort_index: Column index to sort by (0-6).
+        """
         if not self._result.accepted:
             self._console.print("[yellow]No accepted media files found.[/yellow]")
             return
@@ -26,6 +43,12 @@ class MediaListResultPrinter:
         )
 
     def print_rejected(self, sort_index: int = 0):
+        """
+        Prints a table of all media files that were filtered or rejected.
+
+        Args:
+            sort_index: Column index to sort by (0-6).
+        """
         if not self._result.rejected:
             self._console.print("[green]No media files were rejected.[/green]")
             return
@@ -39,6 +62,12 @@ class MediaListResultPrinter:
         )
 
     def print_errored(self, sort_index: int = 0):
+        """
+        Prints a table of all media files that encountered an error during processing.
+
+        Args:
+            sort_index: Column index to sort by (0-6).
+        """
         if not self._result.errored:
             self._console.print("[green]No media files were errored.[/green]")
             return
@@ -59,6 +88,10 @@ class MediaListResultPrinter:
             extra_columns: List[tuple], 
             table_type: str = "accepted"
     ):
+        """
+        Internal implementation for rendering a Rich Table.
+        Constructs columns, sorts items, and populates rows with formatted data.
+        """
         # Base columns for all tables
         base_columns = [
             ("Index", "dim", "right"),

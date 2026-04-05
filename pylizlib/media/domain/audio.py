@@ -3,7 +3,10 @@ from dataclasses import dataclass
 
 @dataclass
 class AudioSegment:
-    """Represents a transcribed segment of audio with timing information"""
+    """
+    Data container for a transcribed segment of audio.
+    Includes text content, timing bounds, and speech recognition confidence.
+    """
     text: str
     start_time: float
     end_time: float

@@ -430,10 +430,11 @@ class LizMedia:
 
     def apply_ai_info(self, ai_info: Any):
         """
-        Applies AI payload information to this media instance.
+        Applies a generic AI payload (e.g. from an API response) to This media instance.
+        Populates description, tags, OCR text, and NSFW status.
 
         Args:
-            ai_info: The AI payload to merge into the current media object.
+            ai_info: Any object that supports attributes 'text', 'filename', 'description', 'tags', and 'nsfw'.
         """
         self.ai_ocr_text = ai_info.text
         self.ai_has_ocr_text = bool(ai_info.text)
@@ -549,30 +550,35 @@ class LizMedia:
 
     def attach_sidecar_file(self, sidecar_path: Path):
         """
-        :param sidecar_path:   Path to sidecar file to attach
-        :return:
+        Attaches a reference to a sidecar file (e.g. .xmp, .aae) to This media.
+
+        Args:
+            sidecar_path: Path to the sidecar file.
         """
         self.attached_sidecar_files.append(sidecar_path)
 
     def detach_sidecar_file(self, sidecar_path: Path):
         """
-        :param sidecar_path:   Path to sidecar file to detach
-        :return:
+        Removes a reference to an attached sidecar file.
+
+        Args:
+            sidecar_path: Path to the sidecar file to remove.
         """
         if sidecar_path in self.attached_sidecar_files:
             self.attached_sidecar_files.remove(sidecar_path)
 
     def clear_sidecar_files(self):
         """
-        Clears all attached sidecar files
-        :return:
+        Removes all references to attached sidecar files.
         """
         self.attached_sidecar_files.clear()
 
     def has_xmp_sidecar(self) -> bool:
         """
-        Checks if there is an attached XMP sidecar file
-        :return: True if an XMP sidecar file is attached, False otherwise
+        Checks if an Adobe XMP sidecar file is attached.
+
+        Returns:
+            True if at least one .xmp sidecar is found.
         """
         for sidecar in self.attached_sidecar_files:
             if sidecar.suffix.lower() == '.xmp':
@@ -581,8 +587,10 @@ class LizMedia:
 
     def has_aae_sidecar(self) -> bool:
         """
-        Checks if there is an attached AAE sidecar file
-        :return: True if an AAE sidecar file is attached, False otherwise
+        Checks if an Apple AAE sidecar file is attached.
+
+        Returns:
+            True if at least one .aae sidecar is found.
         """
         for sidecar in self.attached_sidecar_files:
             if sidecar.suffix.lower() == '.aae':
@@ -591,8 +599,10 @@ class LizMedia:
 
     def get_xmp_sidecar(self) -> Optional[Path]:
         """
-        Retrieves the attached XMP sidecar file if it exists
-        :return: Path to the XMP sidecar file, or None if not found
+        Retrieves the first attached XMP sidecar file.
+
+        Returns:
+            Path to the XMP sidecar, or None if none are found.
         """
         for sidecar in self.attached_sidecar_files:
             if sidecar.suffix.lower() == '.xmp':

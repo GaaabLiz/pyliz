@@ -19,7 +19,23 @@ def resolve_media_source(
     base64_content: str | None = None,
     file_name: str | None = None,
 ) -> ResolvedMediaSource:
-    """Resolves a media input to a filesystem path."""
+    """
+    Resolves various media input formats into a single filesystem path for processing.
+    Handles local paths, raw Base64, and Data URIs. If Base64 is provided,
+    it creates a temporary file.
+
+    Args:
+        media_path: Optional path to a local media file.
+        base64_content: Optional Base64 string (can be a Data URI).
+        file_name: Recommended for Base64 inputs to help infer the file extension.
+
+    Returns:
+        A ResolvedMediaSource object containing the resolved Path and metadata.
+
+    Raises:
+        ValueError: If both or neither input sources are provided, or if Base64 is invalid.
+        FileNotFoundError: If the provided media_path does not exist.
+    """
     if media_path is None and base64_content is None:
         raise ValueError("Either 'media_path' or 'base64_content' must be provided.")
     if media_path is not None and base64_content is not None:
@@ -39,6 +55,10 @@ def resolve_media_source(
 
 
 def _split_data_uri(value: str) -> tuple[str, str | None]:
+    """
+    Splits a Data URI (e.g. 'data:image/png;base64,XXXX') into its
+    raw Base64 payload and MIME type.
+    """
     if value.startswith("data:") and "," in value:
         header, payload = value.split(",", 1)
         mime_type = header[5:].split(";", 1)[0] or None
@@ -47,6 +67,7 @@ def _split_data_uri(value: str) -> tuple[str, str | None]:
 
 
 def _decode_base64(value: str) -> bytes:
+    """Decodes a Base64 string into raw bytes with validation."""
     try:
         return base64.b64decode(value, validate=True)
     except binascii.Error as exc:
@@ -54,6 +75,11 @@ def _decode_base64(value: str) -> bytes:
 
 
 def _resolve_suffix(*, raw_bytes: bytes, file_name: str | None, mime_type: str | None) -> str:
+    """
+    Heuristically determines the file extension for a media blob.
+    Checks provided file_name first, then MIME type, and finally
+    inspects image headers.
+    """
     file_suffix = Path(file_name).suffix.lower() if file_name else ""
     if file_suffix:
         return file_suffix
@@ -72,6 +98,7 @@ def _resolve_suffix(*, raw_bytes: bytes, file_name: str | None, mime_type: str |
 
 
 def _mime_to_suffix(mime_type: str | None) -> str | None:
+    """Maps a MIME type to a normalized file extension."""
     if mime_type is None:
         return None
 
@@ -84,6 +111,7 @@ def _mime_to_suffix(mime_type: str | None) -> str | None:
 
 
 def _detect_image_suffix(raw_bytes: bytes) -> str | None:
+    """Uses PIL to detect the image format from raw bytes."""
     try:
         with Image.open(BytesIO(raw_bytes)) as image:
             fmt = (image.format or "").lower()
@@ -101,6 +129,7 @@ def _detect_image_suffix(raw_bytes: bytes) -> str | None:
 
 
 def _write_temp_file(raw_bytes: bytes, *, suffix: str) -> Path:
+    """Writes raw bytes to a secure temporary file on disk."""
     fd, temp_path = tempfile.mkstemp(prefix="pyliz_media_", suffix=suffix)
     with os.fdopen(fd, "wb") as handle:
         handle.write(raw_bytes)

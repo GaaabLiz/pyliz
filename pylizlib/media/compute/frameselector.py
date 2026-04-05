@@ -10,17 +10,42 @@ from pylizlib.media.domain.video import Frame, FrameOptions, SceneType
 
 
 class FrameSelector(ABC):
-    """Abstract base class for frame selection strategies"""
+    """
+    Abstract base class for video frame selection strategies.
+    Implementations of this class define how to choose specific frames from a video
+    based on different criteria (e.g., scene changes, uniform intervals).
+    """
 
     def __init__(self):
         self.logger = logger
 
     @abstractmethod
     def select_frames(self, video_path: str, frame_options: FrameOptions) -> List[Frame]:
+        """
+        Selects a subset of frames from the given video file.
+
+        Args:
+            video_path: Path to the video file.
+            frame_options: Configuration options for frame selection (counts, thresholds).
+
+        Returns:
+            A list of Frame objects containing imagery and metadata.
+        """
         pass
 
     def _validate_video(self, video_path: str) -> Tuple[cv2.VideoCapture, float, float, int]:
-        """Validate video file and return video properties"""
+        """
+        Validates the video file and retrieves its core properties.
+
+        Args:
+            video_path: Path to the video file.
+
+        Returns:
+            A tuple containing (cv2.VideoCapture, FPS, Duration, Total Frames).
+
+        Raises:
+            ValueError: If the video file cannot be opened.
+        """
         self.logger.trace(f"Validating video file: {video_path}")
         cap = cv2.VideoCapture(video_path)
 
@@ -36,9 +61,16 @@ class FrameSelector(ABC):
 
 
 class DynamicFrameSelector(FrameSelector):
-    """Dynamic frame selection strategy based on scene changes and motion"""
+    """
+    Dynamic frame selection strategy that identifies scene changes and motion
+    to pick the most representative frames from a video.
+    """
 
     def select_frames(self, video_path: str, frame_options: FrameOptions) -> List[Frame]:
+        """
+        Statically analyzes the video to detect scene changes and extracts frames
+        accordingly, weighted by scene transitions.
+        """
         self.logger.trace("Starting dynamic frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
@@ -53,7 +85,18 @@ class DynamicFrameSelector(FrameSelector):
         return frames
 
     def _detect_scene_changes(self, video_path: str, cap: cv2.VideoCapture, threshold: float = 20.0) -> List[float]:
-        """Detect significant scene changes in the video"""
+        """
+        Iterates through the video to identify timestamps where significant pixel
+        differences occur between consecutive frames.
+
+        Args:
+            video_path: Path to the video.
+            cap: Opened cv2.VideoCapture instance.
+            threshold: Sensitivity threshold for scene change detection.
+
+        Returns:
+            List of timestamps (seconds) where scene changes were detected.
+        """
         self.logger.trace("Detecting scene changes")
         scene_changes = []
         prev_frame = None
@@ -78,14 +121,20 @@ class DynamicFrameSelector(FrameSelector):
         return scene_changes
 
     def _calculate_frame_difference(self, frame1: np.ndarray, frame2: np.ndarray) -> floating[Any]:
-        """Calculate the difference between two frames"""
+        """
+        Computes the mean absolute difference between two grayscale frames.
+        Used as a heuristic for scene change detection.
+        """
         gray1 = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
         gray2 = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)
         diff = cv2.absdiff(gray1, gray2)
         return np.mean(diff)
 
     def _extract_frames(self, cap: cv2.VideoCapture, target_frames: int, scene_changes: List[float]) -> List[Frame]:
-        """Extract frames based on scene changes and target count"""
+        """
+        Extracts specific frames from the video, ensuring scene changes are prioritized
+        and gaps are filled to reach the target count.
+        """
         frames = []
         ret, first_frame = cap.read()
         if ret:
@@ -119,9 +168,15 @@ class DynamicFrameSelector(FrameSelector):
         return frames
 
 class UniformFrameSelector(FrameSelector):
-    """Uniform frame selection strategy selecting frames at regular intervals"""
+    """
+    Uniform frame selection strategy that picks frames at regular time intervals.
+    Ideal for videos where scene content is relatively consistent.
+    """
 
     def select_frames(self, video_path: str, frame_options: FrameOptions) -> List[Frame]:
+        """
+        Selects a target number of frames distributed evenly across the video duration.
+        """
         self.logger.trace("Starting uniform frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
@@ -134,7 +189,9 @@ class UniformFrameSelector(FrameSelector):
         return frames
 
     def _extract_uniform_frames(self, cap: cv2.VideoCapture, target_frames: int, fps: float) -> List[Frame]:
-        """Extract frames at uniform intervals"""
+        """
+        Inner logic to jump to specific frame indices based on uniform spacing.
+        """
         frames = []
         if target_frames <= 0:
             return frames
@@ -162,9 +219,15 @@ class UniformFrameSelector(FrameSelector):
         return frames
 
 class AllFrameSelector(FrameSelector):
-    """Frame selection strategy that selects all frames from the video"""
+    """
+    Exhaustive frame selection strategy that extracts every single frame.
+    Recommended only for very short video clips.
+    """
 
     def select_frames(self, video_path: str, frame_options: FrameOptions) -> List[Frame]:
+        """
+        Extracts all frames sequentially from the video.
+        """
         self.logger.trace("Starting all frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
@@ -174,7 +237,7 @@ class AllFrameSelector(FrameSelector):
         return frames
 
     def _extract_all_frames(self, cap: cv2.VideoCapture, fps: float) -> List[Frame]:
-        """Extract all frames from the video"""
+        """Sequential extraction loop for all frames."""
         frames = []
         frame_idx = 0
 
