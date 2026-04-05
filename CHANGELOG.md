@@ -4,6 +4,24 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.0] - 2026-04-05
+
+### Bump
+
+- V0.6.0
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Implement AiMediaScanner for AI media scanning with support for tags, NSFW detection, and OCR
+- Add AiPayloadMediaInfo model and update imports in media scanner
+- Add video frame sampling and media source resolution utilities
+- Update dependencies for AI models and add platform-specific requirements
+- Add integration tests for AiMediaScanner and media source resolution utilities
+- Add project metadata for pylizlib
 ## [0.5.18] - 2026-04-04
 
 ### Bump
