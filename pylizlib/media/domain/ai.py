@@ -6,6 +6,8 @@ class AiPayloadMediaInfo(BaseModel):
     tags: list[str]
     filename: str
     text: list[str]
+    nsfw: bool | None = None
+    ocr_detected: bool | None = None
 
     def __str__(self):
         return f"Description: {self.description}, Tags: {self.tags}, Filename: {self.filename}, Text: {self.text}"

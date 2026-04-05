@@ -33,6 +33,16 @@ media = [
     "sd-parsers>=0.6",
     "exifread>=3.5.1",
 ]
+ai = [
+    "easyocr>=1.7.2",
+    "huggingface-hub>=0.34.4",
+    "nudenet>=3.4.2",
+    "numpy>=2.3.3",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.3.0",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+]
 qtfw = [
     "pyside6>=6.9.2",
     "PySide6-Fluent-Widgets[full]>=1.9.1",
