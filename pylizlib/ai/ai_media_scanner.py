@@ -4,8 +4,8 @@ from pathlib import Path
 
 from pylizlib.ai.domain import AiScanResult, AiScanTool, AiToolScanner
 from pylizlib.ai.providers import EasyOcrProvider, JoyTagProvider, NudeNetProvider
-from pylizlib.ai.utils import resolve_media_source
 from pylizlib.media.lizmedia import LizMedia
+from pylizlib.media.util.source import resolve_media_source
 
 
 class AiMediaScanner:

@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from pylizlib.ai.domain import AiScanResult, AiScanTool
-from pylizlib.ai.utils import sample_video_frames, unique_preserving_order
+from pylizlib.ai.utils import unique_preserving_order
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.media.compute.video_sampling import sample_video_frames
 
 if TYPE_CHECKING:
     from pylizlib.media.lizmedia import LizMedia
