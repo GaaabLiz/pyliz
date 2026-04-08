@@ -1,8 +1,9 @@
+import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, mock_open
 from pathlib import Path
 from datetime import datetime
-import os
 
 from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaListResult, MediaStatus
 from pylizlib.core.domain.os import FileType
@@ -204,6 +205,121 @@ class TestLizMedia(unittest.TestCase):
         
         media.attach_eagle_metadata(meta_obj)
         self.assertEqual(media.eagle_metadata, meta_obj)
+
+    @patch("builtins.open", new_callable=mock_open, read_data=b"image-data")
+    @patch("pylizlib.media.lizmedia.exifread.process_file", return_value={})
+    @patch("pylizlib.media.lizmedia.MetadataHandler")
+    @patch("pylizlib.media.lizmedia.ParserManager")
+    @patch("os.path.getsize", return_value=2500000)
+    @patch("pylizlib.media.lizmedia.get_file_c_date")
+    @patch("pylizlib.media.lizmedia.get_file_type", return_value=FileType.IMAGE)
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    def test_to_json_serializes_full_media_payload(
+        self,
+        _,
+        __,
+        mock_get_date,
+        ___,
+        mock_parser_manager,
+        mock_metadata_handler,
+        ____ ,
+        _____,
+    ):
+        creation_dt = datetime(2024, 1, 2, 3, 4, 5)
+        mock_get_date.return_value = creation_dt
+        mock_parser_manager.return_value.parse.return_value = SimpleNamespace(prompt="a cat", steps=20)
+        mock_metadata_handler.return_value.get_image_creation_date.return_value = None
+
+        media = LizMedia(self.mock_path)
+        media.attach_sidecar_file(Path("/path/to/test_image.xmp"))
+        media.attach_sidecar_file(Path("/path/to/test_image.aae"))
+        media.attach_eagle_metadata_path(Path("/path/to/metadata.json"))
+        media.attach_eagle_metadata(SimpleNamespace(source="eagle", rating=5))
+        media.base64_content = "YWJj"
+        media.apply_ai_scan_result(
+            tags=["cat", "art"],
+            nsfw=False,
+            ocr_text=["hello"],
+            description="A cat image",
+        )
+
+        payload = json.loads(media.to_json())
+
+        self.assertEqual(payload["path"], "/path/to/test_image.jpg")
+        self.assertEqual(payload["file_name"], "test_image.jpg")
+        self.assertEqual(payload["extension"], ".jpg")
+        self.assertEqual(payload["creation_time"], creation_dt.isoformat())
+        self.assertEqual(payload["creation_time_timestamp"], creation_dt.timestamp())
+        self.assertEqual(payload["creation_date_from_exif_or_file_or_sidecar"], creation_dt.isoformat())
+        self.assertEqual(payload["year"], 2024)
+        self.assertEqual(payload["month"], 1)
+        self.assertEqual(payload["day"], 2)
+        self.assertEqual(payload["size_byte"], 2500000)
+        self.assertEqual(payload["size_mb"], 2.5)
+        self.assertEqual(payload["type"], FileType.IMAGE.value)
+        self.assertTrue(payload["is_image"])
+        self.assertFalse(payload["is_video"])
+        self.assertFalse(payload["is_audio"])
+        self.assertEqual(payload["stable_diffusion_metadata"], {"prompt": "a cat", "steps": 20})
+        self.assertFalse(payload["has_exif_data"])
+        self.assertTrue(payload["ai_generated"])
+        self.assertIsNone(payload["duration_sec"])
+        self.assertIsNone(payload["duration_min"])
+        self.assertIsNone(payload["frame_rate"])
+        self.assertEqual(payload["eagle_metadata_path"], "/path/to/metadata.json")
+        self.assertEqual(payload["eagle_metadata"], {"source": "eagle", "rating": 5})
+        self.assertEqual(
+            payload["attached_sidecar_files"],
+            ["/path/to/test_image.xmp", "/path/to/test_image.aae"],
+        )
+        self.assertTrue(payload["has_xmp_sidecar"])
+        self.assertTrue(payload["has_aae_sidecar"])
+        self.assertEqual(payload["xmp_sidecar"], "/path/to/test_image.xmp")
+        self.assertEqual(payload["base64_content"], "YWJj")
+        self.assertEqual(payload["ai_ocr_text"], ["hello"])
+        self.assertTrue(payload["ai_has_ocr_text"])
+        self.assertEqual(payload["ai_file_name"], "test_image.jpg")
+        self.assertEqual(payload["ai_description"], "A cat image")
+        self.assertEqual(payload["ai_desc_plus_text"], "A cat image This media includes texts: hello")
+        self.assertEqual(payload["ai_tags"], ["cat", "art"])
+        self.assertTrue(payload["ai_scanned"])
+        self.assertFalse(payload["ai_nsfw"])
+
+    @patch("os.path.getsize", return_value=4096)
+    @patch("pylizlib.media.lizmedia.get_file_c_date")
+    @patch("pylizlib.media.lizmedia.get_file_type", return_value=FileType.AUDIO)
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    def test_to_json_uses_null_for_unavailable_media_values(self, _, __, mock_get_date, ___):
+        creation_dt = datetime(2025, 6, 7, 8, 9, 10)
+        mock_get_date.return_value = creation_dt
+
+        media = LizMedia(Path("/path/to/test_audio.mp3"))
+        payload = json.loads(media.to_json())
+
+        self.assertEqual(payload["path"], "/path/to/test_audio.mp3")
+        self.assertEqual(payload["creation_time"], creation_dt.isoformat())
+        self.assertEqual(payload["type"], FileType.AUDIO.value)
+        self.assertFalse(payload["is_image"])
+        self.assertFalse(payload["is_video"])
+        self.assertTrue(payload["is_audio"])
+        self.assertIsNone(payload["stable_diffusion_metadata"])
+        self.assertIsNone(payload["has_exif_data"])
+        self.assertIsNone(payload["ai_generated"])
+        self.assertIsNone(payload["duration_sec"])
+        self.assertIsNone(payload["duration_min"])
+        self.assertIsNone(payload["frame_rate"])
+        self.assertIsNone(payload["eagle_metadata_path"])
+        self.assertIsNone(payload["eagle_metadata"])
+        self.assertIsNone(payload["xmp_sidecar"])
+        self.assertIsNone(payload["base64_content"])
+        self.assertIsNone(payload["ai_ocr_text"])
+        self.assertIsNone(payload["ai_has_ocr_text"])
+        self.assertIsNone(payload["ai_file_name"])
+        self.assertIsNone(payload["ai_description"])
+        self.assertIsNone(payload["ai_desc_plus_text"])
+        self.assertIsNone(payload["ai_tags"])
+        self.assertFalse(payload["ai_scanned"])
+        self.assertIsNone(payload["ai_nsfw"])
 
 class TestLizMediaSearchResult(unittest.TestCase):
     

@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from enum import Enum
 from itertools import count
@@ -395,6 +395,143 @@ class LizMedia:
         if self.ai_ocr_text:
             return self.ai_description + " This media includes texts: " + " ".join(self.ai_ocr_text)
         return self.ai_description
+
+    @staticmethod
+    def _serialize_json_value(value: Any) -> Any:
+        """
+        Converts supported Python values into JSON-serializable primitives.
+
+        Unsupported or opaque values are converted to None so that JSON output
+        represents unavailable data as null.
+        """
+        if value is None:
+            return None
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Path):
+            return value.__str__()
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, list):
+            return [LizMedia._serialize_json_value(item) for item in value]
+        if isinstance(value, tuple):
+            return [LizMedia._serialize_json_value(item) for item in value]
+        if isinstance(value, set):
+            return [LizMedia._serialize_json_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                str(key): LizMedia._serialize_json_value(item)
+                for key, item in value.items()
+            }
+        if is_dataclass(value):
+            return {
+                key: LizMedia._serialize_json_value(item)
+                for key, item in asdict(value).items()
+            }
+
+        for method_name in ["model_dump", "dict"]:
+            serializer = getattr(value, method_name, None)
+            if callable(serializer):
+                try:
+                    return LizMedia._serialize_json_value(serializer())
+                except Exception:
+                    pass
+
+        try:
+            public_attributes = {
+                key: item
+                for key, item in vars(value).items()
+                if not key.startswith("_") and not callable(item)
+            }
+            if public_attributes:
+                return {
+                    key: LizMedia._serialize_json_value(item)
+                    for key, item in public_attributes.items()
+                }
+        except Exception:
+            pass
+
+        return None
+
+    def _safe_json_value(self, getter, *, default: Any = None) -> Any:
+        """
+        Safely resolves a value and converts it to a JSON-friendly representation.
+
+        If the value cannot be resolved, returns the provided default.
+        """
+        try:
+            return self._serialize_json_value(getter())
+        except Exception:
+            return default
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serializes the full media object to a JSON-friendly dictionary.
+
+        The payload includes the instance state together with derived file and
+        media metadata. Values that are unavailable or not applicable are
+        normalized to None so they become null in JSON.
+
+        Returns:
+            dict[str, Any]: Full serialized representation of this media.
+        """
+        is_image = self._safe_json_value(lambda: self.is_image)
+        is_video = self._safe_json_value(lambda: self.is_video)
+
+        return {
+            "path": self._serialize_json_value(self.path),
+            "file_name": self._safe_json_value(lambda: self.file_name),
+            "extension": self._safe_json_value(lambda: self.extension),
+            "creation_time": self._safe_json_value(lambda: self.creation_time),
+            "creation_time_timestamp": self._safe_json_value(lambda: self.creation_time_timestamp),
+            "creation_date_from_exif_or_file_or_sidecar": self._safe_json_value(
+                lambda: self.creation_date_from_exif_or_file_or_sidecar
+            ),
+            "year": self._safe_json_value(lambda: self.year),
+            "month": self._safe_json_value(lambda: self.month),
+            "day": self._safe_json_value(lambda: self.day),
+            "size_byte": self._safe_json_value(lambda: self.size_byte),
+            "size_mb": self._safe_json_value(lambda: self.size_mb),
+            "type": self._safe_json_value(lambda: self.type),
+            "is_image": is_image,
+            "is_video": is_video,
+            "is_audio": self._safe_json_value(lambda: self.is_audio),
+            "stable_diffusion_metadata": self._safe_json_value(
+                lambda: self.stable_diffusion_metadata,
+                default=None,
+            ) if is_image else None,
+            "has_exif_data": self._safe_json_value(lambda: self.has_exif_data, default=None) if is_image else None,
+            "ai_generated": self._safe_json_value(lambda: self.ai_generated, default=None) if is_image else None,
+            "duration_sec": self._safe_json_value(lambda: self.duration_sec),
+            "duration_min": self._safe_json_value(lambda: self.duration_min),
+            "frame_rate": self._safe_json_value(lambda: self.frame_rate),
+            "eagle_metadata_path": self._serialize_json_value(self.eagle_metadata_path),
+            "eagle_metadata": self._serialize_json_value(self.eagle_metadata),
+            "attached_sidecar_files": self._serialize_json_value(self.attached_sidecar_files),
+            "has_xmp_sidecar": self._safe_json_value(lambda: self.has_xmp_sidecar()),
+            "has_aae_sidecar": self._safe_json_value(lambda: self.has_aae_sidecar()),
+            "xmp_sidecar": self._safe_json_value(lambda: self.get_xmp_sidecar()),
+            "base64_content": self._serialize_json_value(self.base64_content),
+            "ai_ocr_text": self._serialize_json_value(self.ai_ocr_text),
+            "ai_has_ocr_text": self._serialize_json_value(self.ai_has_ocr_text),
+            "ai_file_name": self._serialize_json_value(self.ai_file_name),
+            "ai_description": self._serialize_json_value(self.ai_description),
+            "ai_desc_plus_text": self._safe_json_value(lambda: self.get_desc_plus_text()),
+            "ai_tags": self._serialize_json_value(self.ai_tags),
+            "ai_scanned": self._serialize_json_value(self.ai_scanned),
+            "ai_nsfw": self._serialize_json_value(self.ai_nsfw),
+        }
+
+    def to_json(self) -> str:
+        """
+        Serializes the full media object as pretty-printed JSON.
+
+        Returns:
+            str: JSON representation of this media.
+        """
+        return json.dumps(self.to_dict(), indent=4)
 
     def to_dict_only_ai(self) -> dict[str, Any]:
         """
