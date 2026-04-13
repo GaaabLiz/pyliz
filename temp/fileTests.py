@@ -10,7 +10,6 @@ from pylizlib.core.log.pylizLogger import logger
 
 
 class TestFiles(unittest.TestCase):
-
     def setUp(self):
         PylizApp("PylizTest", "0.0.1")
         logger.debug("setUp")
@@ -26,5 +25,6 @@ class TestFiles(unittest.TestCase):
         print(path)
         print(gen_file_hash(path))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

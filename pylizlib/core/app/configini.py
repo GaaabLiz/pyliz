@@ -58,9 +58,14 @@ class IniManager:
             with open(self.path, "w", encoding="utf-8") as configfile:
                 self.config.write(configfile)
         except OSError as exc:
-            logger.error(f"Error while creating configuration file '{self.path}': {exc}")
+            logger.error( f"Error while creating configuration file '{self.path}': {exc}" )
 
-    def read(self, section: str, key: str, is_bool: bool = False) -> str | bool | None:
+    def read(
+        self,
+        section: str,
+        key: str,
+        is_bool: bool = False,
+    ) -> str | bool | None:
         """Read a value from the INI file."""
 
         if not self.exists():
@@ -70,7 +75,7 @@ class IniManager:
         self.config = configparser.ConfigParser()
         self.config.read(self.path, encoding="utf-8")
         if not self.config.has_section(section):
-            logger.warning(f"Section '{section}' does not exist in INI file '{self.path}'.")
+            logger.warning( f"Section '{section}' does not exist in INI file '{self.path}'." )
             return None
         if not self.config.has_option(section, key):
             logger.warning(f"Key '{key}' does not exist in section '{section}'.")
@@ -83,7 +88,12 @@ class IniManager:
             logger.error(f"Error while reading '{key}' from section '{section}': {exc}")
             return None
 
-    def write(self, section: str, key: str, value: str | bool | int) -> None:
+    def write(
+        self,
+        section: str,
+        key: str,
+        value: str | bool | int,
+    ) -> None:
         """Write or update a value in the INI file."""
 
         self.config = configparser.ConfigParser()
@@ -103,7 +113,12 @@ class CfgPath:
 
     path: Path
 
-    def __check_ini(self, path: str, keys: bool = False, sections: bool = True) -> None:
+    def __check_ini(
+        self,
+        path: str,
+        keys: bool = False,
+        sections: bool = True,
+    ) -> None:
         """Print sections and keys found in a single INI file."""
 
         config = configparser.ConfigParser()
@@ -116,7 +131,12 @@ class CfgPath:
                     for option in config.options(section):
                         rich.print(f"    - [cyan]{option}[/cyan]")
 
-    def __find_ini_files(self, directory: str, keys: bool = False, sections: bool = True) -> None:
+    def __find_ini_files(
+        self,
+        directory: str,
+        keys: bool = False,
+        sections: bool = True,
+    ) -> None:
         """Walk a directory and inspect each ``.ini`` file found."""
 
         for root, _, files in os.walk(directory):
@@ -132,5 +152,3 @@ class CfgPath:
         """Inspect every INI file below ``path`` and print its contents."""
 
         self.__find_ini_files(str(self.path), keys, sections)
-
-

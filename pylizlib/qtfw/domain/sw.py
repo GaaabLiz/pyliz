@@ -9,6 +9,6 @@ class SoftwareData:
     path: Path
     is_service: bool
     icon: FluentIcon
-    installed : bool
-    running : bool
-    version : str
+    installed: bool
+    running: bool
+    version: str

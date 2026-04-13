@@ -26,5 +26,3 @@ catalogue.update_snapshot_by_objs(snap, snap_edit)
 # snap_found.desc = "Snapshot Edited"
 # snap_edit_new_dir = SnapEditAction(new_path=random_subfolder(path_temp).__str__(), action_type=SnapEditType.ADD_DIR)
 # catalogue.update_snapshot(snap_found, [snap_edit_new_dir])
-
-

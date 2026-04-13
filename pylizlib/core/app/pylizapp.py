@@ -33,13 +33,12 @@ class PylizApp:
 
     language_version: str | None = None
 
-
     def __init__(
-            self,
-            app_name: str,
-            app_version: str | None = None,
-            folder_name: str | None = None,
-            author: str = "Unknown"
+        self,
+        app_name: str,
+        app_version: str | None = None,
+        folder_name: str | None = None,
+        author: str = "Unknown",
     ):
         """Initialize the application home directory.
 
@@ -90,7 +89,11 @@ class PylizApp:
 
         return folder_path
 
-    def add_template_folder(self, template_key: PylizDirFoldersTemplate, name: str | None = None) -> str:
+    def add_template_folder(
+        self,
+        template_key: PylizDirFoldersTemplate,
+        name: str | None = None,
+    ) -> str:
         """Create or update a standard template folder."""
 
         folder_name = name if name is not None else template_key.value
@@ -104,7 +107,13 @@ class PylizApp:
             created_paths.append(self.add_template_folder(template_key))
         return created_paths
 
-    def add_folder_with_ini(self, key: str, folder_name: str, ini_section: str, ini_key: str) -> str:
+    def add_folder_with_ini(
+        self,
+        key: str,
+        folder_name: str,
+        ini_section: str,
+        ini_key: str,
+    ) -> str:
         """Create a folder and store its path inside the active INI file."""
 
         folder_path = self.add_folder(key, folder_name)
@@ -120,9 +129,9 @@ class PylizApp:
         return None
 
     def get_folder_template_path(
-            self,
-            template_key: PylizDirFoldersTemplate,
-            add_if_not_exist: bool = True,
+        self,
+        template_key: PylizDirFoldersTemplate,
+        add_if_not_exist: bool = True,
     ) -> str | None:
         """Return a template folder path and optionally create it if missing."""
 
@@ -149,13 +158,23 @@ class PylizApp:
         self.__ini_initialized = True
         return self.__ini_path
 
-    def get_ini_value(self, section: str, key: str, is_bool: bool = False) -> str | bool | None:
+    def get_ini_value(
+        self,
+        section: str,
+        key: str,
+        is_bool: bool = False,
+    ) -> str | bool | None:
         """Read a value from the active INI file."""
 
         self.check_for_all_init()
         return self.__ini.read(section, key, is_bool)
 
-    def set_ini_value(self, section: str, key: str, value: str | bool | int) -> None:
+    def set_ini_value(
+        self,
+        section: str,
+        key: str,
+        value: str | bool | int,
+    ) -> None:
         """Write a value to the active INI file."""
 
         self.check_for_all_init()
@@ -171,7 +190,11 @@ class PylizApp:
     def delete_ini(self) -> None:
         """Delete the active INI file and reset the internal state."""
 
-        if self.__ini_initialized and self.__ini_path is not None and os.path.exists(self.__ini_path):
+        if (
+            self.__ini_initialized
+            and self.__ini_path is not None
+            and os.path.exists(self.__ini_path)
+        ):
             os.remove(self.__ini_path)
             self.__ini_initialized = False
             self.__ini = None
@@ -183,4 +206,3 @@ class PylizApp:
         """Print a simple hello-world message."""
 
         print("Hello from PylizApp!")
-

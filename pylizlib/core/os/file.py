@@ -9,10 +9,23 @@ from pylizlib.core.domain.operation import Operation
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
 
-image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg', '.heic', '.heif', '.webp', '.ico', '.dng']
-video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp']
-audio_extensions = ['.mp3', '.wav', '.ogg', '.flac', '.wma', '.aac', '.m4a']
-text_extensions = ['.txt', '.doc', '.docx', '.pdf', '.odt', '.rtf', '.tex']
+image_extensions = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".svg",
+    ".heic",
+    ".heif",
+    ".webp",
+    ".ico",
+    ".dng",
+]
+video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm", ".3gp"]
+audio_extensions = [".mp3", ".wav", ".ogg", ".flac", ".wma", ".aac", ".m4a"]
+text_extensions = [".txt", ".doc", ".docx", ".pdf", ".odt", ".rtf", ".tex"]
 
 
 def is_image_extension(extension: str) -> bool:
@@ -56,7 +69,7 @@ def is_media_file(path: str) -> bool:
 
 
 def is_media_sidecar_file(path: str) -> bool:
-    sidecar_extensions = ['.xmp', '.xml', ".aae"]
+    sidecar_extensions = [".xmp", ".xml", ".aae"]
     return os.path.splitext(path)[1] in sidecar_extensions
 
 
@@ -75,7 +88,7 @@ def get_file_type(path: str) -> FileType:
         raise ValueError("Unsupported file type")
 
 
-def is_file_dup_in_dir(path:str, file_name:str) -> bool:
+def is_file_dup_in_dir(path: str, file_name: str) -> bool:
     for root, dirs, files in os.walk(path):
         if file_name in files:
             return True
@@ -88,7 +101,7 @@ def get_file_c_date(path_to_file) -> datetime:
     last modified if that isn't possible.
     See http://stackoverflow.com/a/39501288/1709587 for explanation.
     """
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         timestamp = os.path.getctime(path_to_file)
     else:
         stat = os.stat(path_to_file)
@@ -109,13 +122,13 @@ def download_file(url: str, destinazione: str, on_progress: callable) -> Operati
         response.raise_for_status()  # Verifica se la richiesta è andata a buon fine
 
         # Ottieni la dimensione totale del file dal campo 'Content-Length' dell'header
-        totale = int(response.headers.get('content-length', 0))
+        totale = int(response.headers.get("content-length", 0))
 
         # Inizializza variabili per il calcolo della percentuale
         scaricato = 0
         percentuale = 0
 
-        with open(destinazione, 'wb') as file:
+        with open(destinazione, "wb") as file:
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:  # Filtra fuori i chunk vuoti
                     file.write(chunk)
@@ -141,5 +154,5 @@ def write_json_to_file(path, filename, content):
     file_path = os.path.join(path, filename)
 
     # Scrive il contenuto JSON nel file
-    with open(file_path, 'w') as json_file:
+    with open(file_path, "w") as json_file:
         json.dump(content, json_file, indent=4)

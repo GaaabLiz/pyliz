@@ -1,7 +1,14 @@
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtCore import Qt, Signal, QPoint
-from qfluentwidgets import ComboBox, CheckableMenu, MenuIndicatorType, SubtitleLabel, LineEdit, CaptionLabel, \
-    MessageBoxBase
+from qfluentwidgets import (
+    ComboBox,
+    CheckableMenu,
+    MenuIndicatorType,
+    SubtitleLabel,
+    LineEdit,
+    CaptionLabel,
+    MessageBoxBase,
+)
 
 
 class MultiSelectionComboBox(ComboBox):
@@ -64,9 +71,9 @@ class MultiSelectionComboBox(ComboBox):
 
         # Position and show the menu
         x = (
-                -menu.width() // 2
-                + menu.layout().contentsMargins().left()
-                + self.width() // 2
+            -menu.width() // 2
+            + menu.layout().contentsMargins().left()
+            + self.width() // 2
         )
         pd = self.mapToGlobal(QPoint(x, self.height()))
         menu.exec(pd)
@@ -155,18 +162,18 @@ class MultiSelectionComboBox(ComboBox):
         self.setCheckedIndexes(indexes_to_check)
 
 
-
 class LineEditMessageBox(MessageBoxBase):
-    """ Custom message box """
+    """Custom message box"""
 
-    def __init__(self,
-                 title: str,
-                 placeholder: str,
-                 text_yes: str = 'Yes',
-                 text_no: str = 'No',
-                 error_label: str = "Invalid.",
-                 parent=None
-                 ):
+    def __init__(
+        self,
+        title: str,
+        placeholder: str,
+        text_yes: str = "Yes",
+        text_no: str = "No",
+        error_label: str = "Invalid.",
+        parent=None,
+    ):
         super().__init__(parent)
         self.titleLabel = SubtitleLabel(title, self)
         self.line_edit = LineEdit(self)

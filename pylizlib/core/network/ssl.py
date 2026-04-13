@@ -15,5 +15,3 @@ def ignore_context_ssl():
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-

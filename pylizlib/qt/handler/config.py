@@ -6,21 +6,21 @@ from pylizlib.qt.domain.config import QtConfigItem
 
 
 class ConfigQtHandler:
-
     @staticmethod
     def qt_write(item: QtConfigItem, value: Any, setting: QSettings) -> None:
         if item.type is list:
-            assert item.max_list_size is not None, "max_list_size must be set for list type"
+            assert item.max_list_size is not None, (
+                "max_list_size must be set for list type"
+            )
             ConfigQtHandler.__qt_write_list(item, value, setting)
         if item.type is str:
             ConfigQtHandler.__qt_write_str(item, value, setting)
 
     @staticmethod
     def qt_read(
-            item: QtConfigItem,
-            setting: QSettings,
-            return_default_if_none: bool = False,
-
+        item: QtConfigItem,
+        setting: QSettings,
+        return_default_if_none: bool = False,
     ) -> Any:
         history: Any = setting.value(item.id, item.default, type=item.type)
         if history is None and return_default_if_none:
@@ -38,7 +38,7 @@ class ConfigQtHandler:
         if value in history:
             history.remove(value)
         history.insert(0, value)
-        history = history[:item.max_list_size]
+        history = history[: item.max_list_size]
         setting.setValue(item.id, history)
 
     @staticmethod

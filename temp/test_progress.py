@@ -4,8 +4,6 @@ from pylizlib.core.handler.progress import ProgressHandler
 
 
 class TestProgress(unittest.TestCase):
-
-
     def test_1(self):
         progress = ProgressHandler()
 
@@ -27,6 +25,5 @@ class TestProgress(unittest.TestCase):
         print(progress.get_master_progress())
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

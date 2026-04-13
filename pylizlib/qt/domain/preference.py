@@ -62,4 +62,3 @@ class PreferenceTabGroup:
     tab: str
     section: str
     config_list: list[PreferenceConfigData]
-

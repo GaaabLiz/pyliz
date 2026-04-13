@@ -38,10 +38,10 @@ def open_system_folder(path):
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Path {path} does not exist!")
-    if os.name == 'nt':  # For Windows
-        subprocess.Popen(['explorer', path])
-    elif os.name == 'posix':  # For Linux, Mac
-        subprocess.Popen(['open', path])
+    if os.name == "nt":  # For Windows
+        subprocess.Popen(["explorer", path])
+    elif os.name == "posix":  # For Linux, Mac
+        subprocess.Popen(["open", path])
     else:
         raise OSError("Unsupported OS")
 
@@ -127,6 +127,7 @@ def is_os_unix() -> bool:
     current_os = platform.system()
     return current_os in ["Linux", "Darwin"]
 
+
 def is_os_windows() -> bool:
     """
     Check if the operating system is Windows
@@ -134,6 +135,7 @@ def is_os_windows() -> bool:
     """
     current_os = platform.system()
     return current_os == "Windows"
+
 
 def is_software_installed(exe_path: Path) -> bool:
     """
@@ -153,7 +155,6 @@ def get_system_username() -> str:
 
 
 class WindowsOsUtils:
-
     @staticmethod
     def is_exe_running(exe_path: Path) -> bool:
         """
@@ -162,9 +163,12 @@ class WindowsOsUtils:
         :return: True if the executable is running, False otherwise
         """
         exe_path_str = os.path.abspath(exe_path.__str__())  # normalize
-        for proc in psutil.process_iter(['exe', 'name']):
+        for proc in psutil.process_iter(["exe", "name"]):
             try:
-                if proc.info['exe'] and os.path.abspath(proc.info['exe']) == exe_path_str:
+                if (
+                    proc.info["exe"]
+                    and os.path.abspath(proc.info["exe"]) == exe_path_str
+                ):
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -182,12 +186,17 @@ class WindowsOsUtils:
         if not is_os_windows():
             return "N/A"
         import win32api
+
         try:
             # GetFileVersionInfo call removed as it was unused
             # Le chiavi di versione sono memorizzate come tuple
             # Prima otteniamo la lingua e il codice di pagina
-            lang, codepage = win32api.GetFileVersionInfo(exe_path.__str__(), "\\VarFileInfo\\Translation")[0]
-            str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
+            lang, codepage = win32api.GetFileVersionInfo(
+                exe_path.__str__(), "\\VarFileInfo\\Translation"
+            )[0]
+            str_info_path = (
+                f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
+            )
             version = win32api.GetFileVersionInfo(exe_path.__str__(), str_info_path)
             return version
         except Exception:
@@ -203,9 +212,12 @@ class WindowsOsUtils:
         if not is_os_windows():
             return None
         import winreg
+
         try:
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                                 rf"SYSTEM\CurrentControlSet\Services\{service_name}")
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                rf"SYSTEM\CurrentControlSet\Services\{service_name}",
+            )
             image_path, _ = winreg.QueryValueEx(key, "ImagePath")
             winreg.CloseKey(key)
             # Rimuove eventuali argomenti e prende solo il percorso
@@ -215,18 +227,17 @@ class WindowsOsUtils:
                 image_path = image_path.split('"')[1]
             else:
                 # Prende la prima parte fino al primo spazio (se non ci sono virgolette)
-                parts = image_path.split(' ')
+                parts = image_path.split(" ")
                 # Ricostruisce il percorso se contiene spazi e termina con .exe
                 exe_parts = []
                 for part in parts:
                     exe_parts.append(part)
-                    if part.lower().endswith('.exe'):
+                    if part.lower().endswith(".exe"):
                         break
-                image_path = ' '.join(exe_parts)
+                image_path = " ".join(exe_parts)
             return image_path
         except Exception:
             return None
-
 
     def is_service_running(service_name: str) -> bool:
         """
@@ -236,6 +247,7 @@ class WindowsOsUtils:
         """
         import win32service
         import win32serviceutil
+
         try:
             status = win32serviceutil.QueryServiceStatus(service_name)[1]
             return status == win32service.SERVICE_RUNNING
@@ -249,14 +261,15 @@ class WindowsOsUtils:
         :return: The version of the service or None if not found
         """
         import win32api
+
         path = WindowsOsUtils.get_service_executable_path(service_name)
         if path is None:
             return None
         try:
             # Funzione per ottenere versione dal file binario
-            info = win32api.GetFileVersionInfo(path, '\\')
-            ms = info['FileVersionMS']
-            ls = info['FileVersionLS']
+            info = win32api.GetFileVersionInfo(path, "\\")
+            ms = info["FileVersionMS"]
+            ls = info["FileVersionLS"]
             version = f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
             return version
         except Exception:

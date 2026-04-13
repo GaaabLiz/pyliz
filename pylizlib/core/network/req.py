@@ -23,15 +23,14 @@ class NetResponseType(Enum):
     REQUEST_ERROR = "request_error"
 
 
-
 class NetResponse:
     """Standard wrapper around ``requests`` responses and request errors."""
 
     def __init__(
-            self,
-            response: Response | None,
-            response_type: NetResponseType,
-            exception=None
+        self,
+        response: Response | None,
+        response_type: NetResponseType,
+        exception=None,
     ):
         """Initialize a response wrapper and derive helper fields."""
 
@@ -47,17 +46,20 @@ class NetResponse:
         self.type = response_type
         self.exception = exception
         if self.hasResponse:
-            self.has_json_header = "application/json" in self.response.headers.get("Content-Type", "")
+            self.has_json_header = "application/json" in self.response.headers.get(
+                "Content-Type", ""
+            )
             if self.has_json_header:
                 self.json = self.response.json()
         self.__log()
-
 
     def __log(self) -> None:
         """Emit internal diagnostic log for the response wrapper."""
 
         log_trace = getattr(logger, "trace", logger.debug)
-        log_trace(f"NetResponse: code={self.code} | type={self.type} | jsonHeader={self.has_json_header}")
+        log_trace(
+            f"NetResponse: code={self.code} | type={self.type} | jsonHeader={self.has_json_header}"
+        )
 
     def __str__(self) -> str:
         """Return a readable summary of the response state."""
@@ -86,10 +88,7 @@ class NetResponse:
             return pre
 
 
-
-
 HEADER_ONLY_CONTENT_JSON = {"Content-Type": "application/json"}
-
 
 
 def test_with_head(url: str) -> bool:
@@ -133,15 +132,17 @@ def is_internet_available() -> bool:
 
 
 def exec_get(
-        url: str,
-        headers: Mapping[str, str | bytes | None] | None = None,
-        sec_timeout: int | None = 10
+    url: str,
+    headers: Mapping[str, str | bytes | None] | None = None,
+    sec_timeout: int | None = 10,
 ) -> NetResponse:
     """Execute an HTTP GET request and return a standardized ``NetResponse``."""
 
     try:
         getattr(logger, "trace", logger.debug)("Executing GET request on URL: " + url)
-        response = requests.get(url, allow_redirects=True, headers=headers, timeout=sec_timeout)
+        response = requests.get(
+            url, allow_redirects=True, headers=headers, timeout=sec_timeout
+        )
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
@@ -155,16 +156,18 @@ def exec_get(
 
 
 def exec_post(
-        url: str,
-        payload,
-        headers: Mapping[str, str | bytes | None] | None = None,
-        verify_bool: bool = False,
+    url: str,
+    payload,
+    headers: Mapping[str, str | bytes | None] | None = None,
+    verify_bool: bool = False,
 ) -> NetResponse:
     """Execute an HTTP POST request and return a standardized ``NetResponse``."""
 
     try:
         getattr(logger, "trace", logger.debug)("Executing POST request on URL: " + url)
-        response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers)
+        response = requests.post(
+            url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers
+        )
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
@@ -188,7 +191,7 @@ def get_file_size_byte(url: str, exception_on_fail: bool = False) -> int:
     try:
         response = requests.head(url, timeout=5, allow_redirects=True)
         response.raise_for_status()
-        file_size = response.headers.get('content-length', 0)
+        file_size = response.headers.get("content-length", 0)
         if file_size is None:
             if exception_on_fail:
                 raise ValueError("Unable to get file size for url: " + url)

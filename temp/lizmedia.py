@@ -16,16 +16,18 @@ from pylizlib.media.domain.ai import AiPayloadMediaInfo
 
 
 class LizMedia:
-
     def __init__(self, path: str):
-
         # file info
         self.path = path
         self.file_name = os.path.basename(self.path)
         self.extension = os.path.splitext(path)[1].lower()
         self.creation_time = get_file_c_date(self.path)
         self.creation_time_timestamp: float = self.creation_time.timestamp()
-        self.year, self.month, self.day = self.creation_time.year, self.creation_time.month, self.creation_time.day
+        self.year, self.month, self.day = (
+            self.creation_time.year,
+            self.creation_time.month,
+            self.creation_time.day,
+        )
         self.size_byte = os.path.getsize(self.path)
         self.size_mb = self.size_byte / (1024 * 1024)
 
@@ -68,19 +70,22 @@ class LizMedia:
         except Exception as e:
             logger.error(f"Error checking for AI metadata with sdParser: {str(e)}")
 
-
     def get_desc_plus_text(self):
         if self.ai_ocr_text is not None and len(self.ai_ocr_text) > 0:
             text_array = []
             for text in self.ai_ocr_text:
                 text_array.append(text)
-            return self.ai_description + " This media includes texts: " + " ".join(text_array)
+            return (
+                self.ai_description
+                + " This media includes texts: "
+                + " ".join(text_array)
+            )
         return self.ai_description
 
     def get_video_duration_seconds(self) -> float:
         try:
             probe = ffmpeg.probe(self.path)
-            duration = float(probe['format']['duration'])
+            duration = float(probe["format"]["duration"])
             return duration
         except Exception as e:
             logger.error(f"Error getting video duration: {str(e)}")
@@ -139,7 +144,7 @@ class LizMedia:
                     if exif:
                         for tag, value in exif.items():
                             decoded = ExifTags.TAGS.get(tag, tag)
-                            if decoded == 'DateTimeOriginal':
+                            if decoded == "DateTimeOriginal":
                                 return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
             except Exception as e:
                 logger.error(f"Error reading EXIF data from {self.path}: {e}")

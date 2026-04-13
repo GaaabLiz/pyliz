@@ -6,7 +6,11 @@ from typing import Callable, Any
 from PySide6.QtCore import QRunnable, QObject, Signal
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode, get_step_progress_percentage
+from pylizlib.core.handler.progress import (
+    QueueProgress,
+    QueueProgressMode,
+    get_step_progress_percentage,
+)
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.handler.operation_domain import OperationStatus, OperationInfo
 
@@ -16,11 +20,7 @@ class Task(QObject):
     task_update_progress = Signal(str, int)
     task_update_message = Signal(str, str)
 
-    def __init__(
-            self,
-            name: str,
-            abort_all_on_error: bool = True,
-    ):
+    def __init__(self, name: str, abort_all_on_error: bool = True):
         super().__init__()
         self.id = gen_random_string(10)
         self.name = name
@@ -34,12 +34,12 @@ class Task(QObject):
         return None
 
     def update_task_status(self, status: OperationStatus):
-        logger.debug("Updating task \"%s\" status: %s", self.name, status)
+        logger.debug('Updating task "%s" status: %s', self.name, status)
         self.status = status
         self.task_update_status.emit(self.name, status)
 
     def update_task_progress(self, progress: int):
-        logger.debug("Updating task \"%s\" progress: %s", self.name, progress)
+        logger.debug('Updating task "%s" progress: %s', self.name, progress)
         self.progress = progress
         self.task_update_progress.emit(self.name, progress)
         if self.on_progress_changed:
@@ -67,12 +67,7 @@ class OperationSignals(QObject):
 
 
 class Operation(QRunnable):
-
-    def __init__(
-            self,
-            tasks: list[Task],
-            op_info: OperationInfo,
-    ):
+    def __init__(self, tasks: list[Task], op_info: OperationInfo):
         super().__init__()
         self.signals = OperationSignals()
         self.id = gen_random_string(10)
@@ -186,7 +181,9 @@ class Operation(QRunnable):
             self.time_elapsed = time.perf_counter() - self.time_started
             if self.progress > 0:
                 self.time_estimated_total = self.time_elapsed / (self.progress / 100)
-                self.time_estimated_remaining = max(0, self.time_estimated_total - self.time_elapsed)
+                self.time_estimated_remaining = max(
+                    0, self.time_estimated_total - self.time_elapsed
+                )
                 self.signals.op_eta_update.emit(self.id, self.get_eta_formatted())
         else:
             if self.time_started and self.time_finished:

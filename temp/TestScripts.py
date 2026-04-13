@@ -5,8 +5,6 @@ from pylizlib.core.os import ActionTest, ActionExecCli
 
 
 class TestScripts(unittest.TestCase):
-
-
     def test1(self):
         script = PylizScript("test1")
         a1 = ActionExecCli("C:\\", ["echo", "Hello World"], "C:\\test")

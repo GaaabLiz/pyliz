@@ -26,13 +26,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "bmp", "gif", "tiff", "tif"}
 _VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
-_DEFAULT_MODEL_DIR = os.getenv("PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Documents/models"))
+_DEFAULT_MODEL_DIR = os.getenv(
+    "PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Documents/models")
+)
 
 
 class BaseAiProvider(ABC):
     """
     Base class for AI-based media analysis providers.
     """
+
     tool: AiScanTool
 
     @abstractmethod
@@ -54,9 +57,15 @@ class JoyTagProvider(BaseAiProvider):
     Provider that uses the JoyTag model to predict tags for images and video frames.
     Requires optional AI dependencies (torch, torchvision).
     """
+
     tool = AiScanTool.TAGS
 
-    def __init__(self, model_dir: str | None = None, confidence_threshold: float = 0.45, video_sample_frames: int = 5):
+    def __init__(
+        self,
+        model_dir: str | None = None,
+        confidence_threshold: float = 0.45,
+        video_sample_frames: int = 5,
+    ):
         """
         Initializes the JoyTag provider.
 
@@ -93,11 +102,17 @@ class JoyTagProvider(BaseAiProvider):
         if media.is_image:
             with Image.open(media.path) as image_file:
                 image = image_file.convert("RGB")
-                predicted_tags.extend(self._predict_from_image(image, model, tag_list, device, tvf, torch))
+                predicted_tags.extend(
+                    self._predict_from_image(image, model, tag_list, device, tvf, torch)
+                )
         elif media.is_video:
-            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
+            for frame in sample_video_frames(
+                media.path, max_frames=self.video_sample_frames
+            ):
                 image = Image.fromarray(frame)
-                predicted_tags.extend(self._predict_from_image(image, model, tag_list, device, tvf, torch))
+                predicted_tags.extend(
+                    self._predict_from_image(image, model, tag_list, device, tvf, torch)
+                )
         else:
             return AiScanResult(tags=[])
 
@@ -126,10 +141,14 @@ class JoyTagProvider(BaseAiProvider):
                 "JoyTag scanning requires the optional AI dependencies. Install the 'ai' extra to enable TAGS scans."
             ) from exc
 
-        model_path = snapshot_download(repo_id="fancyfeast/joytag", cache_dir=self.model_dir)
+        model_path = snapshot_download(
+            repo_id="fancyfeast/joytag", cache_dir=self.model_dir
+        )
         py_file_path = os.path.join(model_path, "Models.py")
         if not os.path.exists(py_file_path):
-            url = "https://huggingface.co/spaces/fancyfeast/joytag/resolve/main/Models.py"
+            url = (
+                "https://huggingface.co/spaces/fancyfeast/joytag/resolve/main/Models.py"
+            )
             urllib.request.urlretrieve(url, py_file_path)
 
         spec = importlib.util.spec_from_file_location("joytag_module", py_file_path)
@@ -146,7 +165,9 @@ class JoyTagProvider(BaseAiProvider):
         else:
             device = torch.device("cpu")
 
-        with open(os.path.join(model_path, "top_tags.txt"), "r", encoding="utf-8") as handle:
+        with open(
+            os.path.join(model_path, "top_tags.txt"), "r", encoding="utf-8"
+        ) as handle:
             tag_list = [line.strip() for line in handle.readlines()]
 
         model = vision_model.load_model(model_path)
@@ -160,7 +181,15 @@ class JoyTagProvider(BaseAiProvider):
         self._torch = torch
         return self._model, self._tag_list, self._device, self._tvf, self._torch
 
-    def _predict_from_image(self, image, model, tag_list, device, tvf, torch) -> list[str]:
+    def _predict_from_image(
+        self,
+        image,
+        model,
+        tag_list,
+        device,
+        tvf,
+        torch,
+    ) -> list[str]:
         """
         Runs model inference on a single PIL Image.
 
@@ -209,17 +238,28 @@ class JoyTagProvider(BaseAiProvider):
                 preds = preds.squeeze(0)
             preds = torch.sigmoid(preds)
 
-        logger.debug(f"JoyTag inference completed in {round(time.time() - start_time, 2)}s for {len(tag_list)} tags.")
-        return [tag_list[i] for i, prediction in enumerate(preds) if prediction > self.confidence_threshold]
+        logger.debug( f"JoyTag inference completed in {round(time.time() - start_time, 2)}s for {len(tag_list)} tags."
+        )
+        return [
+            tag_list[i]
+            for i, prediction in enumerate(preds)
+            if prediction > self.confidence_threshold
+        ]
 
 
 class EasyOcrProvider(BaseAiProvider):
     """
     Provider that uses EasyOCR to extract text from images and video frames.
     """
+
     tool = AiScanTool.OCR
 
-    def __init__(self, model_dir: str | None = None, languages: list[str] | None = None, video_sample_frames: int = 5):
+    def __init__(
+        self,
+        model_dir: str | None = None,
+        languages: list[str] | None = None,
+        video_sample_frames: int = 5,
+    ):
         """
         Initializes the OCR provider.
 
@@ -249,13 +289,17 @@ class EasyOcrProvider(BaseAiProvider):
         if media.is_image:
             texts.extend(self._extract_texts(reader.readtext(str(media.path))))
         elif media.is_video:
-            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
+            for frame in sample_video_frames(
+                media.path, max_frames=self.video_sample_frames
+            ):
                 texts.extend(self._extract_texts(reader.readtext(frame)))
         else:
             return AiScanResult(ocr_text=[], ocr_detected=False)
 
         normalized_texts = unique_preserving_order(texts)
-        return AiScanResult(ocr_text=normalized_texts, ocr_detected=bool(normalized_texts))
+        return AiScanResult(
+            ocr_text=normalized_texts, ocr_detected=bool(normalized_texts)
+        )
 
     def _get_reader(self):
         """
@@ -310,6 +354,7 @@ class NudeNetProvider(BaseAiProvider):
     """
     Provider that uses NudeNet to detect NSFW content in images and video frames.
     """
+
     tool = AiScanTool.NSFW
 
     EXPLICIT_LABELS = {
@@ -347,7 +392,9 @@ class NudeNetProvider(BaseAiProvider):
         if media.is_image:
             return AiScanResult(nsfw=self._detect_image(detector, media.path))
         if media.is_video:
-            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
+            for frame in sample_video_frames(
+                media.path, max_frames=self.video_sample_frames
+            ):
                 if self._detect_frame(detector, frame):
                     return AiScanResult(nsfw=True)
             return AiScanResult(nsfw=False)
@@ -399,6 +446,3 @@ class NudeNetProvider(BaseAiProvider):
             if label in self.EXPLICIT_LABELS or label.endswith("_EXPOSED"):
                 return True
         return False
-
-
-

@@ -86,13 +86,18 @@ class ProgressHandler:
         tasks = []
         for task_id in tasks_ids:
             tasks.append(TaskProgress(task_id=task_id, task_progress=0))
-        self.operations.append(OperationProgress(
-            operation_id=id,
-            operation_progress=0,
-            operation_tasks=tasks
-        ))
+        self.operations.append(
+            OperationProgress(
+                operation_id=id, operation_progress=0, operation_tasks=tasks
+            )
+        )
 
-    def set_task_progress(self, operation_id: str, task_id: str, progress: int) -> None:
+    def set_task_progress(
+        self,
+        operation_id: str,
+        task_id: str,
+        progress: int,
+    ) -> None:
         """Set progress for a task in a specific operation."""
 
         for operation in self.operations:
@@ -103,7 +108,9 @@ class ProgressHandler:
     def get_master_progress(self) -> float:
         """Return average progress across all operations."""
 
-        total_progress = sum(operation.get_operation_progress() for operation in self.operations)
+        total_progress = sum(
+            operation.get_operation_progress() for operation in self.operations
+        )
         if self.operations:
             return total_progress / len(self.operations)
         else:
@@ -122,11 +129,11 @@ class QueueProgress:
     """Queue progress aggregator for step-based or single-item mode."""
 
     def __init__(
-            self,
-            mode: QueueProgressMode,
-            total_count: int = 0,
-            min_progress: int = 0,
-            max_progress: int = 100,
+        self,
+        mode: QueueProgressMode,
+        total_count: int = 0,
+        min_progress: int = 0,
+        max_progress: int = 100,
     ):
         """Initialize queue progress tracking."""
 
@@ -200,7 +207,6 @@ class QueueProgress:
                 for step in self.steps:
                     total_progress += step.progress
         return int((total_progress / self.total_inner_progress) * 100)
-
 
 
 def get_step_progress_percentage(step_attuale: int, step_totali: int) -> int:

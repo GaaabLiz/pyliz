@@ -2,8 +2,16 @@ from enum import Enum
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFileDialog, QWidget, QHBoxLayout
-from qfluentwidgets import qconfig, Dialog, ConfigItem, FluentIcon, PushButton, ExpandSettingCard, \
-    GroupHeaderCardWidget, BodyLabel
+from qfluentwidgets import (
+    qconfig,
+    Dialog,
+    ConfigItem,
+    FluentIcon,
+    PushButton,
+    ExpandSettingCard,
+    GroupHeaderCardWidget,
+    BodyLabel,
+)
 from qfluentwidgets.components.settings.folder_list_setting_card import FolderItem
 
 from pylizlib.qtfw.domain.sw import SoftwareData
@@ -12,7 +20,6 @@ from pylizlib.qtfw.widgets.input import LineEditMessageBox
 
 
 class MasterListSettingCard(ExpandSettingCard):
-
     class Type(Enum):
         FILE = 1
         FOLDER = 2
@@ -21,23 +28,23 @@ class MasterListSettingCard(ExpandSettingCard):
     item_changed = Signal(list)
 
     def __init__(
-            self,
-            config_item: ConfigItem,
-            item_type: Type,
-            card_title: str,
-            card_icon: FluentIcon,
-            card_content: str,
-            main_btn: PushButton,
-            dialog_title: str,
-            dialog_content: str = "",
-            dialog_directory="./",
-            dialog_button_yes: str = "Conferma",
-            dialog_button_no: str = "Annulla",
-            dialog_error: str = "Errore",
-            dialog_file_filter: str = "All Files (*.*)",
-            deletion_title: str = "Confirm Deletion",
-            deletion_content: str = "Are you sure you want to delete this item?",
-            parent: QWidget = None,
+        self,
+        config_item: ConfigItem,
+        item_type: Type,
+        card_title: str,
+        card_icon: FluentIcon,
+        card_content: str,
+        main_btn: PushButton,
+        dialog_title: str,
+        dialog_content: str = "",
+        dialog_directory="./",
+        dialog_button_yes: str = "Conferma",
+        dialog_button_no: str = "Annulla",
+        dialog_error: str = "Errore",
+        dialog_file_filter: str = "All Files (*.*)",
+        deletion_title: str = "Confirm Deletion",
+        deletion_content: str = "Are you sure you want to delete this item?",
+        parent: QWidget = None,
     ):
         super().__init__(card_icon, card_title, card_content, parent)
         self.configItem = config_item
@@ -60,7 +67,6 @@ class MasterListSettingCard(ExpandSettingCard):
         # Init widgets
         self.__initWidget()
 
-
     def __initWidget(self):
         self.addWidget(self.main_btn)
 
@@ -78,21 +84,34 @@ class MasterListSettingCard(ExpandSettingCard):
         match self.item_type:
             case self.Type.FOLDER:
                 folder = QFileDialog.getExistingDirectory(
-                    self, self.tr(self.dialog_title), self.dialog_directory)
+                    self, self.tr(self.dialog_title), self.dialog_directory
+                )
                 if not folder or folder in self.items:
                     return
                 self.__addItem(folder)
                 self.items.append(folder)
                 success = True
             case self.Type.FILE:
-                files, _ = QFileDialog.getOpenFileNames(self, self.tr(self.dialog_title), self.dialog_directory, self.dialog_file_filter)
+                files, _ = QFileDialog.getOpenFileNames(
+                    self,
+                    self.tr(self.dialog_title),
+                    self.dialog_directory,
+                    self.dialog_file_filter,
+                )
                 for file in files:
                     if file and file not in self.items:
                         self.items.append(file)
                         self.__addItem(file)
                         success = True
             case self.Type.TEXT:
-                box = LineEditMessageBox(self.dialog_title, self.dialog_content, self.dialog_button_yes, self.dialog_button_no, self.dialog_error, self.parent)
+                box = LineEditMessageBox(
+                    self.dialog_title,
+                    self.dialog_content,
+                    self.dialog_button_yes,
+                    self.dialog_button_no,
+                    self.dialog_error,
+                    self.parent,
+                )
                 if box.exec() == Dialog.DialogCode.Accepted:
                     text = box.line_edit.text()
                     if text and text not in self.items:
@@ -106,7 +125,7 @@ class MasterListSettingCard(ExpandSettingCard):
             self.item_changed.emit(self.items)
 
     def __showConfirmDialog(self, item: FolderItem | FileItem):
-        """ show confirm dialog """
+        """show confirm dialog"""
         w = Dialog(self.title_deletion, self.content_deletion, self.window())
         w.yesSignal.connect(lambda: self.__remove_item(item))
         w.exec_()
@@ -146,14 +165,12 @@ class MasterListSettingCard(ExpandSettingCard):
 
 
 class SoftwareListStatusGroupCard(GroupHeaderCardWidget):
-
     class SoftwareDataWidget(QWidget):
-
         def __init__(self, parent: QWidget, data: SoftwareData):
             super().__init__(parent)
             self.data = data
 
-            self.label_installed = BodyLabel( self)
+            self.label_installed = BodyLabel(self)
             self.label_running = BodyLabel(self)
             self.label_version = BodyLabel(self)
 
@@ -181,7 +198,7 @@ class SoftwareListStatusGroupCard(GroupHeaderCardWidget):
                 self.label_running.setText("🔴")
                 self.label_running.setToolTip("Non in esecuzione")
 
-    def __init__(self, title:str, parent=None):
+    def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setTitle(title)
         self.setBorderRadius(8)

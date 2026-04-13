@@ -43,9 +43,13 @@ class PyProjectToml:
 
         info = self.extract_info()
 
-        authors_repr = "[" + ", ".join(
-            f"({repr(name)}, {repr(email)})" for name, email in info["authors"]
-        ) + "]"
+        authors_repr = (
+            "["
+            + ", ".join(
+                f"({repr(name)}, {repr(email)})" for name, email in info["authors"]
+            )
+            + "]"
+        )
 
         lines = [
             f"name = {repr(info['name'])}",

@@ -2,7 +2,7 @@
 
 from typing import Sequence, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def contains_item(item: T, items: Sequence[T]) -> bool:

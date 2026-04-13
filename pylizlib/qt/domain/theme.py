@@ -14,12 +14,15 @@ class UiTheme:
     primary_color_dark: QColor | None = None
     primary_color: QColor | None = None
 
-
     def get_primary_color(self) -> QColor | None:
         if self.mode is None:
             return self.primary_color
         else:
-            return self.primary_color_light if self.mode == OsTheme.LIGHT else self.primary_color_dark
+            return (
+                self.primary_color_light
+                if self.mode == OsTheme.LIGHT
+                else self.primary_color_dark
+            )
 
 
 @dataclass

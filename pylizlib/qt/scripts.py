@@ -19,7 +19,7 @@ def exec_gen_qrc(qrc_path: Path, dir_list: list[Path]) -> None:
             for file in directory.rglob("*"):
                 if file.is_file():
                     relative_path = file.relative_to(directory.parent)
-                    f.write(f'    <file>{relative_path.as_posix()}</file>\n')
+                    f.write(f"    <file>{relative_path.as_posix()}</file>\n")
 
             f.write("  </qresource>\n")
 
@@ -34,33 +34,33 @@ def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesI
     # Inizializzazione del contenuto del file
     content = [
         f"class {main_class_name}:",
-        "    \"\"\"Class containing all application's resources.\"\"\""
+        '    """Class containing all application\'s resources."""',
     ]
 
     # Dizionario per tenere traccia delle risorse per prefix
     prefix_resources = {}
 
     # Elaborazione delle risorse
-    for qresource in root.findall('qresource'):
-        prefix = qresource.get('prefix', '')
+    for qresource in root.findall("qresource"):
+        prefix = qresource.get("prefix", "")
 
         # Inizializza la lista per questo prefix se non esiste
         if prefix not in prefix_resources:
             prefix_resources[prefix] = []
 
-        for file_elem in qresource.findall('file'):
+        for file_elem in qresource.findall("file"):
             file_path = file_elem.text
             resource_path = f":{prefix}/{file_path}"
 
             # Crea un nome di variabile adatto
             base_name = os.path.basename(file_path)
-            var_name = base_name.replace('.', '_').replace('-', '_').upper()
+            var_name = base_name.replace(".", "_").replace("-", "_").upper()
 
             # Semplifica il nome della variabile rimuovendo l'estensione
-            var_name = var_name.split('.')[0] if '.' in var_name else var_name
+            var_name = var_name.split(".")[0] if "." in var_name else var_name
 
             # Aggiungi la risorsa alla lista del prefix corrispondente
-            prefix_resources[prefix].append(f"        {var_name} = \"{resource_path}\"")
+            prefix_resources[prefix].append(f'        {var_name} = "{resource_path}"')
 
     # Genera classi per ogni prefix
     for prefix, resources in prefix_resources.items():
@@ -71,15 +71,15 @@ def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesI
             # Aggiungi la definizione della classe
             content.append("")
             content.append(f"    class {class_name}:")
-            content.append(f"        \"\"\"Resource with prefix '{prefix}'\"\"\"")
+            content.append(f'        """Resource with prefix \'{prefix}\'"""')
             content.append("")
 
             # Aggiungi tutte le risorse per questo prefix
             content.extend(resources)
 
     # Scrittura del file
-    with open(output_file_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(content))
+    with open(output_file_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(content))
 
     rich.print(f"Resources id python file generated in: {output_file_path}")
 

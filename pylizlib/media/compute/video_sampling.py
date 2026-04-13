@@ -43,7 +43,6 @@ def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any
         cap.release()
 
 
-
 def _build_frame_indices(*, total_frames: int, max_frames: int) -> list[int]:
     """
     Calculates frame indices that are evenly spaced across the video.
@@ -57,4 +56,3 @@ def _build_frame_indices(*, total_frames: int, max_frames: int) -> list[int]:
     if (total_frames - 1) not in indices:
         indices[-1] = total_frames - 1
     return indices
-

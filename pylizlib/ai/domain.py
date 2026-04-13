@@ -15,6 +15,7 @@ class AiScanTool(str, Enum):
     Enum representing the supported AI scan tool categories.
     Each category maps to a specialized provider.
     """
+
     TAGS = "TAGS"
     NSFW = "NSFW"
     OCR = "OCR"
@@ -39,7 +40,9 @@ class AiScanTool(str, Enum):
             return aliases[normalized]
         except KeyError as exc:
             allowed = ", ".join(tool.value for tool in cls)
-            raise ValueError(f"Unsupported AI scan tool '{value}'. Allowed values: {allowed}") from exc
+            raise ValueError(
+                f"Unsupported AI scan tool '{value}'. Allowed values: {allowed}"
+            ) from exc
 
     @classmethod
     def normalize_many(cls, values: list[str]) -> list["AiScanTool"]:
@@ -65,6 +68,7 @@ class AiScanResult:
     """
     Data container for AI scan extraction results across different tool categories.
     """
+
     tags: list[str] | None = None
     nsfw: bool | None = None
     ocr_text: list[str] | None = None
@@ -87,10 +91,10 @@ class AiToolScanner(Protocol):
     """
     Protocol definition for an AI analysis provider plugin.
     """
+
     tool: AiScanTool
 
-    def scan(self, media: "LizMedia") -> AiScanResult:
-        ...
+    def scan(self, media: "LizMedia") -> AiScanResult: ...
 
 
 class AiPayloadMediaInfo(BaseModel):
@@ -98,6 +102,7 @@ class AiPayloadMediaInfo(BaseModel):
     Standard schema for media metadata payloads (tags, description, text, nsfw status).
     Used for serialization and API communication.
     """
+
     model_config = ConfigDict(extra="ignore")
 
     description: str
@@ -109,5 +114,3 @@ class AiPayloadMediaInfo(BaseModel):
 
     def __str__(self):
         return f"Description: {self.description}, Tags: {self.tags}, Filename: {self.filename}, Text: {self.text}"
-
-

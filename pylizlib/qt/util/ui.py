@@ -1,7 +1,4 @@
-
-
 class UiUtils:
-
     @staticmethod
     def clear_layout(layout):
         while layout.count():

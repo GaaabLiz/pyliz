@@ -56,7 +56,7 @@ class FrameSelector(ABC):
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total_frames / fps
 
-        self.logger.trace(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
+        self.logger.trace( f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s" )
         return cap, fps, duration, total_frames
 
 
@@ -75,16 +75,24 @@ class DynamicFrameSelector(FrameSelector):
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         scene_changes = self._detect_scene_changes(video_path, cap)
-        target_frames = frame_options.calculate_dynamic_frame_count(duration, scene_changes)
+        target_frames = frame_options.calculate_dynamic_frame_count(
+            duration, scene_changes
+        )
 
         self.logger.trace(f"Target frames for analysis: {target_frames}")
         frames = self._extract_frames(cap, target_frames, scene_changes)
 
         cap.release()
-        self.logger.trace(f"Dynamic frame selection completed. Selected {len(frames)} frames")
+        self.logger.trace( f"Dynamic frame selection completed. Selected {len(frames)} frames"
+        )
         return frames
 
-    def _detect_scene_changes(self, video_path: str, cap: cv2.VideoCapture, threshold: float = 20.0) -> List[float]:
+    def _detect_scene_changes(
+        self,
+        video_path: str,
+        cap: cv2.VideoCapture,
+        threshold: float = 20.0,
+    ) -> List[float]:
         """
         Iterates through the video to identify timestamps where significant pixel
         differences occur between consecutive frames.
@@ -130,7 +138,12 @@ class DynamicFrameSelector(FrameSelector):
         diff = cv2.absdiff(gray1, gray2)
         return np.mean(diff)
 
-    def _extract_frames(self, cap: cv2.VideoCapture, target_frames: int, scene_changes: List[float]) -> List[Frame]:
+    def _extract_frames(
+        self,
+        cap: cv2.VideoCapture,
+        target_frames: int,
+        scene_changes: List[float],
+    ) -> List[Frame]:
         """
         Extracts specific frames from the video, ensuring scene changes are prioritized
         and gaps are filled to reach the target count.
@@ -138,11 +151,13 @@ class DynamicFrameSelector(FrameSelector):
         frames = []
         ret, first_frame = cap.read()
         if ret:
-            frames.append(Frame(
-                image=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB),
-                timestamp=0.0,
-                scene_type=SceneType.STATIC
-            ))
+            frames.append(
+                Frame(
+                    image=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB),
+                    timestamp=0.0,
+                    scene_type=SceneType.STATIC,
+                )
+            )
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         interval = total_frames // (target_frames - 1)
@@ -159,13 +174,12 @@ class DynamicFrameSelector(FrameSelector):
             is_scene_change = any(abs(sc - timestamp) < 0.1 for sc in scene_changes)
             scene_type = SceneType.TRANSITION if is_scene_change else SceneType.STATIC
 
-            frames.append(Frame(
-                image=frame_rgb,
-                timestamp=timestamp,
-                scene_type=scene_type
-            ))
+            frames.append(
+                Frame(image=frame_rgb, timestamp=timestamp, scene_type=scene_type)
+            )
 
         return frames
+
 
 class UniformFrameSelector(FrameSelector):
     """
@@ -185,10 +199,16 @@ class UniformFrameSelector(FrameSelector):
         frames = self._extract_uniform_frames(cap, target_frames, fps)
 
         cap.release()
-        self.logger.trace(f"Uniform frame selection completed. Selected {len(frames)} frames")
+        self.logger.trace( f"Uniform frame selection completed. Selected {len(frames)} frames"
+        )
         return frames
 
-    def _extract_uniform_frames(self, cap: cv2.VideoCapture, target_frames: int, fps: float) -> List[Frame]:
+    def _extract_uniform_frames(
+        self,
+        cap: cv2.VideoCapture,
+        target_frames: int,
+        fps: float,
+    ) -> List[Frame]:
         """
         Inner logic to jump to specific frame indices based on uniform spacing.
         """
@@ -210,13 +230,12 @@ class UniformFrameSelector(FrameSelector):
             timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            frames.append(Frame(
-                image=frame_rgb,
-                timestamp=timestamp,
-                scene_type=SceneType.STATIC
-            ))
+            frames.append(
+                Frame(image=frame_rgb, timestamp=timestamp, scene_type=SceneType.STATIC)
+            )
 
         return frames
+
 
 class AllFrameSelector(FrameSelector):
     """
@@ -233,7 +252,8 @@ class AllFrameSelector(FrameSelector):
 
         frames = self._extract_all_frames(cap, fps)
         cap.release()
-        self.logger.trace(f"All frame selection completed. Selected {len(frames)} frames")
+        self.logger.trace( f"All frame selection completed. Selected {len(frames)} frames"
+        )
         return frames
 
     def _extract_all_frames(self, cap: cv2.VideoCapture, fps: float) -> List[Frame]:
@@ -249,11 +269,13 @@ class AllFrameSelector(FrameSelector):
             timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            frames.append(Frame(
-                image=frame_rgb,
-                timestamp=timestamp,
-                scene_type=SceneType.STATIC  # Or determine dynamically if needed
-            ))
+            frames.append(
+                Frame(
+                    image=frame_rgb,
+                    timestamp=timestamp,
+                    scene_type=SceneType.STATIC,  # Or determine dynamically if needed
+                )
+            )
 
             frame_idx += 1
             if frame_idx % 100 == 0:

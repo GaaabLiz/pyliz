@@ -26,7 +26,9 @@ class SimpleProgressDialog(QDialog):
 
         # Imposta la modalità modale e rimuove il pulsante di chiusura dalla barra del titolo
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
 
         # Layout

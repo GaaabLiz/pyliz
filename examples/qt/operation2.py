@@ -9,8 +9,6 @@ from pylizlib.qt.handler.operation_runner import OperationRunner
 
 
 class OperationExampleWindow(QMainWindow):
-
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Test Main Window")
@@ -58,11 +56,10 @@ class OperationExampleWindow(QMainWindow):
         runner.task_update_progress.connect(self.on_task_progress_update)
         runner.op_finished.connect(self.on_operation_finished)
 
-
         op_info = OperationInfo("Test Operation", "Test operation description")
         op_tasks = [
             OperationDevDebug.TaskTemplate2("Task1"),
-            OperationDevDebug.TaskTemplate2("Task2")
+            OperationDevDebug.TaskTemplate2("Task2"),
         ]
         op = Operation(op_tasks, op_info)
         runner.add(op)
@@ -72,8 +69,7 @@ class OperationExampleWindow(QMainWindow):
         pass
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = OperationExampleWindow()
     window.show()

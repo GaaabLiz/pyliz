@@ -72,16 +72,16 @@ def check_path_dir(path):
     """
     # Check if the path exists and is readable
     if not os.path.exists(path):
-        raise IOError(f'Path {path} does not exist!')
+        raise IOError(f"Path {path} does not exist!")
     if not os.access(path, os.R_OK):
-        raise PermissionError(f'Path {path} is not readable!')
+        raise PermissionError(f"Path {path} is not readable!")
     if not os.access(path, os.W_OK):
-        raise PermissionError(f'Path {path} is not writable!')
+        raise PermissionError(f"Path {path} is not writable!")
     # Check if the path is a directory
     if not os.path.isdir(path):
-        raise NotADirectoryError(f'Path {path} is not a directory!')
+        raise NotADirectoryError(f"Path {path} is not a directory!")
     if not os.access(path, os.W_OK):
-        raise PermissionError(f'Path {path} is not writable!')
+        raise PermissionError(f"Path {path} is not writable!")
 
 
 def check_path_file(path: str):
@@ -242,10 +242,7 @@ def dir_contains(directory: str, names: list[str], at_least_one: bool = False) -
     return found == len(names)
 
 
-def get_folders_from(
-        directory,
-        recursive: bool = False
-) -> list[ LiteralString | str | bytes]:
+def get_folders_from(directory, recursive: bool = False) -> list[LiteralString | str | bytes]:
     """
     Get a list of folders paths from a path
     :param directory: path to get the folders from
@@ -253,15 +250,21 @@ def get_folders_from(
     :return: list of folders paths from the path
     """
     if recursive:
-        return [os.path.join(root, d) for root, dirs, files in os.walk(directory) for d in dirs]
-    return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
+        return [
+            os.path.join(root, d)
+            for root, dirs, files in os.walk(directory)
+            for d in dirs
+        ]
+    return [
+        d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))
+    ]
 
 
 def get_files_from(
-        directory,
-        recursive:bool = False,
-        extension: Optional[str] = None
-) -> list[ LiteralString | str | bytes]:
+    directory,
+    recursive: bool = False,
+    extension: Optional[str] = None,
+) -> list[LiteralString | str | bytes]:
     """
     Get a list of file paths from a path
     :param directory: path to get the files from
@@ -275,7 +278,11 @@ def get_files_from(
             for file in files:
                 db.append(os.path.join(root, file))
     else:
-        db = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+        db = [
+            f
+            for f in os.listdir(directory)
+            if os.path.isfile(os.path.join(directory, f))
+        ]
     if extension is not None:
         return [f for f in db if f.endswith(extension)]
     return db
@@ -361,9 +368,9 @@ def count_items(dir_path: Path) -> int:
 
 
 def duplicate_directory(
-        src_dir: Path,
-        dest_dir: Path | None = None,
-        copy_suffix: str = "_copy"
+    src_dir: Path,
+    dest_dir: Path | None = None,
+    copy_suffix: str = "_copy",
 ) -> Path:
     """
     Duplica la directory src_dir in dest_dir e ritorna il Path della copia.
@@ -406,7 +413,6 @@ def duplicate_directory(
 
 
 class PathMatcher:
-
     def __init__(self):
         self.working_path_items_rel = None
         self.working_path_items = None
@@ -415,7 +421,9 @@ class PathMatcher:
     def load_path(self, path: Path, recursive: bool = False):
         self.working_path = path
         self.working_path_items = get_path_items(path, recursive)
-        self.working_path_items_rel = [str(p.relative_to(self.working_path)) for p in self.working_path_items]
+        self.working_path_items_rel = [
+            str(p.relative_to(self.working_path)) for p in self.working_path_items
+        ]
 
     def match_with_list(self, path_str_list: list[str]):
         set1, set2 = set(self.working_path_items_rel), set(path_str_list)
@@ -437,6 +445,3 @@ class PathMatcher:
         logger.trace(f"Working path: {self.working_path}")
         for item in self.working_path_items_rel:
             print(item)
-
-
-

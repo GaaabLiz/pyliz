@@ -3,13 +3,14 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel
 from PySide6.QtCore import Qt
 from qfluentwidgets import MessageBoxBase, SubtitleLabel, CaptionLabel
 
+
 class AboutMessageBox(MessageBoxBase):
     def __init__(
-            self,
-            icon: QIcon,
-            app_name: str,
-            app_version: str,
-            parent=None
+        self,
+        icon: QIcon,
+        app_name: str,
+        app_version: str,
+        parent=None,
     ):
         super().__init__(parent)
 

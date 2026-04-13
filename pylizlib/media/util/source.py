@@ -49,9 +49,13 @@ def resolve_media_source(
 
     payload, mime_type = _split_data_uri(base64_content or "")
     raw_bytes = _decode_base64(payload)
-    suffix = _resolve_suffix(raw_bytes=raw_bytes, file_name=file_name, mime_type=mime_type)
+    suffix = _resolve_suffix(
+        raw_bytes=raw_bytes, file_name=file_name, mime_type=mime_type
+    )
     temp_path = _write_temp_file(raw_bytes, suffix=suffix)
-    return ResolvedMediaSource(path=temp_path, base64_content=base64_content, is_temporary=True)
+    return ResolvedMediaSource(
+        path=temp_path, base64_content=base64_content, is_temporary=True
+    )
 
 
 def _split_data_uri(value: str) -> tuple[str, str | None]:
@@ -134,5 +138,3 @@ def _write_temp_file(raw_bytes: bytes, *, suffix: str) -> Path:
     with os.fdopen(fd, "wb") as handle:
         handle.write(raw_bytes)
     return Path(temp_path)
-
-

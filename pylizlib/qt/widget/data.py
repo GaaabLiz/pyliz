@@ -2,7 +2,6 @@ from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QFileDialog, 
 
 
 class PathLineSelector(QWidget):
-
     def __init__(self, parent=None, select_file=False):
         super().__init__(parent)
 
@@ -36,4 +35,3 @@ class PathLineSelector(QWidget):
 
     def get_text_changed(self):
         return self.line_edit.textChanged
-

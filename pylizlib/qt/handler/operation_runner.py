@@ -10,7 +10,6 @@ from pylizlib.qt.handler.operation_domain import OperationStatus
 
 
 class RunnerStatistics:
-
     def __init__(self, operations: list[Operation]):
         self.operations = operations
         self.total_operations = len(operations)
@@ -61,12 +60,11 @@ class OperationRunner(QObject):
     task_failed = Signal(str, str)
     task_finished = Signal(str)
 
-
     def __init__(
-            self,
-            max_threads: int = 1,
-            on_runner_finished: Callable | None = None,
-            abort_all_on_error: bool = False,
+        self,
+        max_threads: int = 1,
+        on_runner_finished: Callable | None = None,
+        abort_all_on_error: bool = False,
     ):
         super().__init__()
         self.max_threads = max_threads
@@ -114,7 +112,9 @@ class OperationRunner(QObject):
 
     def start(self):
         self.runner_start.emit()
-        self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
+        self.progress_obj = QueueProgress(
+            QueueProgressMode.SINGLE, len(self.operation_pool)
+        )
         for op in self.operation_pool:
             self.progress_obj.add_single(op.id)
         for _ in self.operation_pool:

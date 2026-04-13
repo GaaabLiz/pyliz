@@ -19,21 +19,23 @@ from pylizlib.media.util.metadata import MetadataHandler
 from pylizlib.media.util.video import VideoUtils
 
 # Suppress exifread logging
-logging.getLogger('exifread').setLevel(logging.CRITICAL)
+logging.getLogger("exifread").setLevel(logging.CRITICAL)
 
 
 class MediaStatus(str, Enum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
 
+
 # Global counter for LizMediaSearchResult index
 _search_result_counter = count(1)
+
 
 @dataclass
 class LizMediaSearchResult:
     status: MediaStatus
     path: Path
-    media: Optional['LizMedia'] = None
+    media: Optional["LizMedia"] = None
     reason: str = ""
     index: int = field(default_factory=lambda: next(_search_result_counter), init=False)
 
@@ -57,6 +59,7 @@ class MediaListResult:
         rejected (List[LizMediaSearchResult]): Media files that were identified but rejected for various reasons.
         errored (List[LizMediaSearchResult]): Media files that encountered errors during processing.
     """
+
     accepted: List[LizMediaSearchResult] = field(default_factory=list)
     rejected: List[LizMediaSearchResult] = field(default_factory=list)
     errored: List[LizMediaSearchResult] = field(default_factory=list)
@@ -84,6 +87,7 @@ class LizMedia:
         eagle_metadata_path (Path | None): Optional path to an associated Eagle metadata file.
         eagle_metadata (Metadata | None): Optional loaded Eagle metadata object.
     """
+
     path: Path
     eagle_metadata_path: Path | None = None
     eagle_metadata: Any | None = None
@@ -282,18 +286,24 @@ class LizMedia:
         # 1. Try EXIF (Standard Python library)
         if self.is_image:
             try:
-                with open(self.path, 'rb') as f:
+                with open(self.path, "rb") as f:
                     tags = exifread.process_file(f, details=False)
                     # Try common creation date tags
-                    for tag_key in ['EXIF DateTimeOriginal', 'Image DateTime', 'EXIF DateTimeDigitized']:
+                    for tag_key in [
+                        "EXIF DateTimeOriginal",
+                        "Image DateTime",
+                        "EXIF DateTimeDigitized",
+                    ]:
                         if tag_key in tags:
                             try:
-                                return datetime.strptime(str(tags[tag_key]), "%Y:%m:%d %H:%M:%S")
+                                return datetime.strptime(
+                                    str(tags[tag_key]), "%Y:%m:%d %H:%M:%S"
+                                )
                             except ValueError:
                                 continue
             except Exception:
                 pass
-            
+
             # 1b. Robust Exiftool Fallback for Images
             handler = MetadataHandler(self.path)
             exiftool_date = handler.get_image_creation_date()
@@ -325,15 +335,16 @@ class LizMedia:
 
         try:
             import re
-            with open(xmp_path, 'r', encoding='utf-8') as f:
+
+            with open(xmp_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 # Simple regex search for photoshop:DateCreated
                 # Format is typically ISO 8601: YYYY-MM-DDThh:mm:ss
-                match = re.search(r'photoshop:DateCreated>([^<]+)<', content)
+                match = re.search(r"photoshop:DateCreated>([^<]+)<", content)
                 if not match:
                     # Try attribute style
                     match = re.search(r'photoshop:DateCreated="([^"]+)"', content)
-                
+
                 if match:
                     date_str = match.group(1)
                     # Handle potential timezone offsets or variations
@@ -347,7 +358,7 @@ class LizMedia:
                         pass
         except Exception as e:
             logger.warning(f"Error reading XMP date from {xmp_path}: {e}")
-        
+
         return None
 
     @property
@@ -360,7 +371,7 @@ class LizMedia:
         """
         if self.is_image:
             try:
-                with open(self.path, 'rb') as f:
+                with open(self.path, "rb") as f:
                     tags = exifread.process_file(f, details=False)
                     return bool(tags)
             except Exception:
@@ -393,7 +404,11 @@ class LizMedia:
         if self.ai_description is None:
             return None
         if self.ai_ocr_text:
-            return self.ai_description + " This media includes texts: " + " ".join(self.ai_ocr_text)
+            return (
+                self.ai_description
+                + " This media includes texts: "
+                + " ".join(self.ai_ocr_text)
+            )
         return self.ai_description
 
     @staticmethod
@@ -485,7 +500,9 @@ class LizMedia:
             "file_name": self._safe_json_value(lambda: self.file_name),
             "extension": self._safe_json_value(lambda: self.extension),
             "creation_time": self._safe_json_value(lambda: self.creation_time),
-            "creation_time_timestamp": self._safe_json_value(lambda: self.creation_time_timestamp),
+            "creation_time_timestamp": self._safe_json_value(
+                lambda: self.creation_time_timestamp
+            ),
             "creation_date_from_exif_or_file_or_sidecar": self._safe_json_value(
                 lambda: self.creation_date_from_exif_or_file_or_sidecar
             ),
@@ -501,15 +518,27 @@ class LizMedia:
             "stable_diffusion_metadata": self._safe_json_value(
                 lambda: self.stable_diffusion_metadata,
                 default=None,
-            ) if is_image else None,
-            "has_exif_data": self._safe_json_value(lambda: self.has_exif_data, default=None) if is_image else None,
-            "ai_generated": self._safe_json_value(lambda: self.ai_generated, default=None) if is_image else None,
+            )
+            if is_image
+            else None,
+            "has_exif_data": self._safe_json_value(
+                lambda: self.has_exif_data, default=None
+            )
+            if is_image
+            else None,
+            "ai_generated": self._safe_json_value(
+                lambda: self.ai_generated, default=None
+            )
+            if is_image
+            else None,
             "duration_sec": self._safe_json_value(lambda: self.duration_sec),
             "duration_min": self._safe_json_value(lambda: self.duration_min),
             "frame_rate": self._safe_json_value(lambda: self.frame_rate),
             "eagle_metadata_path": self._serialize_json_value(self.eagle_metadata_path),
             "eagle_metadata": self._serialize_json_value(self.eagle_metadata),
-            "attached_sidecar_files": self._serialize_json_value(self.attached_sidecar_files),
+            "attached_sidecar_files": self._serialize_json_value(
+                self.attached_sidecar_files
+            ),
             "has_xmp_sidecar": self._safe_json_value(lambda: self.has_xmp_sidecar()),
             "has_aae_sidecar": self._safe_json_value(lambda: self.has_aae_sidecar()),
             "xmp_sidecar": self._safe_json_value(lambda: self.get_xmp_sidecar()),
@@ -518,7 +547,9 @@ class LizMedia:
             "ai_has_ocr_text": self._serialize_json_value(self.ai_has_ocr_text),
             "ai_file_name": self._serialize_json_value(self.ai_file_name),
             "ai_description": self._serialize_json_value(self.ai_description),
-            "ai_desc_plus_text": self._safe_json_value(lambda: self.get_desc_plus_text()),
+            "ai_desc_plus_text": self._safe_json_value(
+                lambda: self.get_desc_plus_text()
+            ),
             "ai_tags": self._serialize_json_value(self.ai_tags),
             "ai_scanned": self._serialize_json_value(self.ai_scanned),
             "ai_nsfw": self._serialize_json_value(self.ai_nsfw),
@@ -582,14 +613,14 @@ class LizMedia:
         self.ai_nsfw = getattr(ai_info, "nsfw", None)
 
     def apply_ai_scan_result(
-            self,
-            *,
-            tags: Optional[List[str]] = None,
-            nsfw: Optional[bool] = None,
-            ocr_text: Optional[List[str]] = None,
-            has_ocr_text: Optional[bool] = None,
-            description: Optional[str] = None,
-            file_name: Optional[str] = None,
+        self,
+        *,
+        tags: Optional[List[str]] = None,
+        nsfw: Optional[bool] = None,
+        ocr_text: Optional[List[str]] = None,
+        has_ocr_text: Optional[bool] = None,
+        description: Optional[str] = None,
+        file_name: Optional[str] = None,
     ):
         """
         Applies normalized AI scan results to this media instance.
@@ -621,7 +652,13 @@ class LizMedia:
 
         self.ai_scanned = any(
             value is not None
-            for value in [self.ai_tags, self.ai_nsfw, self.ai_ocr_text, self.ai_has_ocr_text, self.ai_description]
+            for value in [
+                self.ai_tags,
+                self.ai_nsfw,
+                self.ai_ocr_text,
+                self.ai_has_ocr_text,
+                self.ai_description,
+            ]
         )
 
     # ---- VIDEO FILE INFO
@@ -718,7 +755,7 @@ class LizMedia:
             True if at least one .xmp sidecar is found.
         """
         for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == '.xmp':
+            if sidecar.suffix.lower() == ".xmp":
                 return True
         return False
 
@@ -730,7 +767,7 @@ class LizMedia:
             True if at least one .aae sidecar is found.
         """
         for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == '.aae':
+            if sidecar.suffix.lower() == ".aae":
                 return True
         return False
 
@@ -742,6 +779,6 @@ class LizMedia:
             Path to the XMP sidecar, or None if none are found.
         """
         for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == '.xmp':
+            if sidecar.suffix.lower() == ".xmp":
                 return sidecar
         return None

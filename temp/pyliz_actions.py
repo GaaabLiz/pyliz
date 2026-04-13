@@ -10,14 +10,13 @@ from pylizlib.core.os.utils import is_command_available
 
 
 class ActionGitClone(PylizBaseAction, ABC):
-
     def __init__(
-            self,
-            repo: str,
-            install_dir: str,
-            ignore_if_exists: bool = True,
-            logs_dir: str | None = None,
-            on_log: Callable[[str], None] = lambda x: None
+        self,
+        repo: str,
+        install_dir: str,
+        ignore_if_exists: bool = True,
+        logs_dir: str | None = None,
+        on_log: Callable[[str], None] = lambda x: None,
     ):
         super().__init__()
         self.repo = repo
@@ -42,7 +41,6 @@ class ActionGitClone(PylizBaseAction, ABC):
 
 
 class ActionCommandAvailable(PylizBaseAction, ABC):
-
     def __init__(self, command: str):
         super().__init__()
         self.command = command
@@ -57,12 +55,9 @@ class ActionCommandAvailable(PylizBaseAction, ABC):
 
 
 class ActionTest(PylizBaseAction, ABC):
-
-
     def __init__(self, param1: str):
         super().__init__()
         self.param1 = param1
-
 
     def run(self):
         print("test " + self.param1)
@@ -72,13 +67,12 @@ class ActionTest(PylizBaseAction, ABC):
 
 
 class ActionExecCli(PylizBaseAction, ABC):
-
-    def __init__(self,
-                 path: str,
-                 commands: list[str],
-                 path_logs: str | None = None,
-                 on_log: Callable[[str], None] = lambda x: None,
-
+    def __init__(
+        self,
+        path: str,
+        commands: list[str],
+        path_logs: str | None = None,
+        on_log: Callable[[str], None] = lambda x: None,
     ):
         super().__init__()
         self.commands = commands
@@ -90,7 +84,14 @@ class ActionExecCli(PylizBaseAction, ABC):
         if not os.path.isdir(self.path_install):
             raise ValueError(f"Invalid path_install: {self.path_install}")
         self.on_log("Executing: " + self.commands[0])
-        output = subprocess.run(self.commands, check=True, cwd=self.path_install, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output = subprocess.run(
+            self.commands,
+            check=True,
+            cwd=self.path_install,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         self.on_log("Done.")
         self.__save_output(output, self.commands[0])
 

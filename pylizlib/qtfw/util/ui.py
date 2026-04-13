@@ -2,12 +2,18 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from qfluentwidgets import setFont, TransparentDropDownPushButton, DropDownPushButton, RoundMenu, \
-    Dialog, FluentIcon, Action
+from qfluentwidgets import (
+    setFont,
+    TransparentDropDownPushButton,
+    DropDownPushButton,
+    RoundMenu,
+    Dialog,
+    FluentIcon,
+    Action,
+)
 
 
 class UiUtils:
-
     @staticmethod
     def show_message(title, text: str, parent=None):
         w = Dialog(title, text, parent)
@@ -17,19 +23,21 @@ class UiUtils:
 
     @staticmethod
     def create_widget_act_bar_btn(
-            parent: Any,
-            data: list[str] | list[Path],
-            btn_name: str,
-            icon: FluentIcon,
-            is_trasparent: bool = True,
-            clicked_signal=None,
-            icon_action: FluentIcon | None = None
+        parent: Any,
+        data: list[str] | list[Path],
+        btn_name: str,
+        icon: FluentIcon,
+        is_trasparent: bool = True,
+        clicked_signal=None,
+        icon_action: FluentIcon | None = None,
     ):
         actions: list[Action] = []
         for action_text in data:
             if isinstance(action_text, Path):
                 action_text = action_text.__str__()
-            act = Action(icon if icon_action is None else icon_action, action_text, parent)
+            act = Action(
+                icon if icon_action is None else icon_action, action_text, parent
+            )
             if clicked_signal is not None:
                 act.triggered.connect(partial(clicked_signal.emit, action_text))
             actions.append(act)

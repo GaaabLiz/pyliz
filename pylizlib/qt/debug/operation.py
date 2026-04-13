@@ -16,8 +16,6 @@ class DevDebugData:
 
 
 class OperationDevDebug(Operation):
-
-
     # class TaskTemplate(Task):
     #
     #     def __init__(self, name: str, on_task_progress_changed: Callable):
@@ -34,9 +32,7 @@ class OperationDevDebug(Operation):
     #             time.sleep(sleep)
     #         return self.steps
 
-
     class TaskTemplate2(Task):
-
         def __init__(self, name: str):
             super().__init__(name)
             self.data = DevDebugData()
@@ -51,20 +47,18 @@ class OperationDevDebug(Operation):
                 time.sleep(sleep)
             return self.steps
 
-
-    def __init__(
-            self,
-    ):
+    def __init__(self):
         tasks = [
-            self.TaskTemplate2("Task1", ),
-            self.TaskTemplate2("Task2")
+            self.TaskTemplate2(
+                "Task1",
+            ),
+            self.TaskTemplate2("Task2"),
         ]
         info = OperationInfo(
             name="Dev Debug",
             description="Dev Debug operation",
         )
         super().__init__(tasks, info)
-
 
     def run(self, /):
         self.execute()

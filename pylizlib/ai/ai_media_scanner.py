@@ -22,7 +22,11 @@ class AiMediaScanner:
             providers: Optional list of AiToolScanner implementations.
                       If None, defaults to JoyTagProvider, NudeNetProvider, and EasyOcrProvider.
         """
-        active_providers = providers if providers is not None else [JoyTagProvider(), NudeNetProvider(), EasyOcrProvider()]
+        active_providers = (
+            providers
+            if providers is not None
+            else [JoyTagProvider(), NudeNetProvider(), EasyOcrProvider()]
+        )
         self._providers = {provider.tool: provider for provider in active_providers}
 
     def scan(
@@ -50,7 +54,9 @@ class AiMediaScanner:
             FileNotFoundError: If the provided media_path does not exist.
         """
         normalized_tools = AiScanTool.normalize_many(tools)
-        source = resolve_media_source(media_path=media_path, base64_content=base64_content, file_name=file_name)
+        source = resolve_media_source(
+            media_path=media_path, base64_content=base64_content, file_name=file_name
+        )
 
         try:
             media = LizMedia(source.path)
@@ -60,7 +66,9 @@ class AiMediaScanner:
             for tool in normalized_tools:
                 provider = self._providers.get(tool)
                 if provider is None:
-                    raise ValueError(f"No provider configured for AI scan tool '{tool.value}'.")
+                    raise ValueError(
+                        f"No provider configured for AI scan tool '{tool.value}'."
+                    )
                 aggregate.merge(provider.scan(media))
 
             media.apply_ai_scan_result(
@@ -93,5 +101,3 @@ class AiMediaScanner:
             base64_content=base64_content,
             file_name=file_name,
         )
-
-

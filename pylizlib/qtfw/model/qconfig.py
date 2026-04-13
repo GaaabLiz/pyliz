@@ -4,7 +4,6 @@ from pathlib import Path
 from qfluentwidgets import ConfigValidator
 
 
-
 class ExecutableValidator(ConfigValidator):
     """Executable file validator"""
 
@@ -20,6 +19,7 @@ class ExecutableValidator(ConfigValidator):
             return value
         # Ritorna il percorso assoluto con slashes forward
         return str(path.resolve()).replace("\\", "/")
+
 
 class TextListValidator(ConfigValidator):
     """Text list validator - check non-empty strings"""
@@ -40,8 +40,11 @@ def count_elements_in_settings_keys(data, key, group=None):
 
     for grp in groups_to_check:
         group_data = data.get(grp, {})
-        if isinstance(group_data, dict) and key in group_data and isinstance(group_data[key], list):
+        if (
+            isinstance(group_data, dict)
+            and key in group_data
+            and isinstance(group_data[key], list)
+        ):
             total_count += len(group_data[key])
 
     return total_count
-

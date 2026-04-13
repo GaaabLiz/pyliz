@@ -2,7 +2,13 @@ import logging
 import sys
 from typing import Any
 
-from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QPushButton
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QApplication,
+    QWidget,
+    QVBoxLayout,
+    QPushButton,
+)
 
 from pylizlib.qt.handler.operation_core import Operation
 from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
@@ -15,15 +21,13 @@ logging.basicConfig(
     handlers=[
         logging.StreamHandler(),  # stampa su stdout
         # logging.FileHandler("app.log")  # se vuoi anche scrivere su file
-    ]
+    ],
 )
 
 logger = logging.getLogger(__name__)
 
 
 class OperationExampleWindow(QMainWindow):
-
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Test Main Window")
@@ -53,7 +57,7 @@ class OperationExampleWindow(QMainWindow):
         op_info = OperationInfo("Test Operation", "Test operation description")
         op_tasks = [
             OperationDevDebug.TaskTemplate2("Task1"),
-            OperationDevDebug.TaskTemplate2("Task2")
+            OperationDevDebug.TaskTemplate2("Task2"),
         ]
         op = Operation(op_tasks, op_info, self.interaction)
         runner.add(op)
@@ -64,7 +68,6 @@ class OperationExampleWindow(QMainWindow):
 
 
 class OperationExampleInteraction(RunnerInteraction):
-
     def on_runner_start(self):
         logger.info("Runner started")
 
@@ -78,8 +81,7 @@ class OperationExampleInteraction(RunnerInteraction):
             logger.info(f"Risultato del task {i}: {result}")
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = OperationExampleWindow()
     window.show()

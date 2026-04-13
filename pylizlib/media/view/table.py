@@ -13,6 +13,7 @@ class MediaListResultPrinter:
     visually appealing table format using the Rich library.
     Handles distinct tables for accepted, rejected, and errored files.
     """
+
     def __init__(self, result: MediaListResult):
         """
         Initializes the printer with a MediaListResult container.
@@ -39,7 +40,7 @@ class MediaListResultPrinter:
             items=self._result.accepted,
             sort_index=sort_index,
             extra_columns=[("Sidecars", "white", None)],
-            table_type="accepted"
+            table_type="accepted",
         )
 
     def print_rejected(self, sort_index: int = 0):
@@ -58,7 +59,7 @@ class MediaListResultPrinter:
             items=self._result.rejected,
             sort_index=sort_index,
             extra_columns=[("Reason", "white", None)],
-            table_type="rejected"
+            table_type="rejected",
         )
 
     def print_errored(self, sort_index: int = 0):
@@ -77,16 +78,16 @@ class MediaListResultPrinter:
             items=self._result.errored,
             sort_index=sort_index,
             extra_columns=[("Reason", "white", None)],
-            table_type="errored"
+            table_type="errored",
         )
 
     def _print_generic_table(
-            self, 
-            title: str, 
-            items: List[LizMediaSearchResult], 
-            sort_index: int, 
-            extra_columns: List[tuple], 
-            table_type: str = "accepted"
+        self,
+        title: str,
+        items: List[LizMediaSearchResult],
+        sort_index: int,
+        extra_columns: List[tuple],
+        table_type: str = "accepted",
     ):
         """
         Internal implementation for rendering a Rich Table.
@@ -101,14 +102,14 @@ class MediaListResultPrinter:
             ("Ext", "yellow", "center"),
             ("Size (MB)", "green", "right"),
         ]
-        
+
         all_columns = base_columns + extra_columns
-        
+
         # Sort items using the shared logic
         sorted_items = self._sort_result_list(items, sort_index)
 
         table = Table(title=title)
-        
+
         # Add columns with sorting indicator
         for idx, (name, style, justify) in enumerate(all_columns):
             header = f"{name}{' *' if sort_index == idx else ''}"
@@ -119,21 +120,25 @@ class MediaListResultPrinter:
                 kwargs["justify"] = justify
             if name == "Filename" or name == "Path":
                 kwargs["no_wrap"] = True
-            
+
             table.add_column(header, **kwargs)
 
         # Add rows
         for item in sorted_items:
             row = self._extract_common_row_data(item)
-            
+
             # Append extra data based on table type
             if table_type == "accepted":
-                sidecars = item.media.attached_sidecar_files if item.media and item.media.attached_sidecar_files else []
+                sidecars = (
+                    item.media.attached_sidecar_files
+                    if item.media and item.media.attached_sidecar_files
+                    else []
+                )
                 sidecars_str = ", ".join([s.name for s in sidecars])
                 row.append(sidecars_str)
-            else: # rejected or errored
+            else:  # rejected or errored
                 row.append(item.reason)
-                
+
             table.add_row(*row)
 
         self._console.print(table)
@@ -143,7 +148,9 @@ class MediaListResultPrinter:
         media = item.media
         if media:
             filename = media.file_name
-            creation_date = media.creation_date_from_exif_or_file_or_sidecar.strftime("%Y-%m-%d %H:%M:%S")
+            creation_date = media.creation_date_from_exif_or_file_or_sidecar.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             has_exif = "Yes" if media.has_exif_data else "No"
             ext = media.extension
             size_mb = f"{media.size_mb:.2f}"
@@ -153,40 +160,51 @@ class MediaListResultPrinter:
             has_exif = "N/A"
             ext = item.path.suffix.lower()
             size_mb = "N/A"
-            
-        return [
-            str(item.index),
-            filename,
-            creation_date,
-            has_exif,
-            ext,
-            size_mb
-        ]
 
-    def _sort_result_list(self, results: List[LizMediaSearchResult], sort_index: int) -> List[LizMediaSearchResult]:
+        return [str(item.index), filename, creation_date, has_exif, ext, size_mb]
+
+    def _sort_result_list(
+        self,
+        results: List[LizMediaSearchResult],
+        sort_index: int,
+    ) -> List[LizMediaSearchResult]:
         """
         Unified sorting logic based on the 6 shared columns + 1 extra.
         Indices: 0=Index, 1=Filename, 2=Date, 3=Exif, 4=Ext, 5=Size, 6=Extra (Sidecars/Reason)
         """
-        if sort_index == 0: # Index
+        if sort_index == 0:  # Index
             return sorted(results, key=lambda x: x.index)
-        elif sort_index == 1: # Filename
-            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
-        elif sort_index == 2: # Date
-            return sorted(results, key=lambda x: x.media.creation_date_from_exif_or_file_or_sidecar if x.media else datetime.min)
-        elif sort_index == 3: # Exif
-            return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
-        elif sort_index == 4: # Ext
-            return sorted(results, key=lambda x: x.media.extension if x.media else x.path.suffix.lower())
-        elif sort_index == 5: # Size
+        elif sort_index == 1:  # Filename
+            return sorted(
+                results, key=lambda x: x.media.file_name if x.media else x.path.name
+            )
+        elif sort_index == 2:  # Date
+            return sorted(
+                results,
+                key=lambda x: x.media.creation_date_from_exif_or_file_or_sidecar
+                if x.media
+                else datetime.min,
+            )
+        elif sort_index == 3:  # Exif
+            return sorted(
+                results, key=lambda x: x.media.has_exif_data if x.media else False
+            )
+        elif sort_index == 4:  # Ext
+            return sorted(
+                results,
+                key=lambda x: x.media.extension if x.media else x.path.suffix.lower(),
+            )
+        elif sort_index == 5:  # Size
             return sorted(results, key=lambda x: x.media.size_mb if x.media else 0)
-        elif sort_index == 6: # Extra (Sidecars or Reason)
+        elif sort_index == 6:  # Extra (Sidecars or Reason)
+
             def get_extra_key(x):
                 if x.reason:
                     return x.reason
                 if x.media and x.media.attached_sidecar_files:
                     return ", ".join([s.name for s in x.media.attached_sidecar_files])
                 return ""
+
             return sorted(results, key=get_extra_key)
-        
+
         return results

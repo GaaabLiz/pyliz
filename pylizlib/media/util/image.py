@@ -10,7 +10,12 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.file import is_media_file, get_file_type
 
 
-def save_ndarrays_as_images(ndarray_list: list[np.ndarray], output_path: str, prefix: str = 'frame', extension: str = 'png'):
+def save_ndarrays_as_images(
+    ndarray_list: list[np.ndarray],
+    output_path: str,
+    prefix: str = "frame",
+    extension: str = "png",
+):
     """
     Saves a list of numpy arrays (images) to a directory.
 
@@ -23,8 +28,7 @@ def save_ndarrays_as_images(ndarray_list: list[np.ndarray], output_path: str, pr
     os.makedirs(output_path, exist_ok=True)  # Crea la directory se non esiste
     for idx, img_array in enumerate(ndarray_list):
         img = Image.fromarray(img_array)  # Converti in immagine
-        img.save(os.path.join(output_path, f'{prefix}_{idx}.{extension}'))
-
+        img.save(os.path.join(output_path, f"{prefix}_{idx}.{extension}"))
 
 
 def load_images_as_ndarrays(input_path: str) -> list[np.ndarray]:
@@ -50,7 +54,7 @@ def load_images_as_ndarrays(input_path: str) -> list[np.ndarray]:
 
 class ImageUtils:
     """
-    Utility class for image-specific operations, including metadata 
+    Utility class for image-specific operations, including metadata
     extraction for Stable Diffusion images.
     """
 

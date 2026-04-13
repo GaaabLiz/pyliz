@@ -5,7 +5,12 @@ from PySide6.QtCore import QSize
 from PySide6.QtGui import QAction, QActionGroup, Qt, QIcon
 from PySide6.QtWidgets import QToolBar, QDockWidget, QPushButton, QToolButton, QMenu
 
-from pylizlib.qt.domain.menuActionTool import ActionItem, ToolbarItem, ActionGroupItem, ActionSignalType
+from pylizlib.qt.domain.menuActionTool import (
+    ActionItem,
+    ToolbarItem,
+    ActionGroupItem,
+    ActionSignalType,
+)
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.resource import ResHandler
 
@@ -21,13 +26,13 @@ def create_toolbar(item: ToolbarItem, parent: Any) -> QToolBar:
 
 
 def create_action(
-        item: ActionItem,
-        parent: Any,
-        theme: AppTheme,
-        signal: Any | None = None,
-        callback: Callable | None = None,
-        use_text_for_group: bool = False,
-        toolbar_icon_size: int = 32,
+    item: ActionItem,
+    parent: Any,
+    theme: AppTheme,
+    signal: Any | None = None,
+    callback: Callable | None = None,
+    use_text_for_group: bool = False,
+    toolbar_icon_size: int = 32,
 ) -> QAction:
     action = QAction(parent)
     action.setObjectName(item.id)
@@ -53,20 +58,21 @@ def create_action(
     return action
 
 
-
 def create_action_group(
-        item: ActionGroupItem,
-        parent: Any,
-        theme: AppTheme,
-        signal: Any | None = None,
-        callback: Callable | None = None,
-        use_text_for_group: bool = False,
-        signal_type: ActionSignalType = ActionSignalType.ACTION_OBJECT,
+    item: ActionGroupItem,
+    parent: Any,
+    theme: AppTheme,
+    signal: Any | None = None,
+    callback: Callable | None = None,
+    use_text_for_group: bool = False,
+    signal_type: ActionSignalType = ActionSignalType.ACTION_OBJECT,
 ) -> QActionGroup:
     action_group = QActionGroup(parent)
     action_group.setExclusive(item.exclusive)
     for action in item.actions:
-        action_obj = create_action(action, parent, theme, use_text_for_group=use_text_for_group)
+        action_obj = create_action(
+            action, parent, theme, use_text_for_group=use_text_for_group
+        )
         action_group.addAction(action_obj)
     if signal:
         action_group.triggered.connect(signal.emit)
@@ -96,13 +102,14 @@ def create_action_contextual(text: str, parent: Any, on_clicked) -> QAction:
 
 
 def create_action_toggle_dock(item: ActionItem, widget: QDockWidget) -> QAction:
-
     def match_action_dock_shortcut(action: QAction, dock: QDockWidget, shortcut: str | None):
         action.setChecked(dock.isVisible())
         if shortcut is not None:
             action.setShortcut(shortcut)
+
         def toggle_visibility():
             dock.setVisible(action.isChecked())
+
         action.toggled.connect(toggle_visibility)
         dock.visibilityChanged.connect(action.setChecked)
 
@@ -114,11 +121,7 @@ def create_action_toggle_dock(item: ActionItem, widget: QDockWidget) -> QAction:
     return action
 
 
-def create_action_btn_push(
-        item: ActionItem,
-        action: QAction,
-        parent: Any,
-) -> QPushButton:
+def create_action_btn_push(item: ActionItem, action: QAction, parent: Any) -> QPushButton:
     btn = QPushButton(parent)
     btn.setObjectName(item.id)
     btn.setText(item.text)
@@ -130,10 +133,7 @@ def create_action_btn_push(
     return btn
 
 
-def create_menu_action_drop_button(
-        menu: QMenu,
-        icon: QIcon | None = None,
-):
+def create_menu_action_drop_button(menu: QMenu, icon: QIcon | None = None):
     tool_button = QToolButton()
     # tool_menu = QMenu(title=menu.title(), parent=tool_button)
 
@@ -147,7 +147,7 @@ def create_menu_action_drop_button(
     tool_button.setText(menu.objectName())
     tool_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
     tool_button.setIcon(icon) if icon else None
-    #tool_button.setIcon(QIcon.fromTheme("document-open"))
+    # tool_button.setIcon(QIcon.fromTheme("document-open"))
     tool_button.setArrowType(Qt.ArrowType.NoArrow)
     tool_button.setMenu(menu)
     return tool_button

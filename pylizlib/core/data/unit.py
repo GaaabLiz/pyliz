@@ -1,4 +1,3 @@
-
 """Small unit conversion helpers."""
 
 
@@ -41,7 +40,7 @@ def convert_months_number_to_str(number: int) -> str:
         9: "September",
         10: "October",
         11: "November",
-        12: "December"
+        12: "December",
     }
     return months.get(number, "Invalid Month")
 

@@ -3,10 +3,23 @@ import sys
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QWidget, QVBoxLayout, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QMenu,
+    QWidget,
+    QVBoxLayout,
+    QPushButton,
+)
 
-from pylizlib.qt.domain.menuActionTool import ActionItem, InstanceData, InstanceInstallSetting, ToolbarWidgetType, \
-    ActionGroupItem, ToolbarItem
+from pylizlib.qt.domain.menuActionTool import (
+    ActionItem,
+    InstanceData,
+    InstanceInstallSetting,
+    ToolbarWidgetType,
+    ActionGroupItem,
+    ToolbarItem,
+)
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.menuAction import MenuMasterHandler
 from pylizlib.qt.handler.menuActionToolbar import ToolbarHandler
@@ -17,15 +30,13 @@ logging.basicConfig(
     handlers=[
         logging.StreamHandler(),  # stampa su stdout
         # logging.FileHandler("app.log")  # se vuoi anche scrivere su file
-    ]
+    ],
 )
 
 logger = logging.getLogger(__name__)
 
 
 class MenuActionToolWindow(QMainWindow):
-
-
     signal_action_1 = Signal()
     signal_action_2 = Signal()
     signal_action_3 = Signal(QAction)
@@ -54,9 +65,21 @@ class MenuActionToolWindow(QMainWindow):
             exclusive=False,
         )
 
-        self.data_1 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON_DROP_DOWN))
-        self.data_2 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.ACTION))
-        self.data_3 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON))
+        self.data_1 = InstanceData(
+            settings=InstanceInstallSetting(
+                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON_DROP_DOWN
+            )
+        )
+        self.data_2 = InstanceData(
+            settings=InstanceInstallSetting(
+                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.ACTION
+            )
+        )
+        self.data_3 = InstanceData(
+            settings=InstanceInstallSetting(
+                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON
+            )
+        )
 
         self.menu = QMenu("Menu 1")
         self.menu_inner_1 = QMenu("Inner 1")
@@ -67,7 +90,7 @@ class MenuActionToolWindow(QMainWindow):
             parent=self,
             toolbar_handler=self.toolbar,
             enable_logs=True,
-            theme=AppTheme()
+            theme=AppTheme(),
         )
         self.handler.install_menu()
         self.handler.install_toolbar()
@@ -105,8 +128,14 @@ class MenuActionToolWindow(QMainWindow):
         print(f"Action triggered: {action.text()}")
 
     def on(self):
-        self.handler.install_action(item=self.action_1, signal=self.signal_action_1,)
-        self.handler.install_action(self.action_2, self.signal_action_2, )
+        self.handler.install_action(
+            item=self.action_1,
+            signal=self.signal_action_1,
+        )
+        self.handler.install_action(
+            self.action_2,
+            self.signal_action_2,
+        )
         self.handler.install_group(
             item=self.item_act_gp1,
             inner_menu=self.menu_inner_1,
@@ -126,9 +155,7 @@ class MenuActionToolWindow(QMainWindow):
         self.handler.uninstall_group(self.item_act_gp2)
 
 
-
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MenuActionToolWindow()
     window.show()

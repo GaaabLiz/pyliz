@@ -33,10 +33,10 @@ class PylizIniHandler:
 
     @staticmethod
     def read(
-            item: PylizIniItem,
-            use_default_if_none: bool = False,
-            use_empty_if_none: bool = False,
-            app: PylizApp | None = None,
+        item: PylizIniItem,
+        use_default_if_none: bool = False,
+        use_empty_if_none: bool = False,
+        app: PylizApp | None = None,
     ) -> str | bool | None:
         """Read a configuration value."""
 
@@ -53,9 +53,9 @@ class PylizIniHandler:
 
     @staticmethod
     def write(
-            item: PylizIniItem,
-            value: str | bool | int | None = None,
-            app: PylizApp | None = None,
+        item: PylizIniItem,
+        value: str | bool | int | None = None,
+        app: PylizApp | None = None,
     ) -> None:
         """Write a configuration value."""
 

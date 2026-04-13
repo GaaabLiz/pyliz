@@ -5,7 +5,6 @@ from pylizlib.core.os.path import get_home_dir, get_path_items, PathMatcher
 
 
 class PathTests(unittest.TestCase):
-
     def test_list_files(self):
         home_dir = Path(get_home_dir())
         elenco = get_path_items(home_dir, True)
@@ -20,5 +19,6 @@ class PathTests(unittest.TestCase):
         matcher.log_all()
         matcher.export_file_list(Path(r"C:\Users\Gabriele\Downloads"))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

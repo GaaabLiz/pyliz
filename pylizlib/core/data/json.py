@@ -47,11 +47,10 @@ class JsonUtils:
         """
 
         if json_string.startswith("```json"):
-            json_string = json_string[len("```json"):]
+            json_string = json_string[len("```json") :]
         elif json_string.startswith("```"):
-            json_string = json_string[len("```"):]
+            json_string = json_string[len("```") :]
         if json_string.endswith("```"):
-            json_string = json_string[:-len("```")]
+            json_string = json_string[: -len("```")]
         json_string = json_string.strip()
         return json_string
-

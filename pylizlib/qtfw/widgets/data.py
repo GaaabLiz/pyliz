@@ -4,7 +4,7 @@ from qfluentwidgets import BodyLabel, ToolButton, FluentIcon
 
 
 class FileItem(QWidget):
-    """ File item """
+    """File item"""
 
     removed = Signal(QWidget)
 
@@ -28,4 +28,3 @@ class FileItem(QWidget):
         self.hBoxLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         self.removeButton.clicked.connect(lambda: self.removed.emit(self))
-

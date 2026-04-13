@@ -35,7 +35,6 @@ class ToolbarItem:
     orientation: Qt.Orientation = Qt.Orientation.Horizontal
 
 
-
 @dataclass
 class ActionGroupItem:
     id: str

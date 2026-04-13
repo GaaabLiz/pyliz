@@ -31,18 +31,18 @@ class Loggiz:
 
     @staticmethod
     def setup(
-            app_name="app",
-            setup_console=True,
-            setup_file=True,
-            console_level=default_console_log_level,
-            console_format=default_console_log_format,
-            console_ansi=False,
-            file_level=default_file_log_level,
-            file_format=default_file_log_format,
-            file_log_base_path="",
-            file_log_folder_name="logs",
-            file_log_name="latest.log",
-            use_app_timestamp_template=True,
+        app_name="app",
+        setup_console=True,
+        setup_file=True,
+        console_level=default_console_log_level,
+        console_format=default_console_log_format,
+        console_ansi=False,
+        file_level=default_file_log_level,
+        file_format=default_file_log_format,
+        file_log_base_path="",
+        file_log_folder_name="logs",
+        file_log_name="latest.log",
+        use_app_timestamp_template=True,
     ):
         """Configure console and/or file logging handlers."""
 
@@ -71,7 +71,6 @@ class Loggiz:
             config.set_console_ansi(console_ansi)
             config.set_logger_console_enabled(True)
 
-
     @staticmethod
     def setup_console(level=default_console_log_level, log_format=default_console_log_format):
         """Configure the root console logger."""
@@ -84,7 +83,11 @@ class Loggiz:
         rootConsoleLogger.addHandler(console_handler)
 
     @staticmethod
-    def setup_file(level=default_file_log_level, log_format=default_file_log_format, file_path="loggiz.log"):
+    def setup_file(
+        level=default_file_log_level,
+        log_format=default_file_log_format,
+        file_path="loggiz.log",
+    ):
         """Configure the root file logger."""
 
         Loggiz._reset_handlers(rootFileLogger)
@@ -202,7 +205,7 @@ class LoggizLogger:
     def print_separator(sep, count):
         """Print a separator line to the console."""
 
-        string = f'{sep}' * count
+        string = f"{sep}" * count
         if config.enable_console_ansi:
             print(Colors.LIGHT_GRAY + string + Colors.END)
         else:
@@ -215,7 +218,12 @@ class LoggizLogger:
         """Write a debug message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.debug(LoggizLogger.get_tag_string(tag, True) + Colors.CYAN + f"{message}" + Colors.END)
+            rootConsoleLogger.debug(
+                LoggizLogger.get_tag_string(tag, True)
+                + Colors.CYAN
+                + f"{message}"
+                + Colors.END
+            )
         else:
             rootConsoleLogger.debug(LoggizLogger.get_tag_string(tag) + message)
 
@@ -224,7 +232,12 @@ class LoggizLogger:
         """Write an info message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.info(LoggizLogger.get_tag_string(tag, True) + Colors.GREEN + f"{message}" + Colors.END)
+            rootConsoleLogger.info(
+                LoggizLogger.get_tag_string(tag, True)
+                + Colors.GREEN
+                + f"{message}"
+                + Colors.END
+            )
         else:
             rootConsoleLogger.info(LoggizLogger.get_tag_string(tag) + message)
 
@@ -233,7 +246,12 @@ class LoggizLogger:
         """Write a warning message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.warning(LoggizLogger.get_tag_string(tag, True) + Colors.YELLOW + f"{message}" + Colors.END)
+            rootConsoleLogger.warning(
+                LoggizLogger.get_tag_string(tag, True)
+                + Colors.YELLOW
+                + f"{message}"
+                + Colors.END
+            )
         else:
             rootConsoleLogger.warning(LoggizLogger.get_tag_string(tag) + message)
 
@@ -242,7 +260,12 @@ class LoggizLogger:
         """Write an error message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.error(LoggizLogger.get_tag_string(tag, True) + Colors.RED + f"{message}" + Colors.END)
+            rootConsoleLogger.error(
+                LoggizLogger.get_tag_string(tag, True)
+                + Colors.RED
+                + f"{message}"
+                + Colors.END
+            )
         else:
             rootConsoleLogger.error(LoggizLogger.get_tag_string(tag) + message)
 
@@ -309,7 +332,3 @@ class LoggizLogger:
             LoggizLogger.log_console_error(tag, message)
         if config.logger_file_enabled:
             LoggizLogger.log_file_error(tag, message)
-
-
-
-

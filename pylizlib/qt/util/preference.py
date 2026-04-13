@@ -3,7 +3,6 @@ from typing import Any
 from PySide6.QtWidgets import QGroupBox, QFormLayout, QSizePolicy
 
 
-
 # def create_prf_path(item: ConfigIniItem, app: PylizApp) -> PreferenceItemPath:
 #     return PreferenceItemPath(
 #         label=QLabel(item.name),

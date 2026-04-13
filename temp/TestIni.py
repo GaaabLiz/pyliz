@@ -4,7 +4,6 @@ from pylizlib.core.app.pylizapp import PylizApp
 
 
 class TestScripts(unittest.TestCase):
-
     def setUp(self):
         self.dir = PylizApp(".pyliz")
 

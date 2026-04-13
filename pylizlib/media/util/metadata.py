@@ -7,13 +7,13 @@ from typing import Optional, Any
 from pylizlib.core.log.pylizLogger import logger
 
 
-
 class MetadataHandler:
     """
     Handles metadata extraction and modification for media files using external tools
     like Exiftool. This class provides methods for generating sidecar files,
     updating XMP metadata, and resolving creation dates.
     """
+
     def __init__(self, file_path: str | Path):
         """
         Initializes the handler for a specific media file.
@@ -27,12 +27,12 @@ class MetadataHandler:
         """
         Generates an XMP sidecar file by extracting metadata from the source file using exiftool.
         The source file is read-only and is not modified.
-        
+
         :param output_path: The destination path for the .xmp file.
         :return: True if successful, False otherwise.
         """
         output_path = Path(output_path)
-        
+
         # Check if exiftool is installed
         if shutil.which("exiftool") is None:
             logger.error("Exiftool is not installed or not found in PATH.")
@@ -44,11 +44,13 @@ class MetadataHandler:
             # -o DST: Write output to destination file
             cmd = [
                 "exiftool",
-                "-tagsfromfile", str(self.file_path),
+                "-tagsfromfile",
+                str(self.file_path),
                 "-all:all",
-                "-o", str(output_path)
+                "-o",
+                str(output_path),
             ]
-            
+
             # Execute command
             # capture_output=True prevents printing to stdout/stderr unless there's an error we want to log
             subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -59,20 +61,20 @@ class MetadataHandler:
             # Check if failure is due to no metadata tags found
             error_msg = e.stderr if e.stderr else ""
             output_msg = e.stdout if e.stdout else ""
-            
+
             if "Nothing to write" in error_msg or "Nothing to write" in output_msg:
-                logger.warning(f"Exiftool found no metadata to copy for {self.file_path.name}. Creating minimal XMP.")
+                logger.warning( f"Exiftool found no metadata to copy for {self.file_path.name}. Creating minimal XMP." )
                 try:
                     minimal_xmp = (
                         "<?xpacket begin='﻿' id='W5M0MpCehiHzreSzNTczkc9d'?>\n"
                         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
                         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
                         '  <rdf:Description rdf:about=""/>\n'
-                        ' </rdf:RDF>\n'
-                        '</x:xmpmeta>\n'
+                        " </rdf:RDF>\n"
+                        "</x:xmpmeta>\n"
                         "<?xpacket end='w'?>"
                     )
-                    with open(output_path, 'w', encoding='utf-8') as f:
+                    with open(output_path, "w", encoding="utf-8") as f:
                         f.write(minimal_xmp)
                     return True
                 except Exception as write_err:
@@ -98,7 +100,7 @@ class MetadataHandler:
             True if the update was successful, False if Exiftool failed or file was missing.
         """
         xmp_path = Path(xmp_path)
-        
+
         if shutil.which("exiftool") is None:
             logger.error("Exiftool is not installed or not found in PATH.")
             return False
@@ -116,14 +118,14 @@ class MetadataHandler:
                 cmd.append(f"-xmp:subject+={tag}")
                 # Add Lightroom hierarchical subject
                 cmd.append(f"-XMP-lr:HierarchicalSubject+={tag}")
-        
+
         # Add annotation/description
         if metadata.annotation:
             # Use -Description=text to set/overwrite
             cmd.append(f"-xmp:description={metadata.annotation}")
 
         # If no changes needed, return True
-        if len(cmd) == 2: # Only 'exiftool' and '-overwrite_original'
+        if len(cmd) == 2:  # Only 'exiftool' and '-overwrite_original'
             return True
 
         cmd.append(str(xmp_path))
@@ -154,7 +156,7 @@ class MetadataHandler:
         xmp_path = Path(xmp_path)
         if not xmp_path.exists():
             return False
-            
+
         date_str = date.strftime("%Y:%m:%d %H:%M:%S")
         # photoshop:DateCreated and xmp:CreateDate are common
         cmd = [
@@ -162,9 +164,9 @@ class MetadataHandler:
             "-overwrite_original",
             f"-photoshop:DateCreated={date_str}",
             f"-xmp:CreateDate={date_str}",
-            str(xmp_path)
+            str(xmp_path),
         ]
-        
+
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             return True
@@ -185,21 +187,16 @@ class MetadataHandler:
             return None
 
         # Try common creation tags in order of reliability
-        tags = [
-            "-DateTimeOriginal",
-            "-CreateDate",
-            "-CreationDate",
-            "-GPSDateTime"
-        ]
-        
+        tags = ["-DateTimeOriginal", "-CreateDate", "-CreationDate", "-GPSDateTime"]
+
         try:
             cmd = ["exiftool", "-s3", "-d", "%Y:%m:%d %H:%M:%S"]
             cmd.extend(tags)
             cmd.append(str(self.file_path))
-            
+
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            output = result.stdout.strip().split('\n')
-            
+            output = result.stdout.strip().split("\n")
+
             for date_str in output:
                 if date_str and ":" in date_str:
                     try:
@@ -210,5 +207,5 @@ class MetadataHandler:
                         continue
         except Exception as e:
             logger.debug(f"Exiftool failed to extract date for {self.file_path}: {e}")
-            
+
         return None
