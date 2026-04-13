@@ -6,6 +6,7 @@ from typing import Callable
 from pylizlib.core.data import gen
 from pylizlib.core.temp.pylizscript import PylizBaseAction
 from pylizlib.core.os.path import check_path
+from pylizlib.core.os.utils import is_command_available
 
 
 class ActionGitClone(PylizBaseAction, ABC):
@@ -32,7 +33,7 @@ class ActionGitClone(PylizBaseAction, ABC):
             return
         else:
             self.on_log("Repo not installed. Proceeding...")
-            pathutils.check_path(self.install_dir, True)
+            check_path(self.install_dir, True)
         # Repo.clone_from(self.repo, self.install_dir)
         self.on_log("Done.")
 
@@ -47,7 +48,7 @@ class ActionCommandAvailable(PylizBaseAction, ABC):
         self.command = command
 
     def run(self):
-        status = osutils.is_command_available(self.command)
+        status = is_command_available(self.command)
         if not status:
             raise Exception(self.command + " command not available.")
 

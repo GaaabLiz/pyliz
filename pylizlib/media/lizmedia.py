@@ -291,7 +291,7 @@ class LizMedia:
                                 return datetime.strptime(str(tags[tag_key]), "%Y:%m:%d %H:%M:%S")
                             except ValueError:
                                 continue
-            except Exception as e:
+            except Exception:
                 pass
             
             # 1b. Robust Exiftool Fallback for Images
@@ -363,7 +363,7 @@ class LizMedia:
                 with open(self.path, 'rb') as f:
                     tags = exifread.process_file(f, details=False)
                     return bool(tags)
-            except Exception as e:
+            except Exception:
                 # logger.error(f"Error checking EXIF data for {self.path}: {e}")
                 pass
         return False

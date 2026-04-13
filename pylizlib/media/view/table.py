@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Any, Callable, Optional
+from typing import List
 
 from rich.console import Console
 from rich.table import Table
@@ -113,9 +113,12 @@ class MediaListResultPrinter:
         for idx, (name, style, justify) in enumerate(all_columns):
             header = f"{name}{' *' if sort_index == idx else ''}"
             kwargs = {}
-            if style: kwargs["style"] = style
-            if justify: kwargs["justify"] = justify
-            if name == "Filename" or name == "Path": kwargs["no_wrap"] = True
+            if style:
+                kwargs["style"] = style
+            if justify:
+                kwargs["justify"] = justify
+            if name == "Filename" or name == "Path":
+                kwargs["no_wrap"] = True
             
             table.add_column(header, **kwargs)
 

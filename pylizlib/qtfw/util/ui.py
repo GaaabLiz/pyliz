@@ -2,7 +2,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from qfluentwidgets import SubtitleLabel, setFont, TransparentDropDownPushButton, DropDownPushButton, RoundMenu, \
+from qfluentwidgets import setFont, TransparentDropDownPushButton, DropDownPushButton, RoundMenu, \
     Dialog, FluentIcon, Action
 
 

@@ -183,7 +183,7 @@ class WindowsOsUtils:
             return "N/A"
         import win32api
         try:
-            info = win32api.GetFileVersionInfo(exe_path.__str__(), "\\")
+            # GetFileVersionInfo call removed as it was unused
             # Le chiavi di versione sono memorizzate come tuple
             # Prima otteniamo la lingua e il codice di pagina
             lang, codepage = win32api.GetFileVersionInfo(exe_path.__str__(), "\\VarFileInfo\\Translation")[0]

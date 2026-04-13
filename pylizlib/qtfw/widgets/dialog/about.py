@@ -1,10 +1,7 @@
-from PySide6.QtGui import QAction, QColor, QIcon
-from PySide6.QtWidgets import QFileDialog, QWidget, QSizePolicy, QHBoxLayout, QApplication, QFrame, QLabel, QVBoxLayout
-from PySide6.QtCore import Qt, Signal, QSize, QPoint
-from qfluentwidgets import ExpandSettingCard, ConfigItem, PushButton, qconfig, Dialog, ToolButton, BodyLabel, \
-    GroupHeaderCardWidget, ComboBox, \
-    FluentIcon, \
-    CheckableMenu, MenuIndicatorType, MessageBoxBase, SubtitleLabel, LineEdit, CaptionLabel, Theme, isDarkTheme
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QHBoxLayout, QLabel
+from PySide6.QtCore import Qt
+from qfluentwidgets import MessageBoxBase, SubtitleLabel, CaptionLabel
 
 class AboutMessageBox(MessageBoxBase):
     def __init__(

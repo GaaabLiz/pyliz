@@ -9,10 +9,10 @@ class ConfigQtHandler:
 
     @staticmethod
     def qt_write(item: QtConfigItem, value: Any, setting: QSettings) -> None:
-        if item.type == list:
+        if item.type is list:
             assert item.max_list_size is not None, "max_list_size must be set for list type"
             ConfigQtHandler.__qt_write_list(item, value, setting)
-        if item.type == str:
+        if item.type is str:
             ConfigQtHandler.__qt_write_str(item, value, setting)
 
     @staticmethod

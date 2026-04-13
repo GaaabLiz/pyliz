@@ -1,5 +1,5 @@
 from PySide6.QtGui import QAction, QColor
-from PySide6.QtCore import Qt, Signal, QSize, QPoint
+from PySide6.QtCore import Qt, Signal, QPoint
 from qfluentwidgets import ComboBox, CheckableMenu, MenuIndicatorType, SubtitleLabel, LineEdit, CaptionLabel, \
     MessageBoxBase
 
@@ -134,8 +134,8 @@ class MultiSelectionComboBox(ComboBox):
             self._updateTextState(True)
 
     def get_items(self) -> list[str]:
-        l = self.checkedItems()
-        return [i.text for i in l]
+        items = self.checkedItems()
+        return [i.text for i in items]
 
     def setCheckedItems(self, item_texts: list[str]):
         """Set selected items by their text values"""

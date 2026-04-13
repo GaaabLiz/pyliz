@@ -98,7 +98,7 @@ class TestLizMedia(unittest.TestCase):
         media = LizMedia(self.mock_path)
         
         # Mocking open and exifread
-        with patch("builtins.open", mock_open(read_data=b"data")) as mock_file, \
+        with patch("builtins.open", mock_open(read_data=b"data")), \
              patch("pylizlib.media.lizmedia.exifread.process_file") as mock_exif:
             
             # Case 1: EXIF found with DateTimeOriginal

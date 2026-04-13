@@ -13,7 +13,7 @@ class PathTests(unittest.TestCase):
             print(item)
 
     def test_dir_matcher(self):
-        home_dir = Path(get_home_dir())
+        Path(get_home_dir())
         dir_1 = "A:\Models"
         matcher = PathMatcher()
         matcher.load_path(Path(dir_1), True)

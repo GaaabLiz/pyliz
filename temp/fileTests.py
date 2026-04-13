@@ -12,7 +12,7 @@ from pylizlib.core.log.pylizLogger import logger
 class TestFiles(unittest.TestCase):
 
     def setUp(self):
-        pyliz_app = PylizApp("PylizTest", "0.0.1")
+        PylizApp("PylizTest", "0.0.1")
         logger.debug("setUp")
 
     def test_clean_json(self):

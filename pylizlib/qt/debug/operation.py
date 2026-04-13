@@ -1,6 +1,5 @@
 import random
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from pylizlib.core.log.pylizLogger import logger

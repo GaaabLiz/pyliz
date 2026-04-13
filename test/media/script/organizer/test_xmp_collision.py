@@ -1,12 +1,11 @@
 
-import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaListResult, MediaStatus
+from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaStatus
 from pylizlib.media.script.organizer.searcher import MediaSearcher
 
 class TestXMPCollision(unittest.TestCase):

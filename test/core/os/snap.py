@@ -15,7 +15,6 @@ from pylizlib.core.os.snap import (
     SnapEditType,
     SnapshotSerializer,
     SnapshotSearcher,
-    SnapshotSearchResult,
     SnapshotSortKey,
     QueryType,
     SearchTarget,

@@ -1,8 +1,7 @@
 import os
-from dataclasses import asdict
 from pathlib import Path
 
-from qfluentwidgets import ConfigValidator, ConfigSerializer, ConfigItem
+from qfluentwidgets import ConfigValidator
 
 
 

@@ -2,7 +2,7 @@ import subprocess
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Any
 
 from pylizlib.core.log.pylizLogger import logger
 
@@ -51,7 +51,7 @@ class MetadataHandler:
             
             # Execute command
             # capture_output=True prevents printing to stdout/stderr unless there's an error we want to log
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
             logger.debug(f"Generated XMP for {self.file_path.name} at {output_path}")
             return True
 
@@ -85,7 +85,7 @@ class MetadataHandler:
             logger.error(f"Error executing exiftool: {e}")
             return False
 
-    def append_eagle_to_xmp(self, metadata: "Metadata", xmp_path: str | Path) -> bool:
+    def append_eagle_to_xmp(self, metadata: Any, xmp_path: str | Path) -> bool:
         """
         Appends Eagle-specific metadata (tags, annotations) to an existing XMP sidecar.
         Updates standardized fields like 'Subject', 'HierarchicalSubject', and 'Description'.
