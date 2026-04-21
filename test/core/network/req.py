@@ -11,6 +11,8 @@ from pylizlib.core.network.req import (
     get_file_size_byte,
     is_endpoint_reachable,
     is_internet_available,
+)
+from pylizlib.core.network.req import (
     test_with_head as _test_with_head,
 )
 

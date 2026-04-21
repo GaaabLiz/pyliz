@@ -1,7 +1,7 @@
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel
-from PySide6.QtCore import Qt
-from qfluentwidgets import MessageBoxBase, SubtitleLabel, CaptionLabel
+from qfluentwidgets import CaptionLabel, MessageBoxBase, SubtitleLabel
 
 
 class AboutMessageBox(MessageBoxBase):

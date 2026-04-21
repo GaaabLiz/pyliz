@@ -2,22 +2,22 @@ from typing import Any
 
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QMainWindow,
     QDockWidget,
-    QWidget,
+    QHBoxLayout,
+    QMainWindow,
     QMenu,
     QMenuBar,
-    QHBoxLayout,
     QVBoxLayout,
+    QWidget,
 )
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.domain.menuActionTool import (
-    MenuActionHandlerData,
-    ActionItem,
-    InstanceData,
     ActionGroupItem,
+    ActionItem,
     ActionSignalType,
+    InstanceData,
+    MenuActionHandlerData,
 )
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.menuActionInst import InstanceAction, InstanceActionGroup

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QStatusBar, QProgressBar
+from PySide6.QtWidgets import QProgressBar, QStatusBar
 
 
 class QtLizStatusBar(QStatusBar):

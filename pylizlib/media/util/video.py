@@ -5,7 +5,7 @@ import ffmpeg
 import numpy as np
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import get_filename, check_path, check_path_file
+from pylizlib.core.os.path import check_path, check_path_file, get_filename
 from pylizlib.media.compute.frameselector import FrameSelector
 from pylizlib.media.domain.video import FrameOptions
 from pylizlib.media.util.image import save_ndarrays_as_images

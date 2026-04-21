@@ -1,26 +1,26 @@
-import unittest
-from unittest.mock import patch
-from pathlib import Path
 import shutil
+import unittest
 import zipfile
 from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import patch
 
+from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap import (
+    QueryType,
+    SearchTarget,
+    SnapDirAssociation,
+    SnapEditType,
     Snapshot,
     SnapshotCatalogue,
     SnapshotManager,
-    SnapshotSettings,
-    SnapDirAssociation,
-    SnapshotUtils,
-    SnapEditType,
-    SnapshotSerializer,
     SnapshotSearcher,
-    SnapshotSortKey,
-    QueryType,
-    SearchTarget,
     SnapshotSearchParams,
+    SnapshotSerializer,
+    SnapshotSettings,
+    SnapshotSortKey,
+    SnapshotUtils,
 )
-from pylizlib.core.data.gen import gen_random_string
 
 # Define test directories
 TEST_ROOT = Path(__file__).parent.parent.parent

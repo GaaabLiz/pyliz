@@ -1,18 +1,18 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QMainWindow, QPushButton, QMenu, QToolButton
+from PySide6.QtWidgets import QMainWindow, QMenu, QPushButton, QToolButton
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.qt.domain.menuActionTool import (
-    InstanceType,
-    InstanceData,
-    ToolbarWidgetType,
-    ActionItem,
-    MenuActionHandlerData,
     ActionGroupItem,
+    ActionItem,
     ActionSignalType,
+    InstanceData,
+    InstanceType,
+    MenuActionHandlerData,
+    ToolbarWidgetType,
 )
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.menuActionToolbar import ToolbarHandler

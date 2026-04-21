@@ -3,17 +3,17 @@ import sys
 from typing import Any
 
 from PySide6.QtWidgets import (
-    QMainWindow,
     QApplication,
-    QWidget,
-    QVBoxLayout,
+    QMainWindow,
     QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from pylizlib.qt.handler.operation_core import Operation
-from pylizlib.qt.handler.operation_domain import RunnerInteraction, OperationInfo
-from pylizlib.qt.handler.operation_runner import OperationRunner
 from pylizlib.qt.debug.operation import OperationDevDebug
+from pylizlib.qt.handler.operation_core import Operation
+from pylizlib.qt.handler.operation_domain import OperationInfo, RunnerInteraction
+from pylizlib.qt.handler.operation_runner import OperationRunner
 
 logging.basicConfig(
     level=logging.DEBUG,  # o DEBUG, WARNING, ERROR, CRITICAL

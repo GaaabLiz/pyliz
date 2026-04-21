@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 import exifread
 from sd_parsers import ParserManager
@@ -14,7 +14,7 @@ from sd_parsers.data import PromptInfo
 
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.file import get_file_type, is_media_file, get_file_c_date
+from pylizlib.core.os.file import get_file_c_date, get_file_type, is_media_file
 from pylizlib.media.util.metadata import MetadataHandler
 from pylizlib.media.util.video import VideoUtils
 

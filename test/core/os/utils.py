@@ -8,16 +8,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pylizlib.core.os.utils import (
-    get_folder_size_mb,
-    get_directory_size,
-    has_disk_free_space,
-    get_free_space_mb,
     check_move_dirs_free_space,
+    get_directory_size,
+    get_folder_size_mb,
+    get_free_space_mb,
+    get_system_username,
+    has_disk_free_space,
     is_command_available,
     is_os_unix,
     is_os_windows,
     is_software_installed,
-    get_system_username,
     open_system_folder,
 )
 

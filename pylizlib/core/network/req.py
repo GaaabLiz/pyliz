@@ -1,13 +1,10 @@
 """HTTP/network request helpers and response wrappers."""
 
 import socket
+from enum import Enum
 from typing import Mapping
 
 import requests
-
-
-from enum import Enum
-
 from requests.models import Response
 
 from pylizlib.core.log.pylizLogger import logger

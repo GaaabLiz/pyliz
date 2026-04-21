@@ -1,12 +1,11 @@
 import getpass
 import os
+import platform
 import shutil
 import subprocess
-import platform
 from pathlib import Path
 
 import psutil
-
 
 PATH_DEFAULT_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 

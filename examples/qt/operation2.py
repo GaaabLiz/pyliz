@@ -1,6 +1,6 @@
 import sys
 
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QMainWindow
+from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 from pylizlib.qt.debug.operation import OperationDevDebug
 from pylizlib.qt.handler.operation_core import Operation

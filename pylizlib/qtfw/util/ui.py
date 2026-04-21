@@ -3,13 +3,13 @@ from pathlib import Path
 from typing import Any
 
 from qfluentwidgets import (
-    setFont,
-    TransparentDropDownPushButton,
-    DropDownPushButton,
-    RoundMenu,
-    Dialog,
-    FluentIcon,
     Action,
+    Dialog,
+    DropDownPushButton,
+    FluentIcon,
+    RoundMenu,
+    TransparentDropDownPushButton,
+    setFont,
 )
 
 

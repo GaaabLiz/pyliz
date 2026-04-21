@@ -1,9 +1,9 @@
 import time
 from abc import abstractmethod
 from time import sleep
-from typing import Callable, Any
+from typing import Any, Callable
 
-from PySide6.QtCore import QRunnable, QObject, Signal
+from PySide6.QtCore import QObject, QRunnable, Signal
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.handler.progress import (
@@ -12,7 +12,7 @@ from pylizlib.core.handler.progress import (
     get_step_progress_percentage,
 )
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.qt.handler.operation_domain import OperationStatus, OperationInfo
+from pylizlib.qt.handler.operation_domain import OperationInfo, OperationStatus
 
 
 class Task(QObject):

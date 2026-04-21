@@ -2,14 +2,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QAction, QActionGroup, Qt, QIcon
-from PySide6.QtWidgets import QToolBar, QDockWidget, QPushButton, QToolButton, QMenu
+from PySide6.QtGui import QAction, QActionGroup, QIcon, Qt
+from PySide6.QtWidgets import QDockWidget, QMenu, QPushButton, QToolBar, QToolButton
 
 from pylizlib.qt.domain.menuActionTool import (
-    ActionItem,
-    ToolbarItem,
     ActionGroupItem,
+    ActionItem,
     ActionSignalType,
+    ToolbarItem,
 )
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.resource import ResHandler

@@ -1,7 +1,7 @@
 import time
 from typing import Callable
 
-from PySide6.QtCore import QThreadPool, QObject, Signal
+from PySide6.QtCore import QObject, QThreadPool, Signal
 
 from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
 from pylizlib.core.log.pylizLogger import logger

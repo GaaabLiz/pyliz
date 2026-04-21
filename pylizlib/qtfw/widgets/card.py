@@ -1,16 +1,16 @@
 from enum import Enum
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFileDialog, QWidget, QHBoxLayout
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 from qfluentwidgets import (
-    qconfig,
-    Dialog,
-    ConfigItem,
-    FluentIcon,
-    PushButton,
-    ExpandSettingCard,
-    GroupHeaderCardWidget,
     BodyLabel,
+    ConfigItem,
+    Dialog,
+    ExpandSettingCard,
+    FluentIcon,
+    GroupHeaderCardWidget,
+    PushButton,
+    qconfig,
 )
 from qfluentwidgets.components.settings.folder_list_setting_card import FolderItem
 

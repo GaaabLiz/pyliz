@@ -3,11 +3,11 @@ import random
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Callable, List, Optional, LiteralString
+from typing import Callable, List, LiteralString, Optional
 
 from pylizlib.core.data import gen
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.file import is_video_file, is_image_file
+from pylizlib.core.os.file import is_image_file, is_video_file
 
 
 def get_home_dir():

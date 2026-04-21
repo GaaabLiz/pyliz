@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotUtils, SnapDirAssociation
+from pylizlib.core.os.snap import SnapDirAssociation, SnapshotCatalogue, SnapshotUtils
 
 path_catalogue = Path(r"C:\Users\Gabriele\devliz\Catalogue")
 path_temp = Path(r"C:\Users\Gabriele\Pictures\LibTest.library\images")

@@ -1,13 +1,13 @@
 from PySide6.QtGui import QAction, Qt
 from PySide6.QtWidgets import (
-    QToolBar,
-    QMainWindow,
     QDockWidget,
-    QWidget,
-    QPushButton,
     QHBoxLayout,
-    QVBoxLayout,
+    QMainWindow,
+    QPushButton,
+    QToolBar,
     QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from pylizlib.core.log.pylizLogger import logger

@@ -3,25 +3,25 @@ import os
 import tempfile
 import unittest
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.os.file import (
-    is_image_extension,
-    is_video_extension,
+    download_file,
+    get_file_c_date,
+    get_file_type,
     is_audio_extension,
-    is_text_extension,
-    is_image_file,
-    is_video_file,
     is_audio_file,
-    is_text_file,
+    is_file_dup_in_dir,
+    is_image_extension,
+    is_image_file,
     is_image_or_video_file,
     is_media_file,
     is_media_sidecar_file,
-    get_file_type,
-    is_file_dup_in_dir,
-    get_file_c_date,
-    download_file,
+    is_text_extension,
+    is_text_file,
+    is_video_extension,
+    is_video_file,
     write_json_to_file,
 )
 

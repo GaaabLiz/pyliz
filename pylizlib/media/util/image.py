@@ -7,7 +7,7 @@ from sd_parsers.data import PromptInfo
 
 from pylizlib.core.domain.os import FileType
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.file import is_media_file, get_file_type
+from pylizlib.core.os.file import get_file_type, is_media_file
 
 
 def save_ndarrays_as_images(

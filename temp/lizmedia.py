@@ -1,11 +1,11 @@
 import json
 import os
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 
 import cv2
 import ffmpeg
-from PIL import Image, ExifTags
+from PIL import ExifTags, Image
 from sd_parsers import ParserManager
 from sd_parsers.data import PromptInfo
 

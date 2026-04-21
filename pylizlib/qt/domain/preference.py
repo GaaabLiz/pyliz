@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from PySide6.QtWidgets import QSpinBox, QLabel, QComboBox, QCheckBox
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QSpinBox
 
 from pylizlib.qt.domain.config import QtConfigItem
 from pylizlib.qt.widget.data import PathLineSelector

@@ -1,13 +1,13 @@
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QAction, QColor
-from PySide6.QtCore import Qt, Signal, QPoint
 from qfluentwidgets import (
-    ComboBox,
-    CheckableMenu,
-    MenuIndicatorType,
-    SubtitleLabel,
-    LineEdit,
     CaptionLabel,
+    CheckableMenu,
+    ComboBox,
+    LineEdit,
+    MenuIndicatorType,
     MessageBoxBase,
+    SubtitleLabel,
 )
 
 

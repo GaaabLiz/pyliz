@@ -1,9 +1,9 @@
 import os
 import unittest
 
-from pylizlib.core.app.pylizapp import PylizApp
 from dotenv import load_dotenv
 
+from pylizlib.core.app.pylizapp import PylizApp
 from pylizlib.core.data.gen import gen_file_hash
 from pylizlib.core.data.json import JsonUtils
 from pylizlib.core.log.pylizLogger import logger

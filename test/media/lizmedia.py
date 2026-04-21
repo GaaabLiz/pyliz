@@ -1,12 +1,12 @@
 import json
 import unittest
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch, mock_open
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, mock_open, patch
 
-from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaListResult, MediaStatus
 from pylizlib.core.domain.os import FileType
+from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaListResult, MediaStatus
 
 
 class TestLizMedia(unittest.TestCase):

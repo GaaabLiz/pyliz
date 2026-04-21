@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Type, Any
+from typing import Any, Type
 
 
 @dataclass

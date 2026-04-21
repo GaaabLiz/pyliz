@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
 
 class PathLineSelector(QWidget):

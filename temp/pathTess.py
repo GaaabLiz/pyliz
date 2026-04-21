@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from pylizlib.core.os.path import get_home_dir, get_path_items, PathMatcher
+from pylizlib.core.os.path import PathMatcher, get_home_dir, get_path_items
 
 
 class PathTests(unittest.TestCase):

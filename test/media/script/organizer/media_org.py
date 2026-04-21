@@ -6,9 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaStatus
 from pylizlib.media.script.organizer.domain import OrganizerOptions
 from pylizlib.media.script.organizer.media_org import MediaOrganizer
+
+from pylizlib.media.lizmedia import LizMedia, LizMediaSearchResult, MediaStatus
 
 TEST_DATETIME = datetime(2023, 10, 27, 10, 30, 0)
 TEST_DATETIME_EXIF = datetime(2022, 5, 15, 8, 0, 0)

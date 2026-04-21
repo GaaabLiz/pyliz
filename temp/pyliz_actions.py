@@ -3,8 +3,9 @@ import subprocess
 from abc import ABC
 from typing import Callable
 
-from pylizlib.core.data import gen
 from pylizlib.core.temp.pylizscript import PylizBaseAction
+
+from pylizlib.core.data import gen
 from pylizlib.core.os.path import check_path
 from pylizlib.core.os.utils import is_command_available
 

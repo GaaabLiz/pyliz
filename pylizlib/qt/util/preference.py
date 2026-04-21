@@ -1,7 +1,6 @@
 from typing import Any
 
-from PySide6.QtWidgets import QGroupBox, QFormLayout, QSizePolicy
-
+from PySide6.QtWidgets import QFormLayout, QGroupBox, QSizePolicy
 
 # def create_prf_path(item: ConfigIniItem, app: PylizApp) -> PreferenceItemPath:
 #     return PreferenceItemPath(

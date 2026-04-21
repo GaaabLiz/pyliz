@@ -1,9 +1,9 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from pylizlib.core.os.ui import (
-    is_macos_dark_theme,
     is_dark_theme,
+    is_macos_dark_theme,
 )
 
 

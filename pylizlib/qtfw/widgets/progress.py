@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QVBoxLayout, QDialog
-from qfluentwidgets import FluentStyleSheet, BodyLabel, ProgressBar
+from PySide6.QtWidgets import QDialog, QVBoxLayout
+from qfluentwidgets import BodyLabel, FluentStyleSheet, ProgressBar
 
 
 @dataclass

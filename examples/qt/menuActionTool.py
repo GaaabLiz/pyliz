@@ -7,18 +7,18 @@ from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QMenu,
-    QWidget,
-    QVBoxLayout,
     QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from pylizlib.qt.domain.menuActionTool import (
+    ActionGroupItem,
     ActionItem,
     InstanceData,
     InstanceInstallSetting,
-    ToolbarWidgetType,
-    ActionGroupItem,
     ToolbarItem,
+    ToolbarWidgetType,
 )
 from pylizlib.qt.domain.theme import AppTheme
 from pylizlib.qt.handler.menuAction import MenuMasterHandler

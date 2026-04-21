@@ -4,22 +4,21 @@ import re
 import shutil
 import tempfile
 import zipfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import ClassVar, Optional, Callable
+from typing import Callable, ClassVar, Optional
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import (
-    random_subfolder,
     clear_folder_contents,
     clear_or_move_to_temp,
     duplicate_directory,
+    random_subfolder,
 )
 from pylizlib.core.os.utils import get_folder_size_mb  # New import
-
 
 SnapshotProgressCallback = Callable[[str, int, int], None]
 
@@ -872,8 +871,8 @@ class SnapshotManager:
 
         if sys.platform == "win32":
             try:
-                import win32security
                 import ntsecuritycon as con
+                import win32security
             except ImportError:
                 logger.error("pywin32 not installed, cannot set file permissions.")
                 win32security = None
