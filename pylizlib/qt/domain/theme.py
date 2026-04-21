@@ -18,11 +18,7 @@ class UiTheme:
         if self.mode is None:
             return self.primary_color
         else:
-            return (
-                self.primary_color_light
-                if self.mode == OsTheme.LIGHT
-                else self.primary_color_dark
-            )
+            return self.primary_color_light if self.mode == OsTheme.LIGHT else self.primary_color_dark
 
 
 @dataclass

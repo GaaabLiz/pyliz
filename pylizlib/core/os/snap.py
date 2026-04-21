@@ -101,10 +101,7 @@ class SnapDirAssociation:
         Returns:
             A list of new `SnapDirAssociation` instances.
         """
-        return [
-            SnapDirAssociation.gen_random(source_folder_for_choices)
-            for _ in range(count)
-        ]
+        return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
     def copy_install_to(self, catalogue_target_path: Path):
         """
@@ -421,9 +418,7 @@ class SnapshotUtils:
         if path_snapshot.is_file():
             raise ValueError(f"The provided path {path_snapshot} is not a directory.")
         if not path_snapshot.exists():
-            raise FileNotFoundError(
-                f"The provided path {path_snapshot} does not exist."
-            )
+            raise FileNotFoundError(f"The provided path {path_snapshot} does not exist.")
         path_snapshot_json = path_snapshot.joinpath(json_filename)
         if not path_snapshot_json.is_file():
             raise FileNotFoundError(f"No snapshot.json file found in {path_snapshot}.")
@@ -456,9 +451,7 @@ class SnapshotUtils:
         Returns:
             The full path to the snapshot's JSON file.
         """
-        return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(
-            json_filename
-        )
+        return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(json_filename)
 
     @staticmethod
     def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
@@ -475,12 +468,8 @@ class SnapshotUtils:
         """
         edits: list[SnapEditAction] = []
 
-        old_path_to_assoc = {
-            dir_assoc.original_path: dir_assoc for dir_assoc in old.directories
-        }
-        new_path_to_assoc = {
-            dir_assoc.original_path: dir_assoc for dir_assoc in new.directories
-        }
+        old_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in old.directories}
+        new_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in new.directories}
 
         old_paths = set(old_path_to_assoc.keys())
         new_paths = set(new_path_to_assoc.keys())
@@ -488,9 +477,7 @@ class SnapshotUtils:
         # Find added folders (present in new but not in old)
         added_paths = new_paths - old_paths
         for path in added_paths:
-            edits.append(
-                SnapEditAction(action_type=SnapEditType.ADD_DIR, new_path=path)
-            )
+            edits.append(SnapEditAction(action_type=SnapEditType.ADD_DIR, new_path=path))
 
         # Find removed folders (present in old but not in new)
         removed_paths = old_paths - new_paths
@@ -577,9 +564,7 @@ class SnapshotSerializer:
             path: The file path where the JSON data will be saved.
         """
         data_dict = asdict(snapshot)
-        json_str = json.dumps(
-            data_dict, default=SnapshotSerializer._converter, indent=4
-        )
+        json_str = json.dumps(data_dict, default=SnapshotSerializer._converter, indent=4)
         path.write_text(json_str, encoding="utf-8")
 
     @classmethod
@@ -600,10 +585,7 @@ class SnapshotSerializer:
 
         # Convert 'directories' into a list of SnapDirAssociation
         if "directories" in data and isinstance(data["directories"], list):
-            data["directories"] = [
-                SnapDirAssociation(**d) if isinstance(d, dict) else d
-                for d in data["directories"]
-            ]
+            data["directories"] = [SnapDirAssociation(**d) if isinstance(d, dict) else d for d in data["directories"]]
 
         return Snapshot(**data)
 
@@ -651,12 +633,8 @@ class SnapshotManager:
         self.snapshot = snapshot
         self.settings = settings
         self.path_catalogue = catalogue_path
-        self.path_snapshot = SnapshotUtils.get_snapshot_path(
-            self.snapshot.folder_name, self.path_catalogue
-        )
-        self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(
-            self.snapshot.folder_name, self.path_catalogue, self.settings.json_filename
-        )
+        self.path_snapshot = SnapshotUtils.get_snapshot_path(self.snapshot.folder_name, self.path_catalogue)
+        self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.settings.json_filename)
 
     def __save_json(self):
         """Saves the current snapshot object state to its JSON file."""
@@ -688,12 +666,8 @@ class SnapshotManager:
         Updates the 'data' and 'date_last_modified' fields in the snapshot's JSON file.
         This method is typically called after modifying the snapshot's data dictionary.
         """
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "data", self.snapshot.data
-        )
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "date_last_modified", datetime.now().isoformat()
-        )
+        SnapshotSerializer.update_field(self.path_snapshot_json, "data", self.snapshot.data)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_modified", datetime.now().isoformat())
         self.snapshot.date_last_modified = datetime.now()
 
     def update_json_base_fields(self):
@@ -701,21 +675,11 @@ class SnapshotManager:
         Updates the basic metadata fields (name, desc, author, tags, date_modified)
         of the snapshot's JSON file.
         """
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "name", self.snapshot.name
-        )
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "desc", self.snapshot.desc
-        )
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "author", self.snapshot.author
-        )
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "tags", self.snapshot.tags
-        )
-        SnapshotSerializer.update_field(
-            self.path_snapshot_json, "date_modified", datetime.now().isoformat()
-        )
+        SnapshotSerializer.update_field(self.path_snapshot_json, "name", self.snapshot.name)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "desc", self.snapshot.desc)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "author", self.snapshot.author)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "tags", self.snapshot.tags)
+        SnapshotSerializer.update_field(self.path_snapshot_json, "date_modified", datetime.now().isoformat())
         self.snapshot.date_modified = datetime.now()
 
     def install_directory(self, destination_path: Path):
@@ -730,9 +694,7 @@ class SnapshotManager:
             ValueError: If the destination_path is not a valid directory.
         """
         if not destination_path.exists() or not destination_path.is_dir():
-            raise ValueError(
-                f"The provided path {destination_path} is not a valid directory."
-            )
+            raise ValueError(f"The provided path {destination_path} is not a valid directory.")
         new_dir = SnapDirAssociation(
             index=SnapDirAssociation.next_index(),
             original_path=destination_path.as_posix(),
@@ -750,9 +712,7 @@ class SnapshotManager:
         Args:
             folder_id: The unique ID of the folder to remove.
         """
-        dir_to_remove = next(
-            (d for d in self.snapshot.directories if d.folder_id == folder_id), None
-        )
+        dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
             dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
             if dir_path.exists():
@@ -801,19 +761,13 @@ class SnapshotManager:
             FileNotFoundError: If the original snapshot path does not exist.
         """
         if not self.path_snapshot.exists():
-            raise FileNotFoundError(
-                f"The snapshot path {self.path_snapshot} does not exist."
-            )
+            raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
         new_snap = self.snapshot
         new_snap.id = gen_random_string(self.settings.snap_id_length)
         new_snap.name = self.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
-        new_snap_path = SnapshotUtils.get_snapshot_path(
-            new_snap.folder_name, self.path_catalogue
-        )
-        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(
-            new_snap.folder_name, self.path_catalogue, self.settings.json_filename
-        )
+        new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
+        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.settings.json_filename)
         duplicate_directory(self.path_snapshot, new_snap_path, "")
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
@@ -834,7 +788,7 @@ class SnapshotManager:
                 dir_assoc.mb_size = get_folder_size_mb(system_path)
             else:
                 dir_assoc.mb_size = 0.0
-                logger.warning( f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist. The snapshot's copy has been cleared." )
+                logger.warning(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist. The snapshot's copy has been cleared.")
 
         self.snapshot.date_last_modified = datetime.now()
         self.__save_json()
@@ -855,7 +809,7 @@ class SnapshotManager:
                 except Exception as e:
                     logger.error(f"Failed to remove directory '{install_path}': {e}")
             else:
-                logger.debug( f"Install path '{install_path}' does not exist or is not a directory. Skipping." )
+                logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
 
     def install(self, enable_everyone_full_control: bool = True):
         """
@@ -883,7 +837,7 @@ class SnapshotManager:
             source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
             install_location = Path(dir_assoc.original_path)
 
-            logger.info( f"Performing clean installation from '{source_dir}' to '{install_location}'" )
+            logger.info(f"Performing clean installation from '{source_dir}' to '{install_location}'")
 
             # 1. Ensure the destination directory exists.
             install_location.mkdir(parents=True, exist_ok=True)
@@ -897,7 +851,7 @@ class SnapshotManager:
                     else:
                         item.unlink()
                 except Exception as e:
-                    logger.error( f"Could not remove item {item} during clean install: {e}" )
+                    logger.error(f"Could not remove item {item} during clean install: {e}")
 
             # 3. Copy the contents from the source directory to the now-empty destination.
             for item in source_dir.iterdir():
@@ -914,15 +868,11 @@ class SnapshotManager:
             # 4. Set permissions if on Windows and pywin32 is installed
             if win32security:
                 try:
-                    logger.info( f"Setting full control permissions for Everyone on '{install_location}'" )
+                    logger.info(f"Setting full control permissions for Everyone on '{install_location}'")
 
-                    everyone, domain, type = win32security.LookupAccountName(
-                        "", "Everyone"
-                    )
+                    everyone, domain, type = win32security.LookupAccountName("", "Everyone")
 
-                    sd = win32security.GetFileSecurity(
-                        str(install_location), win32security.DACL_SECURITY_INFORMATION
-                    )
+                    sd = win32security.GetFileSecurity(str(install_location), win32security.DACL_SECURITY_INFORMATION)
                     dacl = sd.GetSecurityDescriptorDacl()
 
                     dacl.AddAccessAllowedAceEx(
@@ -940,7 +890,7 @@ class SnapshotManager:
                     )
 
                 except Exception as e:
-                    logger.error( f"Failed to set permissions on '{install_location}': {e}" )
+                    logger.error(f"Failed to set permissions on '{install_location}': {e}")
 
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(
@@ -975,9 +925,7 @@ class SnapshotManager:
                 backup_type_suffix = "_sd"
 
             if is_export:
-                zip_name = (
-                    f"{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
-                )
+                zip_name = f"{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
             else:
                 zip_name = f"backup_{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
 
@@ -986,26 +934,20 @@ class SnapshotManager:
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-                    dirs_to_backup = [
-                        Path(d.original_path) for d in self.snapshot.directories
-                    ]
+                    dirs_to_backup = [Path(d.original_path) for d in self.snapshot.directories]
                     for folder in dirs_to_backup:
                         if folder.is_dir():
                             for file_path in folder.rglob("*"):
                                 if file_path.is_file():
                                     archive.write(
                                         file_path,
-                                        arcname=os.path.join(
-                                            folder.name, file_path.relative_to(folder)
-                                        ),
+                                        arcname=os.path.join(folder.name, file_path.relative_to(folder)),
                                     )
                 elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
                     source_dir = self.path_snapshot
                     for file_path in source_dir.rglob("*"):
                         if file_path.is_file():
-                            archive.write(
-                                file_path, arcname=file_path.relative_to(source_dir)
-                            )
+                            archive.write(file_path, arcname=file_path.relative_to(source_dir))
         except Exception as e:
             logger.error(e)
 
@@ -1055,9 +997,7 @@ class SnapshotCatalogue:
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_delete_enabled:
-            snap_manager.create_backup(
-                self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY
-            )
+            snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.delete()
 
     def get_all(self) -> list[Snapshot]:
@@ -1071,9 +1011,7 @@ class SnapshotCatalogue:
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():
-                snap = SnapshotUtils.get_snapshot_from_path(
-                    current_dir, self.settings.json_filename
-                )
+                snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
                 if snap is not None:
                     snapshots.append(snap)
         return snapshots
@@ -1118,9 +1056,7 @@ class SnapshotCatalogue:
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_modify_enabled:
-            snap_manager.create_backup(
-                self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY
-            )
+            snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
         snap_manager.update_from_actions_list(edits)
@@ -1242,7 +1178,7 @@ class SnapshotCatalogue:
 
                 json_path = potential_snap_dir / self.settings.json_filename
                 if not json_path.is_file():
-                    logger.warning( f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file." )
+                    logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
                     continue
 
                 try:
@@ -1250,12 +1186,12 @@ class SnapshotCatalogue:
                     data = json.loads(json_path.read_text(encoding="utf-8"))
                     snap_id = data.get("id")
                     if not snap_id:
-                        logger.warning( f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json." )
+                        logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
                         continue
 
                     # 3. Check for ID conflict
                     if self.exists(snap_id):
-                        logger.info( f"Snapshot with ID '{snap_id}' already exists. Skipping import." )
+                        logger.info(f"Snapshot with ID '{snap_id}' already exists. Skipping import.")
                         continue
 
                     # 4. Copy the extracted folder to the catalogue
@@ -1264,7 +1200,7 @@ class SnapshotCatalogue:
                     logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
 
                 except Exception as e:
-                    logger.error( f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}" )
+                    logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
 
     def import_snapshot(self, zip_path: Path):
         """
@@ -1297,9 +1233,7 @@ class SnapshotCatalogue:
             # 2. Validate the content and get snapshot
             json_path = temp_dir_path / self.settings.json_filename
             if not json_path.is_file():
-                raise ValueError(
-                    f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}')."
-                )
+                raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
 
             try:
                 snapshot_to_import = SnapshotSerializer.from_json(json_path)
@@ -1308,9 +1242,7 @@ class SnapshotCatalogue:
 
             # 3. Check for ID conflict
             if self.exists(snapshot_to_import.id):
-                raise ValueError(
-                    f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue."
-                )
+                raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
             # 4. Copy the extracted folder to the catalogue
             destination_path = self.path_catalogue / snapshot_to_import.id
@@ -1337,7 +1269,7 @@ class SnapshotCatalogue:
         """
         snap = self.get_by_id(snap_id)
         if not snap:
-            logger.warning( f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies." )
+            logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
             return
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.remove_installed_copies()
@@ -1469,9 +1401,7 @@ class SnapshotSearcher:
                 logger.error(f"Invalid regex pattern provided: {e}")
                 return []
 
-        return self._search_in_snapshot_path(
-            snapshot, snapshot_path, params, compiled_regex, on_progress
-        )
+        return self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress)
 
     def search_list(
         self,
@@ -1518,7 +1448,7 @@ class SnapshotSearcher:
         """
         results: list[SnapshotSearchResult] = []
         if not snapshot_path or not snapshot_path.is_dir():
-            logger.warning( f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory." )
+            logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
             return results
 
         # 1. Collect all files to be searched
@@ -1555,11 +1485,7 @@ class SnapshotSearcher:
                     )
 
             elif params.search_target == SearchTarget.FILE_CONTENT:
-                results.extend(
-                    self._search_in_file(
-                        file_path, params, compiled_regex, snapshot.name
-                    )
-                )
+                results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
 
         return results
 

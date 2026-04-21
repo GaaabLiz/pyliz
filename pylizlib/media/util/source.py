@@ -49,13 +49,9 @@ def resolve_media_source(
 
     payload, mime_type = _split_data_uri(base64_content or "")
     raw_bytes = _decode_base64(payload)
-    suffix = _resolve_suffix(
-        raw_bytes=raw_bytes, file_name=file_name, mime_type=mime_type
-    )
+    suffix = _resolve_suffix(raw_bytes=raw_bytes, file_name=file_name, mime_type=mime_type)
     temp_path = _write_temp_file(raw_bytes, suffix=suffix)
-    return ResolvedMediaSource(
-        path=temp_path, base64_content=base64_content, is_temporary=True
-    )
+    return ResolvedMediaSource(path=temp_path, base64_content=base64_content, is_temporary=True)
 
 
 def _split_data_uri(value: str) -> tuple[str, str | None]:
@@ -96,9 +92,7 @@ def _resolve_suffix(*, raw_bytes: bytes, file_name: str | None, mime_type: str |
     if image_suffix:
         return image_suffix
 
-    raise ValueError(
-        "Unable to infer a file extension from base64 content. Provide 'file_name' or use a data URI base64 payload."
-    )
+    raise ValueError("Unable to infer a file extension from base64 content. Provide 'file_name' or use a data URI base64 payload.")
 
 
 def _mime_to_suffix(mime_type: str | None) -> str | None:

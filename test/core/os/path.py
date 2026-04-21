@@ -55,14 +55,12 @@ def _build_tree(root: str):
 
 
 class GetHomeDirTestCase(unittest.TestCase):
-
     def test_returns_existing_directory(self):
         home = get_home_dir()
         self.assertTrue(os.path.isdir(home))
 
 
 class GetAppHomeDirTestCase(unittest.TestCase):
-
     def test_creates_app_dir(self):
         with tempfile.TemporaryDirectory() as td:
             app_name = os.path.join(td, ".test_pyliz_app")
@@ -76,7 +74,6 @@ class GetAppHomeDirTestCase(unittest.TestCase):
 
 
 class CreatePathTestCase(unittest.TestCase):
-
     def test_creates_nested_path(self):
         with tempfile.TemporaryDirectory() as td:
             nested = os.path.join(td, "a", "b", "c")
@@ -89,7 +86,6 @@ class CreatePathTestCase(unittest.TestCase):
 
 
 class CheckPathTestCase(unittest.TestCase):
-
     def test_existing_readable_dir(self):
         with tempfile.TemporaryDirectory() as td:
             self.assertTrue(check_path(td))
@@ -106,7 +102,6 @@ class CheckPathTestCase(unittest.TestCase):
 
 
 class CheckPathDirTestCase(unittest.TestCase):
-
     def test_valid_directory(self):
         with tempfile.TemporaryDirectory() as td:
             check_path_dir(td)  # should not raise
@@ -122,7 +117,6 @@ class CheckPathDirTestCase(unittest.TestCase):
 
 
 class CheckPathFileTestCase(unittest.TestCase):
-
     def test_valid_file(self):
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp_name = tmp.name
@@ -142,7 +136,6 @@ class CheckPathFileTestCase(unittest.TestCase):
 
 
 class GetSecondToLastDirectoryTestCase(unittest.TestCase):
-
     def test_normal_path(self):
         self.assertEqual(get_second_to_last_directory("/a/b/c"), "b")
 
@@ -155,7 +148,6 @@ class GetSecondToLastDirectoryTestCase(unittest.TestCase):
 
 
 class CountPathSubTestCase(unittest.TestCase):
-
     def test_count_files(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -173,7 +165,6 @@ class CountPathSubTestCase(unittest.TestCase):
 
 
 class GetFilenameTestCase(unittest.TestCase):
-
     def test_get_filename(self):
         self.assertEqual(get_filename("/a/b/photo.jpg"), "photo.jpg")
 
@@ -185,7 +176,6 @@ class GetFilenameTestCase(unittest.TestCase):
 
 
 class ScanDirectoryMatchBoolTestCase(unittest.TestCase):
-
     def test_returns_matching_files(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -200,7 +190,6 @@ class ScanDirectoryMatchBoolTestCase(unittest.TestCase):
 
 
 class DirContainsTestCase(unittest.TestCase):
-
     def test_contains_all(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -223,7 +212,6 @@ class DirContainsTestCase(unittest.TestCase):
 
 
 class GetFoldersFromTestCase(unittest.TestCase):
-
     def test_non_recursive(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -240,7 +228,6 @@ class GetFoldersFromTestCase(unittest.TestCase):
 
 
 class GetFilesFromTestCase(unittest.TestCase):
-
     def test_non_recursive(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -261,7 +248,6 @@ class GetFilesFromTestCase(unittest.TestCase):
 
 
 class GetPathItemsTestCase(unittest.TestCase):
-
     def test_non_recursive(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -278,7 +264,6 @@ class GetPathItemsTestCase(unittest.TestCase):
 
 
 class ClearFolderContentsTestCase(unittest.TestCase):
-
     def test_clears_all(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -292,7 +277,6 @@ class ClearFolderContentsTestCase(unittest.TestCase):
 
 
 class CountItemsTestCase(unittest.TestCase):
-
     def test_count(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -306,7 +290,6 @@ class CountItemsTestCase(unittest.TestCase):
 
 
 class DuplicateDirectoryTestCase(unittest.TestCase):
-
     def test_duplicate_default_suffix(self):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "origin"
@@ -339,7 +322,6 @@ class DuplicateDirectoryTestCase(unittest.TestCase):
 
 
 class RandomSubfolderTestCase(unittest.TestCase):
-
     def test_returns_subfolder(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -353,7 +335,6 @@ class RandomSubfolderTestCase(unittest.TestCase):
 
 
 class ClearOrMoveToTempTestCase(unittest.TestCase):
-
     def test_clear_deletes_directory(self):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "to_delete"
@@ -372,7 +353,6 @@ class ClearOrMoveToTempTestCase(unittest.TestCase):
 
 
 class PathMatcherTestCase(unittest.TestCase):
-
     def test_load_and_match(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -406,7 +386,3 @@ class PathMatcherTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

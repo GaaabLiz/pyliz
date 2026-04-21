@@ -69,6 +69,5 @@ class FrameOptions:
         """Calculate the number of frames to select uniformly based on video duration."""
         base_frames = int((video_duration / 60) * self.frames_per_minute)
         optimal_frames = min(self.max_frames, max(self.min_frames, base_frames))
-        logger.trace( f"Calculated uniform frame count: {optimal_frames} (Base: {base_frames}, Min: {self.min_frames}, Max: {self.max_frames})"
-        )
+        logger.trace(f"Calculated uniform frame count: {optimal_frames} (Base: {base_frames}, Min: {self.min_frames}, Max: {self.max_frames})")
         return optimal_frames

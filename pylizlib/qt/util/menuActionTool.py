@@ -70,9 +70,7 @@ def create_action_group(
     action_group = QActionGroup(parent)
     action_group.setExclusive(item.exclusive)
     for action in item.actions:
-        action_obj = create_action(
-            action, parent, theme, use_text_for_group=use_text_for_group
-        )
+        action_obj = create_action(action, parent, theme, use_text_for_group=use_text_for_group)
         action_group.addAction(action_obj)
     if signal:
         action_group.triggered.connect(signal.emit)

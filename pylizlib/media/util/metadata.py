@@ -63,7 +63,7 @@ class MetadataHandler:
             output_msg = e.stdout if e.stdout else ""
 
             if "Nothing to write" in error_msg or "Nothing to write" in output_msg:
-                logger.warning( f"Exiftool found no metadata to copy for {self.file_path.name}. Creating minimal XMP." )
+                logger.warning(f"Exiftool found no metadata to copy for {self.file_path.name}. Creating minimal XMP.")
                 try:
                     minimal_xmp = (
                         "<?xpacket begin='﻿' id='W5M0MpCehiHzreSzNTczkc9d'?>\n"

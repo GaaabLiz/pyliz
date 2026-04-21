@@ -11,7 +11,6 @@ from pylizlib.core.data.unit import (
 
 
 class UnitHelpersTestCase(unittest.TestCase):
-
     def test_convert_byte_to_mb(self):
         self.assertEqual(convert_byte_to_mb(1048576), 1.0)
 

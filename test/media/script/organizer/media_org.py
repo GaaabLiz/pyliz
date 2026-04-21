@@ -102,8 +102,8 @@ class TestMediaOrganizer(unittest.TestCase):
         organizer = MediaOrganizer(search_results, str(self.target_dir), options)
         organizer.organize()
 
-        self.assertFalse(any(self.target_dir.iterdir())) # Target should be empty
-        self.assertTrue(file.exists()) # Source should be untouched
+        self.assertFalse(any(self.target_dir.iterdir()))  # Target should be empty
+        self.assertTrue(file.exists())  # Source should be untouched
 
     def test_organize_with_empty_search_results(self):
         """Test that organizing an empty list results in no operations."""
@@ -133,7 +133,7 @@ class TestMediaOrganizer(unittest.TestCase):
         organizer_noyear.organize()
         expected_path_noyear = self.target_dir / "2023-10" / "noyear.jpg"
         self.assertTrue(expected_path_noyear.exists())
-        
+
     def test_date_source_exif(self):
         """Test that EXIF date is preferred when option is set."""
         file = self._create_dummy_file("exif.jpg", dt=TEST_DATETIME)
@@ -152,7 +152,7 @@ class TestMediaOrganizer(unittest.TestCase):
         """Test skipping a duplicate file."""
         file_content = "identical content"
         source_file = self._create_dummy_file("duplicate.jpg", content=file_content, dt=TEST_DATETIME)
-        
+
         target_path = self.target_dir / "2023" / "10"
         target_path.mkdir(parents=True)
         (target_path / "duplicate.jpg").write_text(file_content)
@@ -205,13 +205,13 @@ class TestMediaOrganizer(unittest.TestCase):
         self.assertFalse(results[0].success)
         self.assertEqual(results[0].reason, "File conflict: target exists but content differs")
 
-    @patch('pylizlib.media.script.organizer.media_org.os.path.getsize', return_value=200 * 1024 * 1024)
+    @patch("pylizlib.media.script.organizer.media_org.os.path.getsize", return_value=200 * 1024 * 1024)
     def test_duplicate_check_with_large_file(self, mock_getsize):
         """Test duplicate check when files are too large for hashing."""
         source_file = self._create_dummy_file("large.jpg", content="source", dt=TEST_DATETIME)
         target_path = self.target_dir / "2023" / "10"
         target_path.mkdir(parents=True)
-        (target_path / "large.jpg").write_text("target") # Different content
+        (target_path / "large.jpg").write_text("target")  # Different content
 
         search_results = [self._create_mock_search_result(source_file, TEST_DATETIME)]
         organizer = MediaOrganizer(search_results, str(self.target_dir), OrganizerOptions())
@@ -246,7 +246,7 @@ class TestMediaOrganizer(unittest.TestCase):
         """Test that sidecars are moved even if the main file is a skipped duplicate."""
         main_file = self._create_dummy_file("dup_main.jpg", content="content", dt=TEST_DATETIME)
         sidecar_file = self._create_dummy_file("dup_main.xmp", content="sidecar", dt=TEST_DATETIME)
-        
+
         target_path = self.target_dir / "2023" / "10"
         target_path.mkdir(parents=True)
         (target_path / "dup_main.jpg").write_text("content")
@@ -292,16 +292,16 @@ class TestMediaOrganizer(unittest.TestCase):
 
         target_path = self.target_dir / "2023" / "10"
         target_path.mkdir(parents=True)
-        (target_path / "fail.jpg").write_text("target") # Create a conflict
+        (target_path / "fail.jpg").write_text("target")  # Create a conflict
 
         search_results = [self._create_mock_search_result(main_file, TEST_DATETIME, sidecars=[sidecar_file])]
         organizer = MediaOrganizer(search_results, str(self.target_dir), OrganizerOptions())
         organizer.organize()
 
-        self.assertEqual(len(organizer.get_results()), 1) # Only one result for the failed main file
+        self.assertEqual(len(organizer.get_results()), 1)  # Only one result for the failed main file
         self.assertEqual(organizer.get_results()[0].reason, "File conflict: target exists but content differs")
-        self.assertTrue(sidecar_file.exists()) # Sidecar should be untouched
-        self.assertFalse((target_path / "fail.xmp").exists()) # And not moved
+        self.assertTrue(sidecar_file.exists())  # Sidecar should be untouched
+        self.assertFalse((target_path / "fail.xmp").exists())  # And not moved
 
     # --- Error Handling and Edge Case Tests ---
 
@@ -313,7 +313,7 @@ class TestMediaOrganizer(unittest.TestCase):
         organizer.organize()
         self.assertEqual(len(organizer.get_results()), 0)
 
-    @patch('pylizlib.media.script.organizer.media_org.MediaOrganizer._sanitize_path', side_effect=ValueError("Path contains invalid traversal components"))
+    @patch("pylizlib.media.script.organizer.media_org.MediaOrganizer._sanitize_path", side_effect=ValueError("Path contains invalid traversal components"))
     def test_process_item_handles_sanitize_error(self, mock_sanitize):
         """Test that _process_single_item correctly handles a ValueError from _sanitize_path."""
         file = self._create_dummy_file("anyfile.jpg", dt=TEST_DATETIME)
@@ -337,20 +337,20 @@ class TestMediaOrganizer(unittest.TestCase):
         valid_path = str(self.source_dir / "file.jpg")
         self.assertEqual(organizer._sanitize_path(valid_path), valid_path)
 
-    @patch('pylizlib.media.script.organizer.media_org.os.access', return_value=False)
+    @patch("pylizlib.media.script.organizer.media_org.os.access", return_value=False)
     def test_error_no_write_permission(self, mock_access):
         """Test failure when write permission is denied for the target folder."""
         file = self._create_dummy_file("permission_denied.jpg", dt=TEST_DATETIME)
         search_results = [self._create_mock_search_result(file, TEST_DATETIME)]
         organizer = MediaOrganizer(search_results, str(self.target_dir), OrganizerOptions())
         organizer.organize()
-        
+
         results = organizer.get_results()
         self.assertFalse(results[0].success)
         self.assertIn("write permission denied", results[0].reason.lower())
         self.assertTrue(file.exists())
 
-    @patch('pylizlib.media.script.organizer.media_org.tqdm')
+    @patch("pylizlib.media.script.organizer.media_org.tqdm")
     def test_progress_bar_toggle(self, mock_tqdm):
         """Test that the progress bar is toggled correctly."""
         file = self._create_dummy_file("progress.jpg", dt=TEST_DATETIME)
@@ -361,11 +361,11 @@ class TestMediaOrganizer(unittest.TestCase):
         organizer_progress = MediaOrganizer(search_results, str(self.target_dir), options_progress)
         organizer_progress.organize()
         mock_tqdm.assert_called_once()
-        
+
         mock_tqdm.reset_mock()
-        
+
         # Without progress bar
-        self.setUp() # Reset dirs
+        self.setUp()  # Reset dirs
         file = self._create_dummy_file("progress.jpg", dt=TEST_DATETIME)
         search_results = [self._create_mock_search_result(file, TEST_DATETIME)]
         options_no_progress = OrganizerOptions(no_progress=True)
@@ -379,7 +379,7 @@ class TestMediaOrganizer(unittest.TestCase):
     def test_with_real_files_from_env(self):
         """Integration test using real files from the TEST_MEDIA_DIR."""
         real_media_dir = Path(os.environ["TEST_MEDIA_DIR"])
-        
+
         real_files = [p for p in real_media_dir.glob("*.*") if p.is_file()][:5]
         if not real_files:
             self.skipTest(f"No files found in TEST_MEDIA_DIR: {real_media_dir}")
@@ -391,21 +391,22 @@ class TestMediaOrganizer(unittest.TestCase):
             temp_real_files.append(temp_path)
 
         search_results = [LizMediaSearchResult(status=MediaStatus.ACCEPTED, path=p) for p in temp_real_files]
-        
+
         options = OrganizerOptions(copy=True, exif=True)
         organizer = MediaOrganizer(search_results, str(self.target_dir), options)
         organizer.organize()
 
         results = organizer.get_results()
         self.assertEqual(len(results), len(temp_real_files))
-        
+
         for result in results:
             if result.success:
                 self.assertTrue(Path(result.destination_path).exists())
                 self.assertIn(str(result.media.year), result.destination_path)
-        
+
         for temp_file in temp_real_files:
             self.assertTrue(temp_file.exists())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

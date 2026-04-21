@@ -40,11 +40,7 @@ def count_elements_in_settings_keys(data, key, group=None):
 
     for grp in groups_to_check:
         group_data = data.get(grp, {})
-        if (
-            isinstance(group_data, dict)
-            and key in group_data
-            and isinstance(group_data[key], list)
-        ):
+        if isinstance(group_data, dict) and key in group_data and isinstance(group_data[key], list):
             total_count += len(group_data[key])
 
     return total_count

@@ -83,9 +83,7 @@ class MasterListSettingCard(ExpandSettingCard):
         success = False
         match self.item_type:
             case self.Type.FOLDER:
-                folder = QFileDialog.getExistingDirectory(
-                    self, self.tr(self.dialog_title), self.dialog_directory
-                )
+                folder = QFileDialog.getExistingDirectory(self, self.tr(self.dialog_title), self.dialog_directory)
                 if not folder or folder in self.items:
                     return
                 self.__addItem(folder)

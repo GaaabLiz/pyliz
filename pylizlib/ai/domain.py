@@ -40,9 +40,7 @@ class AiScanTool(str, Enum):
             return aliases[normalized]
         except KeyError as exc:
             allowed = ", ".join(tool.value for tool in cls)
-            raise ValueError(
-                f"Unsupported AI scan tool '{value}'. Allowed values: {allowed}"
-            ) from exc
+            raise ValueError(f"Unsupported AI scan tool '{value}'. Allowed values: {allowed}") from exc
 
     @classmethod
     def normalize_many(cls, values: list[str]) -> list["AiScanTool"]:

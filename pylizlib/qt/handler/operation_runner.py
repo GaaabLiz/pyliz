@@ -112,9 +112,7 @@ class OperationRunner(QObject):
 
     def start(self):
         self.runner_start.emit()
-        self.progress_obj = QueueProgress(
-            QueueProgressMode.SINGLE, len(self.operation_pool)
-        )
+        self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
         for op in self.operation_pool:
             self.progress_obj.add_single(op.id)
         for _ in self.operation_pool:

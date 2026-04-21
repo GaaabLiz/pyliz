@@ -6,7 +6,6 @@ from pylizlib.core.app.pytoml import PyProjectToml
 
 
 class PyProjectTomlTestCase(unittest.TestCase):
-
     def test_init_raises_for_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             missing_path = Path(temp_dir) / "missing.toml"

@@ -129,11 +129,7 @@ class MediaListResultPrinter:
 
             # Append extra data based on table type
             if table_type == "accepted":
-                sidecars = (
-                    item.media.attached_sidecar_files
-                    if item.media and item.media.attached_sidecar_files
-                    else []
-                )
+                sidecars = item.media.attached_sidecar_files if item.media and item.media.attached_sidecar_files else []
                 sidecars_str = ", ".join([s.name for s in sidecars])
                 row.append(sidecars_str)
             else:  # rejected or errored
@@ -148,9 +144,7 @@ class MediaListResultPrinter:
         media = item.media
         if media:
             filename = media.file_name
-            creation_date = media.creation_date_from_exif_or_file_or_sidecar.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            creation_date = media.creation_date_from_exif_or_file_or_sidecar.strftime("%Y-%m-%d %H:%M:%S")
             has_exif = "Yes" if media.has_exif_data else "No"
             ext = media.extension
             size_mb = f"{media.size_mb:.2f}"
@@ -175,20 +169,14 @@ class MediaListResultPrinter:
         if sort_index == 0:  # Index
             return sorted(results, key=lambda x: x.index)
         elif sort_index == 1:  # Filename
-            return sorted(
-                results, key=lambda x: x.media.file_name if x.media else x.path.name
-            )
+            return sorted(results, key=lambda x: x.media.file_name if x.media else x.path.name)
         elif sort_index == 2:  # Date
             return sorted(
                 results,
-                key=lambda x: x.media.creation_date_from_exif_or_file_or_sidecar
-                if x.media
-                else datetime.min,
+                key=lambda x: x.media.creation_date_from_exif_or_file_or_sidecar if x.media else datetime.min,
             )
         elif sort_index == 3:  # Exif
-            return sorted(
-                results, key=lambda x: x.media.has_exif_data if x.media else False
-            )
+            return sorted(results, key=lambda x: x.media.has_exif_data if x.media else False)
         elif sort_index == 4:  # Ext
             return sorted(
                 results,

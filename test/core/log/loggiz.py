@@ -8,7 +8,6 @@ from pylizlib.core.log.loggiz import Loggiz, config, rootConsoleLogger, rootFile
 
 
 class LoggizTestCase(unittest.TestCase):
-
     def setUp(self):
         self.addCleanup(lambda: Loggiz._reset_handlers(rootFileLogger))
         self.addCleanup(lambda: Loggiz._reset_handlers(rootConsoleLogger))

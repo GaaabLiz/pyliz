@@ -4,7 +4,6 @@ from pylizlib.core.data.utils import all_not_none, contains_item
 
 
 class UtilsHelpersTestCase(unittest.TestCase):
-
     def test_contains_item_true(self):
         self.assertTrue(contains_item(2, [1, 2, 3]))
 

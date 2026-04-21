@@ -7,7 +7,6 @@ from pylizlib.core.data.gen import gen_file_hash, gen_random_string, gen_timesta
 
 
 class GenHelpersTestCase(unittest.TestCase):
-
     def test_gen_random_string_has_requested_length(self):
         value = gen_random_string(24)
 
@@ -29,7 +28,7 @@ class GenHelpersTestCase(unittest.TestCase):
 
     def test_gen_timestamp_log_name_has_expected_timestamp_shape(self):
         result = gen_timestamp_log_name("p_", ".txt")
-        timestamp = result[len("p_"):-len(".txt")]
+        timestamp = result[len("p_") : -len(".txt")]
 
         self.assertRegex(timestamp, r"^\d{8}_\d{6}$")
 

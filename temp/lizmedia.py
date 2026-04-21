@@ -75,11 +75,7 @@ class LizMedia:
             text_array = []
             for text in self.ai_ocr_text:
                 text_array.append(text)
-            return (
-                self.ai_description
-                + " This media includes texts: "
-                + " ".join(text_array)
-            )
+            return self.ai_description + " This media includes texts: " + " ".join(text_array)
         return self.ai_description
 
     def get_video_duration_seconds(self) -> float:

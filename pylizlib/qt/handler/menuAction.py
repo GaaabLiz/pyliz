@@ -95,7 +95,10 @@ class MenuMasterHandler:
             self.toolbar_handler.create(parent_to_use, layout)
             self.toolbar_installed = True
         else:
-            logger.error( "Cannot install toolbar %s. Toolbar is not available.", self.toolbar_handler.item.id, )
+            logger.error(
+                "Cannot install toolbar %s. Toolbar is not available.",
+                self.toolbar_handler.item.id,
+            )
 
     def uninstall_menu(self):
         if self.__is_menu_added():
@@ -107,17 +110,26 @@ class MenuMasterHandler:
             self.toolbar_handler.destroy(self.parent)
             self.toolbar_installed = False
         else:
-            logger.error( "Cannot uninstall toolbar %s. Toolbar is not available.", self.toolbar_handler.item.id, )
+            logger.error(
+                "Cannot uninstall toolbar %s. Toolbar is not available.",
+                self.toolbar_handler.item.id,
+            )
 
     def set_toolbar_handler(self, toolbar_handler: ToolbarHandler):
         if self.__is_toolbar_available():
-            logger.error( "Cannot add toolbar handler %s. Toolbar handler is already set.", toolbar_handler.item.id, )
+            logger.error(
+                "Cannot add toolbar handler %s. Toolbar handler is already set.",
+                toolbar_handler.item.id,
+            )
             return
         self.toolbar_handler = toolbar_handler
 
     def clear_toolbar_handler(self):
         if not self.__is_toolbar_available():
-            logger.error( "Cannot clear toolbar handler %s. Toolbar handler is not set.", self.toolbar_handler.item.id, )
+            logger.error(
+                "Cannot clear toolbar handler %s. Toolbar handler is not set.",
+                self.toolbar_handler.item.id,
+            )
             return
         self.toolbar_handler = None
 
@@ -128,7 +140,7 @@ class MenuMasterHandler:
         return False
 
     def reinstall_instance(self, inst: InstanceAction | InstanceActionGroup):
-        logger.debug( "Reinstalling instance %s", inst.type.value ) if self.enable_logs else None
+        logger.debug("Reinstalling instance %s", inst.type.value) if self.enable_logs else None
         inst.teardown()
         inst.menu_uninstall(self.menu)
         inst.toolbar_uninstall(self.toolbar_handler)
@@ -214,7 +226,9 @@ class MenuMasterHandler:
 
     def append_action_to_group(self, action: QAction, inner_menu: QMenu):
         if not self.menu_installed:
-            logger.error( "Cannot append action group %s. Menu is not installed.", action.objectName(),
+            logger.error(
+                "Cannot append action group %s. Menu is not installed.",
+                action.objectName(),
             )
             return
         for instance in self.inst_group:
@@ -295,9 +309,7 @@ class MenuMasterHandler:
                     instance.toolbar_uninstall(self.toolbar_handler)
                     self.inst_group.remove(instance)
                     return
-            raise RuntimeError(
-                "Cannot uninstall action group %s. Related instance not found", item.id
-            )
+            raise RuntimeError("Cannot uninstall action group %s. Related instance not found", item.id)
         except Exception as e:
             logger.error("Error uninstalling action group %s: %s", item.id, str(e))
             return
@@ -312,11 +324,11 @@ class MenuMasterHandler:
         for action in self.__get_installed_actions():
             if action.objectName() == action_id:
                 if text is not None:
-                    logger.debug( 'Updating text of action "%s" to "%s"', action_id, text ) if self.enable_logs else None
+                    logger.debug('Updating text of action "%s" to "%s"', action_id, text) if self.enable_logs else None
                     action.setText(text)
                 if status is not None:
-                    logger.debug( 'Updating status of action "%s" to "%s"', action_id, status ) if self.enable_logs else None
+                    logger.debug('Updating status of action "%s" to "%s"', action_id, status) if self.enable_logs else None
                     action.setEnabled(status)
                 if trigger is not None:
-                    logger.debug( 'Updating trigger of action "%s"', action_id ) if self.enable_logs else None
+                    logger.debug('Updating trigger of action "%s"', action_id) if self.enable_logs else None
                     action.triggered.connect(trigger)

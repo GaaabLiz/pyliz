@@ -296,9 +296,7 @@ class LizMedia:
                     ]:
                         if tag_key in tags:
                             try:
-                                return datetime.strptime(
-                                    str(tags[tag_key]), "%Y:%m:%d %H:%M:%S"
-                                )
+                                return datetime.strptime(str(tags[tag_key]), "%Y:%m:%d %H:%M:%S")
                             except ValueError:
                                 continue
             except Exception:
@@ -404,11 +402,7 @@ class LizMedia:
         if self.ai_description is None:
             return None
         if self.ai_ocr_text:
-            return (
-                self.ai_description
-                + " This media includes texts: "
-                + " ".join(self.ai_ocr_text)
-            )
+            return self.ai_description + " This media includes texts: " + " ".join(self.ai_ocr_text)
         return self.ai_description
 
     @staticmethod
@@ -436,15 +430,9 @@ class LizMedia:
         if isinstance(value, set):
             return [LizMedia._serialize_json_value(item) for item in value]
         if isinstance(value, dict):
-            return {
-                str(key): LizMedia._serialize_json_value(item)
-                for key, item in value.items()
-            }
+            return {str(key): LizMedia._serialize_json_value(item) for key, item in value.items()}
         if is_dataclass(value):
-            return {
-                key: LizMedia._serialize_json_value(item)
-                for key, item in asdict(value).items()
-            }
+            return {key: LizMedia._serialize_json_value(item) for key, item in asdict(value).items()}
 
         for method_name in ["model_dump", "dict"]:
             serializer = getattr(value, method_name, None)
@@ -455,16 +443,9 @@ class LizMedia:
                     pass
 
         try:
-            public_attributes = {
-                key: item
-                for key, item in vars(value).items()
-                if not key.startswith("_") and not callable(item)
-            }
+            public_attributes = {key: item for key, item in vars(value).items() if not key.startswith("_") and not callable(item)}
             if public_attributes:
-                return {
-                    key: LizMedia._serialize_json_value(item)
-                    for key, item in public_attributes.items()
-                }
+                return {key: LizMedia._serialize_json_value(item) for key, item in public_attributes.items()}
         except Exception:
             pass
 
@@ -500,12 +481,8 @@ class LizMedia:
             "file_name": self._safe_json_value(lambda: self.file_name),
             "extension": self._safe_json_value(lambda: self.extension),
             "creation_time": self._safe_json_value(lambda: self.creation_time),
-            "creation_time_timestamp": self._safe_json_value(
-                lambda: self.creation_time_timestamp
-            ),
-            "creation_date_from_exif_or_file_or_sidecar": self._safe_json_value(
-                lambda: self.creation_date_from_exif_or_file_or_sidecar
-            ),
+            "creation_time_timestamp": self._safe_json_value(lambda: self.creation_time_timestamp),
+            "creation_date_from_exif_or_file_or_sidecar": self._safe_json_value(lambda: self.creation_date_from_exif_or_file_or_sidecar),
             "year": self._safe_json_value(lambda: self.year),
             "month": self._safe_json_value(lambda: self.month),
             "day": self._safe_json_value(lambda: self.day),
@@ -521,24 +498,14 @@ class LizMedia:
             )
             if is_image
             else None,
-            "has_exif_data": self._safe_json_value(
-                lambda: self.has_exif_data, default=None
-            )
-            if is_image
-            else None,
-            "ai_generated": self._safe_json_value(
-                lambda: self.ai_generated, default=None
-            )
-            if is_image
-            else None,
+            "has_exif_data": self._safe_json_value(lambda: self.has_exif_data, default=None) if is_image else None,
+            "ai_generated": self._safe_json_value(lambda: self.ai_generated, default=None) if is_image else None,
             "duration_sec": self._safe_json_value(lambda: self.duration_sec),
             "duration_min": self._safe_json_value(lambda: self.duration_min),
             "frame_rate": self._safe_json_value(lambda: self.frame_rate),
             "eagle_metadata_path": self._serialize_json_value(self.eagle_metadata_path),
             "eagle_metadata": self._serialize_json_value(self.eagle_metadata),
-            "attached_sidecar_files": self._serialize_json_value(
-                self.attached_sidecar_files
-            ),
+            "attached_sidecar_files": self._serialize_json_value(self.attached_sidecar_files),
             "has_xmp_sidecar": self._safe_json_value(lambda: self.has_xmp_sidecar()),
             "has_aae_sidecar": self._safe_json_value(lambda: self.has_aae_sidecar()),
             "xmp_sidecar": self._safe_json_value(lambda: self.get_xmp_sidecar()),
@@ -547,9 +514,7 @@ class LizMedia:
             "ai_has_ocr_text": self._serialize_json_value(self.ai_has_ocr_text),
             "ai_file_name": self._serialize_json_value(self.ai_file_name),
             "ai_description": self._serialize_json_value(self.ai_description),
-            "ai_desc_plus_text": self._safe_json_value(
-                lambda: self.get_desc_plus_text()
-            ),
+            "ai_desc_plus_text": self._safe_json_value(lambda: self.get_desc_plus_text()),
             "ai_tags": self._serialize_json_value(self.ai_tags),
             "ai_scanned": self._serialize_json_value(self.ai_scanned),
             "ai_nsfw": self._serialize_json_value(self.ai_nsfw),

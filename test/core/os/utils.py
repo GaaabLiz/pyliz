@@ -23,7 +23,6 @@ from pylizlib.core.os.utils import (
 
 
 class GetFolderSizeMbTestCase(unittest.TestCase):
-
     def test_known_size(self):
         with tempfile.TemporaryDirectory() as td:
             data = b"x" * (1024 * 1024)
@@ -38,7 +37,6 @@ class GetFolderSizeMbTestCase(unittest.TestCase):
 
 
 class GetDirectorySizeTestCase(unittest.TestCase):
-
     def test_known_size(self):
         with tempfile.TemporaryDirectory() as td:
             data = b"y" * (512 * 1024)
@@ -49,7 +47,6 @@ class GetDirectorySizeTestCase(unittest.TestCase):
 
 
 class HasDiskFreeSpaceTestCase(unittest.TestCase):
-
     def test_has_enough_space(self):
         self.assertTrue(has_disk_free_space(tempfile.gettempdir(), 1))
 
@@ -58,21 +55,18 @@ class HasDiskFreeSpaceTestCase(unittest.TestCase):
 
 
 class GetFreeSpaceMbTestCase(unittest.TestCase):
-
     def test_returns_positive(self):
         free = get_free_space_mb(tempfile.gettempdir())
         self.assertGreater(free, 0)
 
 
 class CheckMoveDirsFreeSpaceTestCase(unittest.TestCase):
-
     def test_small_source_large_dest(self):
         with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst:
             self.assertTrue(check_move_dirs_free_space(src, dst))
 
 
 class IsCommandAvailableTestCase(unittest.TestCase):
-
     def test_known_command(self):
         self.assertTrue(is_command_available("ls"))
 
@@ -81,7 +75,6 @@ class IsCommandAvailableTestCase(unittest.TestCase):
 
 
 class IsOsTestCase(unittest.TestCase):
-
     def test_is_os_unix(self):
         current = platform.system()
         if current in ("Linux", "Darwin"):
@@ -101,13 +94,11 @@ class IsOsTestCase(unittest.TestCase):
 
 
 class GetSystemUsernameTestCase(unittest.TestCase):
-
     def test_matches_getpass(self):
         self.assertEqual(get_system_username(), getpass.getuser())
 
 
 class IsSoftwareInstalledTestCase(unittest.TestCase):
-
     def test_executable_file(self):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".sh") as tmp:
             tmp_name = tmp.name
@@ -131,7 +122,6 @@ class IsSoftwareInstalledTestCase(unittest.TestCase):
 
 
 class OpenSystemFolderTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.os.utils.subprocess.Popen")
     def test_opens_existing_folder(self, mock_popen):
         with tempfile.TemporaryDirectory() as td:

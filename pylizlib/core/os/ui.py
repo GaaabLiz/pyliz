@@ -46,6 +46,4 @@ def is_dark_theme() -> bool:
             # Fallback cross-platform using Qt palette
             raise Exception("Unsupported OS")
     except Exception:
-        raise Exception(
-            "An error occurred while checking the theme. Please check your system settings."
-        )
+        raise Exception("An error occurred while checking the theme. Please check your system settings.")

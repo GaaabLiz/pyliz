@@ -58,7 +58,7 @@ class IniManager:
             with open(self.path, "w", encoding="utf-8") as configfile:
                 self.config.write(configfile)
         except OSError as exc:
-            logger.error( f"Error while creating configuration file '{self.path}': {exc}" )
+            logger.error(f"Error while creating configuration file '{self.path}': {exc}")
 
     def read(
         self,
@@ -75,7 +75,7 @@ class IniManager:
         self.config = configparser.ConfigParser()
         self.config.read(self.path, encoding="utf-8")
         if not self.config.has_section(section):
-            logger.warning( f"Section '{section}' does not exist in INI file '{self.path}'." )
+            logger.warning(f"Section '{section}' does not exist in INI file '{self.path}'.")
             return None
         if not self.config.has_option(section, key):
             logger.warning(f"Key '{key}' does not exist in section '{section}'.")

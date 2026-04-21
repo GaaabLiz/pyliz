@@ -43,9 +43,7 @@ class NetResponse:
         self.type = response_type
         self.exception = exception
         if self.hasResponse:
-            self.has_json_header = "application/json" in self.response.headers.get(
-                "Content-Type", ""
-            )
+            self.has_json_header = "application/json" in self.response.headers.get("Content-Type", "")
             if self.has_json_header:
                 self.json = self.response.json()
         self.__log()
@@ -54,9 +52,7 @@ class NetResponse:
         """Emit internal diagnostic log for the response wrapper."""
 
         log_trace = getattr(logger, "trace", logger.debug)
-        log_trace(
-            f"NetResponse: code={self.code} | type={self.type} | jsonHeader={self.has_json_header}"
-        )
+        log_trace(f"NetResponse: code={self.code} | type={self.type} | jsonHeader={self.has_json_header}")
 
     def __str__(self) -> str:
         """Return a readable summary of the response state."""
@@ -137,9 +133,7 @@ def exec_get(
 
     try:
         getattr(logger, "trace", logger.debug)("Executing GET request on URL: " + url)
-        response = requests.get(
-            url, allow_redirects=True, headers=headers, timeout=sec_timeout
-        )
+        response = requests.get(url, allow_redirects=True, headers=headers, timeout=sec_timeout)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:
@@ -162,9 +156,7 @@ def exec_post(
 
     try:
         getattr(logger, "trace", logger.debug)("Executing POST request on URL: " + url)
-        response = requests.post(
-            url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers
-        )
+        response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers)
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:

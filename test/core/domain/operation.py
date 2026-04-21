@@ -4,7 +4,6 @@ from pylizlib.core.domain.operation import Operation
 
 
 class OperationDomainTestCase(unittest.TestCase):
-
     def test_default_state(self):
         op = Operation()
 

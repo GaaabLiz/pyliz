@@ -18,7 +18,6 @@ from pylizlib.core.network.req import (
 
 
 class NetResponseTestCase(unittest.TestCase):
-
     def test_netresponse_with_json_header(self):
         response = MagicMock()
         response.status_code = 200
@@ -42,7 +41,6 @@ class NetResponseTestCase(unittest.TestCase):
 
 
 class RequestHelpersTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.network.req.requests.head")
     def test_test_with_head_true(self, mock_head):
         mock_head.return_value.status_code = 200

@@ -4,7 +4,6 @@ from pylizlib.core.domain.os import FileOsType, FileType, OsTheme, OsType
 
 
 class OsDomainTestCase(unittest.TestCase):
-
     def test_os_type_values(self):
         self.assertEqual(OsType.WINDOWS.value, "windows")
         self.assertEqual(OsType.UNKNOWN.value, "unknown")

@@ -64,17 +64,26 @@ class Instance(ABC):
     ):
         if self.settings.toolbar_widget_type == ToolbarWidgetType.ACTION:
             if action is None:
-                logger.error( "Cannot add action to toolbar %s. Action is None.", toolbar_handler.item.id, )
+                logger.error(
+                    "Cannot add action to toolbar %s. Action is None.",
+                    toolbar_handler.item.id,
+                )
                 return
             toolbar_handler.add_action(action)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
             if button is None:
-                logger.error( "Cannot add button to toolbar %s. Button is None.", toolbar_handler.item.id, )
+                logger.error(
+                    "Cannot add button to toolbar %s. Button is None.",
+                    toolbar_handler.item.id,
+                )
                 return
             toolbar_handler.add_action_button(button)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON_DROP_DOWN:
             if drop_button is None:
-                logger.error( "Cannot add button drop down to toolbar %s. DropDown Button is None.", toolbar_handler.item.id, )
+                logger.error(
+                    "Cannot add button drop down to toolbar %s. DropDown Button is None.",
+                    toolbar_handler.item.id,
+                )
                 return
             toolbar_handler.add_button_dropdown(drop_button)
 
@@ -87,7 +96,10 @@ class Instance(ABC):
     ):
         if self.settings.toolbar_widget_type == ToolbarWidgetType.ACTION:
             if action is None:
-                logger.error( "Cannot remove action from toolbar %s. Action is None.", toolbar_handler.item.id, )
+                logger.error(
+                    "Cannot remove action from toolbar %s. Action is None.",
+                    toolbar_handler.item.id,
+                )
                 return
             toolbar_handler.toolbar.removeAction(action)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
@@ -101,7 +113,10 @@ class Instance(ABC):
             pass
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON_DROP_DOWN:
             if drop_button is None:
-                logger.error( "Cannot remove button drop down from toolbar %s. DropDown Button is None.", toolbar_handler.item.id, )
+                logger.error(
+                    "Cannot remove button drop down from toolbar %s. DropDown Button is None.",
+                    toolbar_handler.item.id,
+                )
                 return
             toolbar_handler.remove_button_dropdown(drop_button)
 
@@ -116,9 +131,7 @@ class InstanceAction(Instance):
         signal: Any | None = None,
         callback: Any | None = None,
         data: InstanceData = InstanceData(),
-        handler_data: MenuActionHandlerData = MenuActionHandlerData(
-            AppTheme(), False, 32
-        ),
+        handler_data: MenuActionHandlerData = MenuActionHandlerData(AppTheme(), False, 32),
     ):
         super().__init__(InstanceType.ACTION, data)
         self.item = item
@@ -134,7 +147,9 @@ class InstanceAction(Instance):
 
     def menu_install(self, menu: QMenu):
         if self.settings.menu_add:
-            logger.debug( "Installing action %s to menu %s", self.action.objectName(),
+            logger.debug(
+                "Installing action %s to menu %s",
+                self.action.objectName(),
                 menu.title(),
             ) if self.enable_logs else None
             menu.addAction(self.action)
@@ -142,7 +157,9 @@ class InstanceAction(Instance):
 
     def menu_uninstall(self, menu: QMenu):
         if self.settings.menu_add:
-            logger.debug( "Uninstalling action %s from menu %s", self.action.objectName(),
+            logger.debug(
+                "Uninstalling action %s from menu %s",
+                self.action.objectName(),
                 menu.title(),
             ) if self.enable_logs else None
             menu.removeAction(self.action)
@@ -150,7 +167,9 @@ class InstanceAction(Instance):
 
     def toolbar_install(self, toolbar_handler: Optional[ToolbarHandler]):
         if self.settings.toolbar_add and toolbar_handler:
-            logger.debug( "Installing action %s to toolbar %s", self.action.objectName(),
+            logger.debug(
+                "Installing action %s to toolbar %s",
+                self.action.objectName(),
                 toolbar_handler.item.id,
             ) if self.enable_logs else None
             self.handle_tlb_action_adding(toolbar_handler, action=self.action)
@@ -170,9 +189,7 @@ class InstanceActionGroup(Instance):
         signal_type: ActionSignalType = ActionSignalType.ACTION_OBJECT,
         callback: Any | None = None,
         data: InstanceData = InstanceData(),
-        handler_data: MenuActionHandlerData = MenuActionHandlerData(
-            AppTheme(), False, 32
-        ),
+        handler_data: MenuActionHandlerData = MenuActionHandlerData(AppTheme(), False, 32),
     ):
         super().__init__(InstanceType.ACTION_GROUP_INNER_MENU, data)
         self.action_group = create_action_group(
@@ -202,7 +219,9 @@ class InstanceActionGroup(Instance):
         if action not in self.action_group.actions():
             self.action_group.addAction(action)
         else:
-            logger.warning( "Action %s already in group %s", action.text(),
+            logger.warning(
+                "Action %s already in group %s",
+                action.text(),
                 self.action_group.objectName(),
             )
 
@@ -217,13 +236,18 @@ class InstanceActionGroup(Instance):
             if act:
                 self.action_group.removeAction(act)
             else:
-                logger.warning( "Action %s not in group %s", action_id, self.action_group.objectName(),
+                logger.warning(
+                    "Action %s not in group %s",
+                    action_id,
+                    self.action_group.objectName(),
                 )
         elif action is not None:
             if action in self.action_group.actions():
                 self.action_group.removeAction(action)
             else:
-                logger.warning( "Action %s not in group %s", action.text(),
+                logger.warning(
+                    "Action %s not in group %s",
+                    action.text(),
                     self.action_group.objectName(),
                 )
 
@@ -235,7 +259,9 @@ class InstanceActionGroup(Instance):
     def setup(self):
         if self.is_inner:
             self.inner_menu.addActions(self.action_group.actions())
-            logger.debug( "Added %s actions to inner menu %s", len(self.action_group.actions()),
+            logger.debug(
+                "Added %s actions to inner menu %s",
+                len(self.action_group.actions()),
                 self.inner_menu.title(),
             ) if self.enable_logs else None
 
@@ -248,7 +274,9 @@ class InstanceActionGroup(Instance):
     def menu_install(self, menu: QMenu):
         if self.settings.menu_add:
             if self.is_inner:
-                logger.debug( "Installing action group %s to menu %s", self.action_group.objectName(),
+                logger.debug(
+                    "Installing action group %s to menu %s",
+                    self.action_group.objectName(),
                     menu.title(),
                 ) if self.enable_logs else None
                 menu.addMenu(self.inner_menu)
@@ -282,22 +310,18 @@ class InstanceActionGroup(Instance):
                     pass
                 case ToolbarWidgetType.BUTTON_DROP_DOWN:
                     if self.is_inner:
-                        drop_button = create_menu_action_drop_button(
-                            menu=self.inner_menu, icon=self.__get_group_icon()
-                        )
+                        drop_button = create_menu_action_drop_button(menu=self.inner_menu, icon=self.__get_group_icon())
                     else:
                         drop_menu = QMenu(title=self.action_group.objectName())
                         for action in self.action_group.actions():
-                            logger.debug( "Adding action %s to drop menu %s", action.objectName(),
+                            logger.debug(
+                                "Adding action %s to drop menu %s",
+                                action.objectName(),
                                 drop_menu.title(),
                             ) if self.enable_logs else None
                             drop_menu.addAction(action)
-                        drop_button = create_menu_action_drop_button(
-                            menu=drop_menu, icon=self.__get_group_icon()
-                        )
-                    self.handle_tlb_action_adding(
-                        toolbar_handler, drop_button=drop_button
-                    )
+                        drop_button = create_menu_action_drop_button(menu=drop_menu, icon=self.__get_group_icon())
+                    self.handle_tlb_action_adding(toolbar_handler, drop_button=drop_button)
                     self.widgets_dropdown.append(drop_button)
 
     def toolbar_uninstall(self, toolbar_handler: Optional[ToolbarHandler]):

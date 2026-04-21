@@ -190,11 +190,7 @@ class PylizApp:
     def delete_ini(self) -> None:
         """Delete the active INI file and reset the internal state."""
 
-        if (
-            self.__ini_initialized
-            and self.__ini_path is not None
-            and os.path.exists(self.__ini_path)
-        ):
+        if self.__ini_initialized and self.__ini_path is not None and os.path.exists(self.__ini_path):
             os.remove(self.__ini_path)
             self.__ini_initialized = False
             self.__ini = None

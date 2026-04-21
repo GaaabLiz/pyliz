@@ -27,9 +27,7 @@ class MultiSelectionComboBox(ComboBox):
 
     def _createComboMenu(self):
         """Create a checkable menu for multi-selection"""
-        menu = CheckableMenu(
-            title="", parent=self, indicatorType=MenuIndicatorType.CHECK
-        )
+        menu = CheckableMenu(title="", parent=self, indicatorType=MenuIndicatorType.CHECK)
         menu.setItemHeight(33)
 
         for i, item in enumerate(self.items):
@@ -39,9 +37,7 @@ class MultiSelectionComboBox(ComboBox):
             if item.icon:
                 action.setIcon(item.icon)
             action.setChecked(i in self._checked_indexes)
-            action.toggled.connect(
-                lambda checked, idx=i, act=action: self._onItemToggled(idx, act)
-            )
+            action.toggled.connect(lambda checked, idx=i, act=action: self._onItemToggled(idx, act))
             menu.addAction(action)
 
         if menu.view.width() < self.width():
@@ -70,11 +66,7 @@ class MultiSelectionComboBox(ComboBox):
         self.dropMenu = menu
 
         # Position and show the menu
-        x = (
-            -menu.width() // 2
-            + menu.layout().contentsMargins().left()
-            + self.width() // 2
-        )
+        x = -menu.width() // 2 + menu.layout().contentsMargins().left() + self.width() // 2
         pd = self.mapToGlobal(QPoint(x, self.height()))
         menu.exec(pd)
 

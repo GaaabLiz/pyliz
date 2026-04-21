@@ -35,9 +35,7 @@ class UiUtils:
         for action_text in data:
             if isinstance(action_text, Path):
                 action_text = action_text.__str__()
-            act = Action(
-                icon if icon_action is None else icon_action, action_text, parent
-            )
+            act = Action(icon if icon_action is None else icon_action, action_text, parent)
             if clicked_signal is not None:
                 act.triggered.connect(partial(clicked_signal.emit, action_text))
             actions.append(act)

@@ -8,7 +8,6 @@ from pylizlib.core.app.pylizini import PylizIniHandler, PylizIniItem
 
 
 class PylizIniHandlerTestCase(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)

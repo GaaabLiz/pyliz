@@ -56,7 +56,7 @@ class FrameSelector(ABC):
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total_frames / fps
 
-        self.logger.trace( f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s" )
+        self.logger.trace(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
         return cap, fps, duration, total_frames
 
 
@@ -75,16 +75,13 @@ class DynamicFrameSelector(FrameSelector):
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         scene_changes = self._detect_scene_changes(video_path, cap)
-        target_frames = frame_options.calculate_dynamic_frame_count(
-            duration, scene_changes
-        )
+        target_frames = frame_options.calculate_dynamic_frame_count(duration, scene_changes)
 
         self.logger.trace(f"Target frames for analysis: {target_frames}")
         frames = self._extract_frames(cap, target_frames, scene_changes)
 
         cap.release()
-        self.logger.trace( f"Dynamic frame selection completed. Selected {len(frames)} frames"
-        )
+        self.logger.trace(f"Dynamic frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _detect_scene_changes(
@@ -174,9 +171,7 @@ class DynamicFrameSelector(FrameSelector):
             is_scene_change = any(abs(sc - timestamp) < 0.1 for sc in scene_changes)
             scene_type = SceneType.TRANSITION if is_scene_change else SceneType.STATIC
 
-            frames.append(
-                Frame(image=frame_rgb, timestamp=timestamp, scene_type=scene_type)
-            )
+            frames.append(Frame(image=frame_rgb, timestamp=timestamp, scene_type=scene_type))
 
         return frames
 
@@ -199,8 +194,7 @@ class UniformFrameSelector(FrameSelector):
         frames = self._extract_uniform_frames(cap, target_frames, fps)
 
         cap.release()
-        self.logger.trace( f"Uniform frame selection completed. Selected {len(frames)} frames"
-        )
+        self.logger.trace(f"Uniform frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_uniform_frames(
@@ -230,9 +224,7 @@ class UniformFrameSelector(FrameSelector):
             timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            frames.append(
-                Frame(image=frame_rgb, timestamp=timestamp, scene_type=SceneType.STATIC)
-            )
+            frames.append(Frame(image=frame_rgb, timestamp=timestamp, scene_type=SceneType.STATIC))
 
         return frames
 
@@ -252,8 +244,7 @@ class AllFrameSelector(FrameSelector):
 
         frames = self._extract_all_frames(cap, fps)
         cap.release()
-        self.logger.trace( f"All frame selection completed. Selected {len(frames)} frames"
-        )
+        self.logger.trace(f"All frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_all_frames(self, cap: cv2.VideoCapture, fps: float) -> List[Frame]:

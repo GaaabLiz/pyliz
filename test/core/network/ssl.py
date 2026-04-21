@@ -5,7 +5,6 @@ from pylizlib.core.network.ssl import ignore_context_ssl
 
 
 class SslHelpersTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.network.ssl.urllib3.disable_warnings")
     @patch("pylizlib.core.network.ssl.ssl.create_default_context")
     def test_ignore_context_ssl(self, mock_context_factory, mock_disable_warnings):

@@ -12,7 +12,6 @@ from pylizlib.core.handler.progress import (
 
 
 class OperationProgressTestCase(unittest.TestCase):
-
     def test_set_task_progress_updates_existing_task(self):
         operation = OperationProgress(
             operation_id="op1",
@@ -47,7 +46,6 @@ class OperationProgressTestCase(unittest.TestCase):
 
 
 class ProgressHandlerTestCase(unittest.TestCase):
-
     def test_add_and_get_operation_progress(self):
         handler = ProgressHandler()
         handler.add_operation("op1", ["t1", "t2"])
@@ -67,7 +65,6 @@ class ProgressHandlerTestCase(unittest.TestCase):
 
 
 class QueueProgressTestCase(unittest.TestCase):
-
     def test_step_mode_progress(self):
         queue = QueueProgress(mode=QueueProgressMode.STEP, total_count=2)
         queue.set_step_progress(0, 100)
@@ -92,7 +89,6 @@ class QueueProgressTestCase(unittest.TestCase):
 
 
 class StepProgressFunctionTestCase(unittest.TestCase):
-
     def test_get_step_progress_percentage(self):
         self.assertEqual(get_step_progress_percentage(3, 4), 75)
 

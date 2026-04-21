@@ -164,10 +164,7 @@ class WindowsOsUtils:
         exe_path_str = os.path.abspath(exe_path.__str__())  # normalize
         for proc in psutil.process_iter(["exe", "name"]):
             try:
-                if (
-                    proc.info["exe"]
-                    and os.path.abspath(proc.info["exe"]) == exe_path_str
-                ):
+                if proc.info["exe"] and os.path.abspath(proc.info["exe"]) == exe_path_str:
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -190,12 +187,8 @@ class WindowsOsUtils:
             # GetFileVersionInfo call removed as it was unused
             # Le chiavi di versione sono memorizzate come tuple
             # Prima otteniamo la lingua e il codice di pagina
-            lang, codepage = win32api.GetFileVersionInfo(
-                exe_path.__str__(), "\\VarFileInfo\\Translation"
-            )[0]
-            str_info_path = (
-                f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
-            )
+            lang, codepage = win32api.GetFileVersionInfo(exe_path.__str__(), "\\VarFileInfo\\Translation")[0]
+            str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
             version = win32api.GetFileVersionInfo(exe_path.__str__(), str_info_path)
             return version
         except Exception:

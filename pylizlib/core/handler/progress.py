@@ -86,11 +86,7 @@ class ProgressHandler:
         tasks = []
         for task_id in tasks_ids:
             tasks.append(TaskProgress(task_id=task_id, task_progress=0))
-        self.operations.append(
-            OperationProgress(
-                operation_id=id, operation_progress=0, operation_tasks=tasks
-            )
-        )
+        self.operations.append(OperationProgress(operation_id=id, operation_progress=0, operation_tasks=tasks))
 
     def set_task_progress(
         self,
@@ -108,9 +104,7 @@ class ProgressHandler:
     def get_master_progress(self) -> float:
         """Return average progress across all operations."""
 
-        total_progress = sum(
-            operation.get_operation_progress() for operation in self.operations
-        )
+        total_progress = sum(operation.get_operation_progress() for operation in self.operations)
         if self.operations:
             return total_progress / len(self.operations)
         else:

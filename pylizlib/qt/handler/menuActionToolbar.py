@@ -33,7 +33,7 @@ class ToolbarHandler:
         else:
             layout.addWidget(self.toolbar)
         self.created = True
-        logger.debug( f"Toolbar created for {self.item.id}" ) if self.enable_logs else None
+        logger.debug(f"Toolbar created for {self.item.id}") if self.enable_logs else None
 
     def destroy(
         self,
@@ -48,9 +48,9 @@ class ToolbarHandler:
             self.toolbar.deleteLater()
             self.toolbar = None
             self.created = False
-            logger.debug( f"Toolbar destroyed for {self.item.id}" ) if self.enable_logs else None
+            logger.debug(f"Toolbar destroyed for {self.item.id}") if self.enable_logs else None
         else:
-            logger.error( "Cannot destroy toolbar %s. Toolbar is not created.", self.item.id )
+            logger.error("Cannot destroy toolbar %s. Toolbar is not created.", self.item.id)
 
     def is_created(self) -> bool:
         return self.toolbar is not None and self.created
@@ -58,33 +58,33 @@ class ToolbarHandler:
     def add_action(self, action: QAction):
         if self.is_created():
             self.toolbar.addAction(action)
-            logger.debug( "Added action %s to toolbar %s", action.objectName(), self.item.id
-            ) if self.enable_logs else None
+            logger.debug("Added action %s to toolbar %s", action.objectName(), self.item.id) if self.enable_logs else None
         else:
-            logger.error( "Cannot add action to toolbar %s. Toolbar is not created.", self.item.id )
+            logger.error("Cannot add action to toolbar %s. Toolbar is not created.", self.item.id)
 
     def add_separator(self):
         if self.is_created():
             self.toolbar.addSeparator()
-            logger.debug( "Added separator to toolbar %s", self.item.id ) if self.enable_logs else None
+            logger.debug("Added separator to toolbar %s", self.item.id) if self.enable_logs else None
         else:
-            logger.error( "Cannot add separator to toolbar %s. Toolbar is not created.", self.item.id, )
+            logger.error(
+                "Cannot add separator to toolbar %s. Toolbar is not created.",
+                self.item.id,
+            )
 
     def add_action_button(self, button: QPushButton):
         if self.is_created():
             self.toolbar.addWidget(button)
-            logger.debug( "Added button %s to toolbar %s", button.objectName(), self.item.id
-            ) if self.enable_logs else None
+            logger.debug("Added button %s to toolbar %s", button.objectName(), self.item.id) if self.enable_logs else None
         else:
-            logger.error( "Cannot add button to toolbar %s. Toolbar is not created.", self.item.id )
+            logger.error("Cannot add button to toolbar %s. Toolbar is not created.", self.item.id)
 
     def add_button_dropdown(self, button: QToolButton):
         if self.is_created():
             self.toolbar.addWidget(button)
-            logger.debug( "Added button %s to toolbar %s", button.objectName(), self.item.id
-            ) if self.enable_logs else None
+            logger.debug("Added button %s to toolbar %s", button.objectName(), self.item.id) if self.enable_logs else None
         else:
-            logger.error( "Cannot add button to toolbar %s. Toolbar is not created.", self.item.id )
+            logger.error("Cannot add button to toolbar %s. Toolbar is not created.", self.item.id)
 
     def remove_button_dropdown(self, button: QToolButton):
         if self.is_created():
@@ -94,7 +94,9 @@ class ToolbarHandler:
                     self.toolbar.removeAction(action)
                     button.deleteLater()
                     break
-            logger.debug( "Removed button %s from toolbar %s", button.objectName(), self.item.id
-            ) if self.enable_logs else None
+            logger.debug("Removed button %s from toolbar %s", button.objectName(), self.item.id) if self.enable_logs else None
         else:
-            logger.error( "Cannot remove button from toolbar %s. Toolbar is not created.", self.item.id, )
+            logger.error(
+                "Cannot remove button from toolbar %s. Toolbar is not created.",
+                self.item.id,
+            )

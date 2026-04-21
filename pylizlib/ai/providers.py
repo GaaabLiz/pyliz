@@ -26,9 +26,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "bmp", "gif", "tiff", "tif"}
 _VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
-_DEFAULT_MODEL_DIR = os.getenv(
-    "PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Documents/models")
-)
+_DEFAULT_MODEL_DIR = os.getenv("PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Documents/models"))
 
 
 class BaseAiProvider(ABC):
@@ -102,17 +100,11 @@ class JoyTagProvider(BaseAiProvider):
         if media.is_image:
             with Image.open(media.path) as image_file:
                 image = image_file.convert("RGB")
-                predicted_tags.extend(
-                    self._predict_from_image(image, model, tag_list, device, tvf, torch)
-                )
+                predicted_tags.extend(self._predict_from_image(image, model, tag_list, device, tvf, torch))
         elif media.is_video:
-            for frame in sample_video_frames(
-                media.path, max_frames=self.video_sample_frames
-            ):
+            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
                 image = Image.fromarray(frame)
-                predicted_tags.extend(
-                    self._predict_from_image(image, model, tag_list, device, tvf, torch)
-                )
+                predicted_tags.extend(self._predict_from_image(image, model, tag_list, device, tvf, torch))
         else:
             return AiScanResult(tags=[])
 
@@ -137,18 +129,12 @@ class JoyTagProvider(BaseAiProvider):
             import torchvision.transforms.functional as tvf
             from huggingface_hub import snapshot_download
         except ImportError as exc:
-            raise ImportError(
-                "JoyTag scanning requires the optional AI dependencies. Install the 'ai' extra to enable TAGS scans."
-            ) from exc
+            raise ImportError("JoyTag scanning requires the optional AI dependencies. Install the 'ai' extra to enable TAGS scans.") from exc
 
-        model_path = snapshot_download(
-            repo_id="fancyfeast/joytag", cache_dir=self.model_dir
-        )
+        model_path = snapshot_download(repo_id="fancyfeast/joytag", cache_dir=self.model_dir)
         py_file_path = os.path.join(model_path, "Models.py")
         if not os.path.exists(py_file_path):
-            url = (
-                "https://huggingface.co/spaces/fancyfeast/joytag/resolve/main/Models.py"
-            )
+            url = "https://huggingface.co/spaces/fancyfeast/joytag/resolve/main/Models.py"
             urllib.request.urlretrieve(url, py_file_path)
 
         spec = importlib.util.spec_from_file_location("joytag_module", py_file_path)
@@ -165,9 +151,7 @@ class JoyTagProvider(BaseAiProvider):
         else:
             device = torch.device("cpu")
 
-        with open(
-            os.path.join(model_path, "top_tags.txt"), "r", encoding="utf-8"
-        ) as handle:
+        with open(os.path.join(model_path, "top_tags.txt"), "r", encoding="utf-8") as handle:
             tag_list = [line.strip() for line in handle.readlines()]
 
         model = vision_model.load_model(model_path)
@@ -238,13 +222,8 @@ class JoyTagProvider(BaseAiProvider):
                 preds = preds.squeeze(0)
             preds = torch.sigmoid(preds)
 
-        logger.debug( f"JoyTag inference completed in {round(time.time() - start_time, 2)}s for {len(tag_list)} tags."
-        )
-        return [
-            tag_list[i]
-            for i, prediction in enumerate(preds)
-            if prediction > self.confidence_threshold
-        ]
+        logger.debug(f"JoyTag inference completed in {round(time.time() - start_time, 2)}s for {len(tag_list)} tags.")
+        return [tag_list[i] for i, prediction in enumerate(preds) if prediction > self.confidence_threshold]
 
 
 class EasyOcrProvider(BaseAiProvider):
@@ -289,17 +268,13 @@ class EasyOcrProvider(BaseAiProvider):
         if media.is_image:
             texts.extend(self._extract_texts(reader.readtext(str(media.path))))
         elif media.is_video:
-            for frame in sample_video_frames(
-                media.path, max_frames=self.video_sample_frames
-            ):
+            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
                 texts.extend(self._extract_texts(reader.readtext(frame)))
         else:
             return AiScanResult(ocr_text=[], ocr_detected=False)
 
         normalized_texts = unique_preserving_order(texts)
-        return AiScanResult(
-            ocr_text=normalized_texts, ocr_detected=bool(normalized_texts)
-        )
+        return AiScanResult(ocr_text=normalized_texts, ocr_detected=bool(normalized_texts))
 
     def _get_reader(self):
         """
@@ -318,9 +293,7 @@ class EasyOcrProvider(BaseAiProvider):
             import easyocr
             import torch
         except ImportError as exc:
-            raise ImportError(
-                "OCR scanning requires the optional AI dependencies. Install the 'ai' extra to enable OCR scans."
-            ) from exc
+            raise ImportError("OCR scanning requires the optional AI dependencies. Install the 'ai' extra to enable OCR scans.") from exc
 
         self._reader = easyocr.Reader(
             self.languages,
@@ -392,9 +365,7 @@ class NudeNetProvider(BaseAiProvider):
         if media.is_image:
             return AiScanResult(nsfw=self._detect_image(detector, media.path))
         if media.is_video:
-            for frame in sample_video_frames(
-                media.path, max_frames=self.video_sample_frames
-            ):
+            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
                 if self._detect_frame(detector, frame):
                     return AiScanResult(nsfw=True)
             return AiScanResult(nsfw=False)
@@ -416,9 +387,7 @@ class NudeNetProvider(BaseAiProvider):
         try:
             from nudenet import NudeDetector
         except ImportError as exc:
-            raise ImportError(
-                "NSFW scanning requires the optional AI dependencies. Install the 'ai' extra to enable NSFW scans."
-            ) from exc
+            raise ImportError("NSFW scanning requires the optional AI dependencies. Install the 'ai' extra to enable NSFW scans.") from exc
 
         self._detector = NudeDetector()
         return self._detector

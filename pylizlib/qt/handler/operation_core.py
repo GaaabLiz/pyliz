@@ -181,9 +181,7 @@ class Operation(QRunnable):
             self.time_elapsed = time.perf_counter() - self.time_started
             if self.progress > 0:
                 self.time_estimated_total = self.time_elapsed / (self.progress / 100)
-                self.time_estimated_remaining = max(
-                    0, self.time_estimated_total - self.time_elapsed
-                )
+                self.time_estimated_remaining = max(0, self.time_estimated_total - self.time_elapsed)
                 self.signals.op_eta_update.emit(self.id, self.get_eta_formatted())
         else:
             if self.time_started and self.time_finished:

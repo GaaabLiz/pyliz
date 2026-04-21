@@ -6,7 +6,6 @@ from pylizlib.core.data.regex import is_valid_url, validate_url
 
 
 class RegexHelpersTestCase(unittest.TestCase):
-
     def test_is_valid_url_accepts_https(self):
         self.assertTrue(is_valid_url("https://example.com/path?q=1"))
 

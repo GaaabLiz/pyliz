@@ -28,8 +28,7 @@ class VideoUtils:
             use_existing: If True, skips extraction if the audio file already exists.
         """
         if use_existing and os.path.exists(audio_path):
-            logger.debug( f"Audio file for {get_filename(video_path)} already exist: {audio_path}"
-            )
+            logger.debug(f"Audio file for {get_filename(video_path)} already exist: {audio_path}")
             return
         ffmpeg.input(video_path).output(audio_path).run(overwrite_output=True)
 
@@ -107,7 +106,7 @@ class VideoUtils:
 
         # Skip if frames already exist
         if use_existing and len(os.listdir(output_folder)) > 0:
-            logger.debug( f"Frames already exist in {output_folder}. Exiting frame extraction." )
+            logger.debug(f"Frames already exist in {output_folder}. Exiting frame extraction.")
             return
 
         # Open the video
@@ -129,9 +128,7 @@ class VideoUtils:
 
         # Save the first frame
         file_name = os.path.basename(video_path).split(".")[0]
-        frame_path = os.path.join(
-            output_folder, f"{file_name}_frame_{saved_frame_count}.jpg"
-        )
+        frame_path = os.path.join(output_folder, f"{file_name}_frame_{saved_frame_count}.jpg")
         cv2.imwrite(frame_path, prev_frame)
         saved_frame_count += 1
 
@@ -150,16 +147,14 @@ class VideoUtils:
             # Save frame if threshold is exceeded
             if mean_diff > difference_threshold:
                 file_name = os.path.basename(video_path).split(".")[0]
-                frame_path = os.path.join(
-                    output_folder, f"{file_name}_frame_{saved_frame_count}.jpg"
-                )
+                frame_path = os.path.join(output_folder, f"{file_name}_frame_{saved_frame_count}.jpg")
                 cv2.imwrite(frame_path, frame)
                 saved_frame_count += 1
                 prev_frame_gray = frame_gray  # Update previous frame
-                logger.trace( f"Frame {frame_count} saved because threshold exceeded: {mean_diff}" )
+                logger.trace(f"Frame {frame_count} saved because threshold exceeded: {mean_diff}")
 
             frame_count += 1
-            logger.trace( f"Frame {frame_count} processed, {saved_frame_count} frames saved" )
+            logger.trace(f"Frame {frame_count} processed, {saved_frame_count} frames saved")
 
         # Rilascia la cattura del video e chiudi le finestre
         cap.release()
@@ -177,9 +172,7 @@ class VideoUtils:
             probe = ffmpeg.probe(path)
             tags = probe.get("format", {}).get("tags", {})
             # Try apple specific tag first as it is more reliable for iPhone videos
-            date_str = tags.get("com.apple.quicktime.creationdate") or tags.get(
-                "creation_time"
-            )
+            date_str = tags.get("com.apple.quicktime.creationdate") or tags.get("creation_time")
             if date_str:
                 # Handle Z and other ISO formats
                 try:

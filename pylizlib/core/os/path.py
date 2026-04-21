@@ -250,14 +250,8 @@ def get_folders_from(directory, recursive: bool = False) -> list[LiteralString |
     :return: list of folders paths from the path
     """
     if recursive:
-        return [
-            os.path.join(root, d)
-            for root, dirs, files in os.walk(directory)
-            for d in dirs
-        ]
-    return [
-        d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))
-    ]
+        return [os.path.join(root, d) for root, dirs, files in os.walk(directory) for d in dirs]
+    return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
 
 def get_files_from(
@@ -278,11 +272,7 @@ def get_files_from(
             for file in files:
                 db.append(os.path.join(root, file))
     else:
-        db = [
-            f
-            for f in os.listdir(directory)
-            if os.path.isfile(os.path.join(directory, f))
-        ]
+        db = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     if extension is not None:
         return [f for f in db if f.endswith(extension)]
     return db
@@ -421,9 +411,7 @@ class PathMatcher:
     def load_path(self, path: Path, recursive: bool = False):
         self.working_path = path
         self.working_path_items = get_path_items(path, recursive)
-        self.working_path_items_rel = [
-            str(p.relative_to(self.working_path)) for p in self.working_path_items
-        ]
+        self.working_path_items_rel = [str(p.relative_to(self.working_path)) for p in self.working_path_items]
 
     def match_with_list(self, path_str_list: list[str]):
         set1, set2 = set(self.working_path_items_rel), set(path_str_list)

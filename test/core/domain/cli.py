@@ -4,7 +4,6 @@ from pylizlib.core.domain.cli import AnsYesNo
 
 
 class CliDomainTestCase(unittest.TestCase):
-
     def test_from_string_yes(self):
         self.assertEqual(AnsYesNo.from_string("yes"), AnsYesNo.YES)
         self.assertEqual(AnsYesNo.from_string(" YES "), AnsYesNo.YES)

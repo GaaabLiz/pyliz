@@ -218,12 +218,7 @@ class LoggizLogger:
         """Write a debug message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.debug(
-                LoggizLogger.get_tag_string(tag, True)
-                + Colors.CYAN
-                + f"{message}"
-                + Colors.END
-            )
+            rootConsoleLogger.debug(LoggizLogger.get_tag_string(tag, True) + Colors.CYAN + f"{message}" + Colors.END)
         else:
             rootConsoleLogger.debug(LoggizLogger.get_tag_string(tag) + message)
 
@@ -232,12 +227,7 @@ class LoggizLogger:
         """Write an info message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.info(
-                LoggizLogger.get_tag_string(tag, True)
-                + Colors.GREEN
-                + f"{message}"
-                + Colors.END
-            )
+            rootConsoleLogger.info(LoggizLogger.get_tag_string(tag, True) + Colors.GREEN + f"{message}" + Colors.END)
         else:
             rootConsoleLogger.info(LoggizLogger.get_tag_string(tag) + message)
 
@@ -246,12 +236,7 @@ class LoggizLogger:
         """Write a warning message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.warning(
-                LoggizLogger.get_tag_string(tag, True)
-                + Colors.YELLOW
-                + f"{message}"
-                + Colors.END
-            )
+            rootConsoleLogger.warning(LoggizLogger.get_tag_string(tag, True) + Colors.YELLOW + f"{message}" + Colors.END)
         else:
             rootConsoleLogger.warning(LoggizLogger.get_tag_string(tag) + message)
 
@@ -260,12 +245,7 @@ class LoggizLogger:
         """Write an error message to console logger."""
 
         if config.enable_console_ansi:
-            rootConsoleLogger.error(
-                LoggizLogger.get_tag_string(tag, True)
-                + Colors.RED
-                + f"{message}"
-                + Colors.END
-            )
+            rootConsoleLogger.error(LoggizLogger.get_tag_string(tag, True) + Colors.RED + f"{message}" + Colors.END)
         else:
             rootConsoleLogger.error(LoggizLogger.get_tag_string(tag) + message)
 

@@ -8,7 +8,6 @@ from pylizlib.core.os.ui import (
 
 
 class IsMacosDarkThemeTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.os.ui.subprocess.run")
     def test_dark_theme_detected(self, mock_run):
         mock_run.return_value = MagicMock(stdout="Dark\n")
@@ -25,7 +24,6 @@ class IsMacosDarkThemeTestCase(unittest.TestCase):
 
 
 class IsDarkThemeTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.os.ui.is_macos_dark_theme", return_value=True)
     @patch("platform.system", return_value="Darwin")
     def test_macos_dark(self, mock_sys, mock_mac):

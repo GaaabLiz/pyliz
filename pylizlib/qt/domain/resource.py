@@ -25,9 +25,7 @@ class ResIcon:
         return self.color
 
     def has_fixed_color(self):
-        return (self.color is not None) or (
-            self.color_light is None and self.color_dark is None
-        )
+        return (self.color is not None) or (self.color_light is None and self.color_dark is None)
 
 
 @dataclass

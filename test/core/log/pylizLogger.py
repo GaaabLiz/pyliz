@@ -4,7 +4,6 @@ from pylizlib.core.log.pylizLogger import PYLIZ_LIB_LOGGER_NAME, log_tests, logg
 
 
 class PylizLoggerTestCase(unittest.TestCase):
-
     def test_logger_name(self):
         self.assertEqual(PYLIZ_LIB_LOGGER_NAME, "PylizLib")
         self.assertEqual(logger.name, PYLIZ_LIB_LOGGER_NAME)

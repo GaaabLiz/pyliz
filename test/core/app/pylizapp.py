@@ -8,7 +8,6 @@ from pylizlib.core.app.pylizapp import PylizApp, PylizDirFoldersTemplate
 
 
 class PylizAppTestCase(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)

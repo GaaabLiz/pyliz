@@ -45,9 +45,7 @@ class ResHandler:
         if not theme_style:
             return QIcon(icon.res_id)
         color = ResHandler.__get_icon_color(icon, theme)
-        return ResHandler.colored_svg_icon(
-            icon.res_id, QSize(icon_size, icon_size), color
-        )
+        return ResHandler.colored_svg_icon(icon.res_id, QSize(icon_size, icon_size), color)
 
     @staticmethod
     def get_icon_image(image: ResImage) -> QIcon:

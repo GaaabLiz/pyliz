@@ -45,13 +45,7 @@ def create_test_snapshot(name: str, num_dirs: int = 2) -> Snapshot:
                 folder_id=gen_random_string(6),
             )
         )
-    return Snapshot(
-        id=gen_random_string(10),
-        name=name,
-        desc=f"Description for {name}",
-        directories=dirs,
-        author="TestRunner"
-    )
+    return Snapshot(id=gen_random_string(10), name=name, desc=f"Description for {name}", directories=dirs, author="TestRunner")
 
 
 class TestSnapshot(unittest.TestCase):
@@ -197,14 +191,14 @@ class TestSnapshotUtils(unittest.TestCase):
         # Test sort by ASSOC_DIR_MB_SIZE
         # Create snapshots with different sizes
         # Ensure directories have some content for size calculation
-        (SOURCE_DATA_PATH / "dir1" / "file_s.txt").write_text("s" * 100) # ~0.1KB
-        (SOURCE_DATA_PATH / "dir2" / "file_m.txt").write_text("m" * 1000) # ~1KB
-        (SOURCE_DATA_PATH / "dir3" / "file_l.txt").write_text("l" * 10000) # ~10KB
+        (SOURCE_DATA_PATH / "dir1" / "file_s.txt").write_text("s" * 100)  # ~0.1KB
+        (SOURCE_DATA_PATH / "dir2" / "file_m.txt").write_text("m" * 1000)  # ~1KB
+        (SOURCE_DATA_PATH / "dir3" / "file_l.txt").write_text("l" * 10000)  # ~10KB
 
         # Re-create snapshots to ensure mb_size is calculated based on new file sizes
-        snap_small = create_test_snapshot("SmallSnap", num_dirs=1) # Uses dir1
-        snap_medium = create_test_snapshot("MediumSnap", num_dirs=2) # Uses dir1, dir2
-        snap_large = create_test_snapshot("LargeSnap", num_dirs=3) # Uses dir1, dir2, dir3
+        snap_small = create_test_snapshot("SmallSnap", num_dirs=1)  # Uses dir1
+        snap_medium = create_test_snapshot("MediumSnap", num_dirs=2)  # Uses dir1, dir2
+        snap_large = create_test_snapshot("LargeSnap", num_dirs=3)  # Uses dir1, dir2, dir3
 
         # Ensure mb_size is calculated and ordered correctly
         self.assertGreater(snap_small.get_assoc_dir_mb_size, 0)
@@ -221,7 +215,6 @@ class TestSnapshotUtils(unittest.TestCase):
 
 
 class TestSnapshotManager(unittest.TestCase):
-
     def setUp(self):
         """Set up for each test method."""
         if TEST_LOCAL_ROOT.exists():
@@ -307,7 +300,6 @@ class TestSnapshotManager(unittest.TestCase):
 
 
 class TestSnapshotCatalogue(unittest.TestCase):
-
     def setUp(self):
         """Set up for each test method."""
         if TEST_LOCAL_ROOT.exists():
@@ -326,12 +318,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         (SOURCE_DATA_PATH / "dir3" / "subdir").mkdir()
         (SOURCE_DATA_PATH / "dir3" / "subdir" / "file3.txt").write_text("content3")
 
-        self.settings = SnapshotSettings(
-            backup_path=BACKUP_PATH,
-            backup_pre_delete=True,
-            backup_pre_install=True,
-            backup_pre_modify=True
-        )
+        self.settings = SnapshotSettings(backup_path=BACKUP_PATH, backup_pre_delete=True, backup_pre_install=True, backup_pre_modify=True)
         self.catalogue = SnapshotCatalogue(CATALOGUE_PATH, settings=self.settings)
 
     def tearDown(self):
@@ -380,8 +367,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         # Remove one dir and add another
         snap_new.directories.pop(0)
         new_dir_path = str(SOURCE_DATA_PATH / "dir3")
-        snap_new.directories.append(
-            SnapDirAssociation(index=3, original_path=new_dir_path, folder_id=gen_random_string(6)))
+        snap_new.directories.append(SnapDirAssociation(index=3, original_path=new_dir_path, folder_id=gen_random_string(6)))
 
         self.catalogue.update_snapshot_by_objs(snap_old, snap_new)
 
@@ -423,7 +409,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertTrue(export_zip_path.exists())
 
         # 4. Verify the zip contents
-        with zipfile.ZipFile(export_zip_path, 'r') as zf:
+        with zipfile.ZipFile(export_zip_path, "r") as zf:
             zipped_files = zf.namelist()
 
             # Check for snap1 files
@@ -504,7 +490,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertEqual(len(self.catalogue.get_all()), 1)
 
         # 3. Import the catalogue and check for logging
-        with patch('pylizlib.core.log.pylizLogger.logger.info') as mock_info:
+        with patch("pylizlib.core.log.pylizLogger.logger.info") as mock_info:
             self.catalogue.import_catalogue(export_zip_path)
             # Verify that the existing snapshot was skipped
             mock_info.assert_any_call(f"Snapshot with ID '{snap1.id}' already exists. Skipping import.")
@@ -563,8 +549,8 @@ class TestSnapshotCatalogue(unittest.TestCase):
             SnapDirAssociation(index=2, original_path=str(install_dir_2_path), folder_id="id2"),
         ]
 
-        self.catalogue.add(snap_to_remove) # Adds to catalogue
-        self.catalogue.install(snap_to_remove) # Installs to original_path locations
+        self.catalogue.add(snap_to_remove)  # Adds to catalogue
+        self.catalogue.install(snap_to_remove)  # Installs to original_path locations
 
         # Verify they exist before removal
         self.assertTrue(install_dir_1_path.exists())
@@ -578,7 +564,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertFalse(install_dir_2_path.exists())
 
         # Test Case 2: Snapshot Not Found (should log a warning)
-        with patch('pylizlib.core.log.pylizLogger.logger.warning') as mock_warning:
+        with patch("pylizlib.core.log.pylizLogger.logger.warning") as mock_warning:
             self.catalogue.remove_installed_copies("non-existent-id")
             mock_warning.assert_called_once_with("Snapshot with ID 'non-existent-id' not found. Cannot remove installed copies.")
 
@@ -590,25 +576,25 @@ class TestSnapshotCatalogue(unittest.TestCase):
         # Create both directories so 'add' succeeds
         install_dir_3_path.mkdir(parents=True, exist_ok=True)
         (install_dir_3_path / "file_c.txt").write_text("content C")
-        install_dir_4_path.mkdir(parents=True, exist_ok=True) # Create this one too
-        (install_dir_4_path / "file_d.txt").write_text("content D") # Add some content
+        install_dir_4_path.mkdir(parents=True, exist_ok=True)  # Create this one too
+        (install_dir_4_path / "file_d.txt").write_text("content D")  # Add some content
 
         snap_partial_remove.directories = [
             SnapDirAssociation(index=1, original_path=str(install_dir_3_path), folder_id="id3"),
             SnapDirAssociation(index=2, original_path=str(install_dir_4_path), folder_id="id4"),
         ]
-        self.catalogue.add(snap_partial_remove) # This will now succeed
+        self.catalogue.add(snap_partial_remove)  # This will now succeed
 
         # Now, simulate one of the installed copies being missing
-        shutil.rmtree(install_dir_4_path) # Manually delete it
+        shutil.rmtree(install_dir_4_path)  # Manually delete it
 
         self.assertTrue(install_dir_3_path.exists())
-        self.assertFalse(install_dir_4_path.exists()) # Confirm it's missing
+        self.assertFalse(install_dir_4_path.exists())  # Confirm it's missing
 
         self.catalogue.remove_installed_copies(snap_partial_remove.id)
 
-        self.assertFalse(install_dir_3_path.exists()) # Should be removed
-        self.assertFalse(install_dir_4_path.exists()) # Should still be missing, no error
+        self.assertFalse(install_dir_3_path.exists())  # Should be removed
+        self.assertFalse(install_dir_4_path.exists())  # Should still be missing, no error
 
     def test_export_assoc_dirs(self):
         # Setup: Create a snapshot with some associated directories
@@ -625,13 +611,13 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertTrue(export_destination.exists())
         export_files = list(export_destination.iterdir())
         self.assertEqual(len(export_files), 1)
-        
+
         zip_file = export_files[0]
         self.assertTrue(zip_file.name.startswith(f"export_{snap1.id}_ad"))
         self.assertTrue(zip_file.name.endswith(".zip"))
 
         # Verify the contents of the zip file
-        with zipfile.ZipFile(zip_file, 'r') as zf:
+        with zipfile.ZipFile(zip_file, "r") as zf:
             zipped_files = zf.namelist()
             # zipfile uses forward slashes
             self.assertIn("dir1/file1.txt", zipped_files)
@@ -652,17 +638,17 @@ class TestSnapshotCatalogue(unittest.TestCase):
         self.assertTrue(export_destination.exists())
         export_files = list(export_destination.iterdir())
         self.assertEqual(len(export_files), 1)
-        
+
         zip_file = export_files[0]
         self.assertTrue(zip_file.name.startswith(f"export_snap_{snap1.id}_sd"))
         self.assertTrue(zip_file.name.endswith(".zip"))
 
         # Verify the contents of the zip file
-        with zipfile.ZipFile(zip_file, 'r') as zf:
+        with zipfile.ZipFile(zip_file, "r") as zf:
             zipped_files = zf.namelist()
             # Check for the snapshot.json file and a file from one of the copied directories
             self.assertIn(self.settings.json_filename, zipped_files)
-            
+
             # The structure inside the zip is relative to the snapshot directory
             # e.g., "1-dir1/file1.txt"
             dir1_in_snap_name = snap1.directories[0].directory_name
@@ -673,11 +659,11 @@ class TestSnapshotCatalogue(unittest.TestCase):
         # 1. Create a snapshot and export it to have a valid zip file
         snap_to_export = create_test_snapshot("SnapToImport", num_dirs=1)
         self.catalogue.add(snap_to_export)
-        
+
         export_destination = TEST_LOCAL_ROOT / "exports_for_import"
         export_destination.mkdir()
         self.catalogue.export_snapshot(snap_to_export.id, export_destination)
-        
+
         zip_files = list(export_destination.glob("*.zip"))
         self.assertEqual(len(zip_files), 1)
         zip_to_import = zip_files[0]
@@ -710,7 +696,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
 
         # 7. Test importing a zip file without a snapshot.json
         empty_zip_path = TEST_LOCAL_ROOT / "empty.zip"
-        with zipfile.ZipFile(empty_zip_path, 'w') as zf:
+        with zipfile.ZipFile(empty_zip_path, "w") as zf:
             zf.writestr("test.txt", "hello")
         with self.assertRaises(ValueError) as cm:
             self.catalogue.import_snapshot(empty_zip_path)
@@ -732,7 +718,7 @@ class TestSnapshotCatalogue(unittest.TestCase):
         internal_copy_path = snap_dir_path / snap1.directories[0].directory_name
         self.assertFalse((internal_copy_path / "new_file.txt").exists())
         self.assertEqual((internal_copy_path / "file1.txt").read_text(), "content1")
-        
+
         original_size = snap1.directories[0].mb_size
 
         # 4. Call the update method
@@ -771,7 +757,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         (dir2 / "fileD.txt").write_text("No interesting content here.")
 
         # Create a binary file
-        (dir2 / "binary.bin").write_bytes(b'\x80\x81\x82')
+        (dir2 / "binary.bin").write_bytes(b"\x80\x81\x82")
 
         # Create a snapshot containing these dirs
         SnapDirAssociation._current_index = 0
@@ -783,7 +769,7 @@ class TestSnapshotSearcher(unittest.TestCase):
                 SnapDirAssociation(index=1, original_path=str(dir1), folder_id="d1"),
                 SnapDirAssociation(index=2, original_path=str(dir2), folder_id="d2"),
             ],
-            author="SearchTest"
+            author="SearchTest",
         )
 
         self.catalogue = SnapshotCatalogue(CATALOGUE_PATH)
@@ -795,11 +781,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         shutil.rmtree(TEST_LOCAL_ROOT)
 
     def test_search_content_text_found(self):
-        params = SnapshotSearchParams(
-            query="Hello",
-            search_target=SearchTarget.FILE_CONTENT,
-            query_type=QueryType.TEXT
-        )
+        params = SnapshotSearchParams(query="Hello", search_target=SearchTarget.FILE_CONTENT, query_type=QueryType.TEXT)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         results.sort(key=lambda r: r.file_path.name)
@@ -816,11 +798,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertEqual(len(results), 0)
 
     def test_search_content_regex_found(self):
-        params = SnapshotSearchParams(
-            query=r"value=\d+",
-            search_target=SearchTarget.FILE_CONTENT,
-            query_type=QueryType.REGEX
-        )
+        params = SnapshotSearchParams(query=r"value=\d+", search_target=SearchTarget.FILE_CONTENT, query_type=QueryType.REGEX)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertEqual("fileC.log", results[0].file_path.name)
@@ -839,11 +817,7 @@ class TestSnapshotSearcher(unittest.TestCase):
             self.assertEqual(result.file_path.suffix, ".txt")
 
     def test_search_name_text_found(self):
-        params = SnapshotSearchParams(
-            query="fileA",
-            search_target=SearchTarget.FILE_NAME,
-            query_type=QueryType.TEXT
-        )
+        params = SnapshotSearchParams(query="fileA", search_target=SearchTarget.FILE_NAME, query_type=QueryType.TEXT)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].file_path.name, "fileA.txt")
@@ -851,11 +825,7 @@ class TestSnapshotSearcher(unittest.TestCase):
         self.assertIsNone(results[0].line_content)
 
     def test_search_name_regex_found(self):
-        params = SnapshotSearchParams(
-            query=r"file(A|B)\.txt$",
-            search_target=SearchTarget.FILE_NAME,
-            query_type=QueryType.REGEX
-        )
+        params = SnapshotSearchParams(query=r"file(A|B)\.txt$", search_target=SearchTarget.FILE_NAME, query_type=QueryType.REGEX)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
         names = {r.file_path.name for r in results}
@@ -863,24 +833,16 @@ class TestSnapshotSearcher(unittest.TestCase):
 
     def test_search_name_with_extension_filter(self):
         # Should find the log file
-        params_log = SnapshotSearchParams(
-            query="fileC",
-            search_target=SearchTarget.FILE_NAME,
-            extensions=[".log"]
-        )
+        params_log = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".log"])
         results_log = self.searcher.search(self.snap, params_log)
         self.assertEqual(len(results_log), 1)
         self.assertEqual(results_log[0].file_path.name, "fileC.log")
 
         # Should NOT find the log file if filtered to .txt
-        params_txt = SnapshotSearchParams(
-            query="fileC",
-            search_target=SearchTarget.FILE_NAME,
-            extensions=[".txt"]
-        )
+        params_txt = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".txt"])
         results_txt = self.searcher.search(self.snap, params_txt)
         self.assertEqual(len(results_txt), 0)
 
 
-if __name__ == '__main__':
-    unittest.main(argv=['first-arg-is-ignored'], exit=False)
+if __name__ == "__main__":
+    unittest.main(argv=["first-arg-is-ignored"], exit=False)

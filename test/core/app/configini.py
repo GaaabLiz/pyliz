@@ -8,7 +8,6 @@ from pylizlib.core.app.configini import CfgPath, IniItem, IniManager
 
 
 class IniManagerTestCase(unittest.TestCase):
-
     def test_create_writes_empty_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             ini_path = os.path.join(temp_dir, "empty.ini")
@@ -70,7 +69,6 @@ class IniManagerTestCase(unittest.TestCase):
 
 
 class CfgPathTestCase(unittest.TestCase):
-
     def test_check_duplicates_prints_sections_and_keys(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = IniManager(os.path.join(temp_dir, "settings.ini"))

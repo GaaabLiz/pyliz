@@ -65,21 +65,9 @@ class MenuActionToolWindow(QMainWindow):
             exclusive=False,
         )
 
-        self.data_1 = InstanceData(
-            settings=InstanceInstallSetting(
-                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON_DROP_DOWN
-            )
-        )
-        self.data_2 = InstanceData(
-            settings=InstanceInstallSetting(
-                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.ACTION
-            )
-        )
-        self.data_3 = InstanceData(
-            settings=InstanceInstallSetting(
-                toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON
-            )
-        )
+        self.data_1 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON_DROP_DOWN))
+        self.data_2 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.ACTION))
+        self.data_3 = InstanceData(settings=InstanceInstallSetting(toolbar_add=True, toolbar_widget_type=ToolbarWidgetType.BUTTON))
 
         self.menu = QMenu("Menu 1")
         self.menu_inner_1 = QMenu("Inner 1")

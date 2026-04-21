@@ -27,7 +27,6 @@ from pylizlib.core.os.file import (
 
 
 class IsExtensionTestCase(unittest.TestCase):
-
     # ── image ──
     def test_is_image_extension_png(self):
         self.assertTrue(is_image_extension(".png"))
@@ -73,7 +72,6 @@ class IsExtensionTestCase(unittest.TestCase):
 
 
 class IsFileTypeTestCase(unittest.TestCase):
-
     def test_is_image_file(self):
         self.assertTrue(is_image_file("/some/path/photo.jpg"))
 
@@ -130,7 +128,6 @@ class IsFileTypeTestCase(unittest.TestCase):
 
 
 class GetFileTypeTestCase(unittest.TestCase):
-
     def test_get_file_type_image(self):
         self.assertEqual(get_file_type("photo.png"), FileType.IMAGE)
 
@@ -152,7 +149,6 @@ class GetFileTypeTestCase(unittest.TestCase):
 
 
 class IsFileDupInDirTestCase(unittest.TestCase):
-
     def test_file_found(self):
         with tempfile.TemporaryDirectory() as td:
             sub = os.path.join(td, "sub")
@@ -166,7 +162,6 @@ class IsFileDupInDirTestCase(unittest.TestCase):
 
 
 class GetFileCDateTestCase(unittest.TestCase):
-
     def test_returns_datetime(self):
         with tempfile.NamedTemporaryFile() as tmp:
             result = get_file_c_date(tmp.name)
@@ -174,7 +169,6 @@ class GetFileCDateTestCase(unittest.TestCase):
 
 
 class DownloadFileTestCase(unittest.TestCase):
-
     @patch("pylizlib.core.os.file.logger")
     @patch("pylizlib.core.os.file.requests.get")
     def test_download_file_success(self, mock_get, mock_logger):
@@ -203,7 +197,6 @@ class DownloadFileTestCase(unittest.TestCase):
 
 
 class WriteJsonToFileTestCase(unittest.TestCase):
-
     def test_writes_valid_json(self):
         with tempfile.TemporaryDirectory() as td:
             content = {"key": "value", "number": 42}
@@ -223,5 +216,3 @@ class WriteJsonToFileTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
