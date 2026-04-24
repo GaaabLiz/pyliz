@@ -64,7 +64,7 @@ ai-linux-nvidia = [
     "einops>=0.8.1",
     "huggingface-hub>=0.34.4",
     "nudenet>=3.4.2",
-    "onnxruntime-gpu>=1.22.0",
+    "onnxruntime-gpu>=1.22.0 ; sys_platform == 'linux'",
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
     "pillow>=11.3.0",
