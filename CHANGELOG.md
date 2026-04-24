@@ -4,6 +4,26 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.2] - 2026-04-24
+
+### Bump
+
+- V0.6.2
+
+### ♻️ Refactor
+
+- Clean up unused imports, type hints, and code throughout the codebase
+- Standardize project structure by adding missing package init files and applying consistent code formatting across the codebase
+- Reorder and organize import statements for improved readability and consistency across multiple files
+- Remove trailing newlines and streamline code formatting across multiple files
+- Add platform markers for onnxruntime-gpu dependencies in configuration files
+- Update Makefile for improved CI quality checks and add configuration for Ty
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+- Add ruff configuration file for linting and formatting settings
+- Add dedicated ty configuration file
 ## [0.6.1] - 2026-04-08
 
 ### Bump
