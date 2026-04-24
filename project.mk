@@ -193,3 +193,14 @@ APPS_LIST ?=
 # Configure the variables in qt.mk before including it.
 #
 # include qt.mk
+
+
+# ==============================================================================
+#  7. TOOL CONFIGURATION FILES
+#
+#  Qui si configurano i file di configurazione per i tool di qualità.
+# ==============================================================================
+
+# Configurazione file per Ruff e Ty
+RUFF_CONFIG_FILE ?= ruff.toml
+TY_CONFIG_FILE ?= ty.toml

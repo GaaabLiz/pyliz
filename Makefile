@@ -109,14 +109,13 @@ help:
 ## install              – Sync all dependency groups and extras via uv
 .PHONY: install
 install:
-	uv sync
-	uv sync --all-extras
+	uv sync --all-extras --all-groups
 
 ## install-all          – Install configured Python, sync all groups, and run uv build
 .PHONY: install-all
 install-all:
 	uv python install $(CI_PYTHON_VERSION)
-	uv sync --all-groups
+	uv sync --all-extras --all-groups
 	uv build
 
 ## install-dev          – Sync only the dev dependency group
@@ -305,27 +304,27 @@ gen-inno-iss:
 ## lint                 – Run Ruff linter (check only, no changes written)
 .PHONY: lint
 lint:
-	uv run ruff check .
+	uv run ruff check --config $(RUFF_CONFIG_FILE) .
 
 ## lint-fix             – Run Ruff linter and auto-fix safe issues
 .PHONY: lint-fix
 lint-fix:
-	uv run ruff check --fix .
+	uv run ruff check --config $(RUFF_CONFIG_FILE) --fix .
 
 ## format               – Format all Python files with Ruff formatter
 .PHONY: format
 format:
-	uv run ruff format .
+	uv run ruff format --config $(RUFF_CONFIG_FILE) .
 
 ## format-check         – Check formatting without making changes (CI-safe)
 .PHONY: format-check
 format-check:
-	uv run ruff format --check .
+	uv run ruff format --config $(RUFF_CONFIG_FILE) --check .
 
-## type-check           – Run static type analysis with mypy
+## type-check           – Run static type analysis with ty
 .PHONY: type-check
 type-check:
-	uv run mypy $(PYTHON_MAIN_PACKAGE)
+	uv run ty check --config-file $(TY_CONFIG_FILE) $(PYTHON_MAIN_PACKAGE)
 
 ## test                 – Run the full test suite with pytest
 .PHONY: test
@@ -473,12 +472,12 @@ clean-build:
 	- rm -rf $(PYTHON_MAIN_PACKAGE).egg-info
 	- rm -f *.spec
 
-## clean-cache          – Remove Python bytecode, pytest, mypy, and ruff caches
+## clean-cache          – Remove Python bytecode, pytest, ty, and ruff caches
 .PHONY: clean-cache
 clean-cache:
 	- rm -rf __pycache__
 	- rm -rf .pytest_cache
-	- rm -rf .mypy_cache
+	- rm -rf .ty_cache
 	- rm -rf .ruff_cache
 	- find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 
@@ -618,6 +617,17 @@ ci-setup:
 	uv python install $(CI_PYTHON_VERSION)
 	uv sync --all-groups
 
+## ci-quality             – Run CI quality gates; skip tests when CI_RUN_TESTS=0
+.PHONY: ci-quality
+ci-quality:
+	@if [ "$(CI_RUN_TESTS)" = "1" ]; then \
+		echo "CI_RUN_TESTS=1 -> running full qa (including tests)"; \
+		$(MAKE) --no-print-directory qa; \
+	else \
+		echo "CI_RUN_TESTS=0 -> running lint, format-check, and type-check only"; \
+		$(MAKE) --no-print-directory lint format-check type-check; \
+	fi
+
 ## ci-export-config       – Export CI configuration values to $GITHUB_OUTPUT
 .PHONY: ci-export-config
 ci-export-config:
@@ -632,6 +642,12 @@ ci-export-config:
 	@echo "build_windows=$(CI_BUILD_WINDOWS)" >> "$$GITHUB_OUTPUT"
 	@echo "enable_pypi_publish=$(CI_ENABLE_PYPI_PUBLISH)" >> "$$GITHUB_OUTPUT"
 	@echo "pypi_environment=$(CI_PYPI_ENVIRONMENT)" >> "$$GITHUB_OUTPUT"
+	@echo "enable_dockerhub_publish=$(CI_ENABLE_DOCKERHUB_PUBLISH)" >> "$$GITHUB_OUTPUT"
+	@echo "dockerhub_environment=$(CI_DOCKERHUB_ENVIRONMENT)" >> "$$GITHUB_OUTPUT"
+	@echo "dockerhub_image=$(CI_DOCKERHUB_IMAGE)" >> "$$GITHUB_OUTPUT"
+	@echo "dockerfile=$(CI_DOCKERFILE)" >> "$$GITHUB_OUTPUT"
+	@echo "docker_build_context=$(CI_DOCKER_BUILD_CONTEXT)" >> "$$GITHUB_OUTPUT"
+	@echo "docker_push_latest=$(CI_DOCKER_PUSH_LATEST)" >> "$$GITHUB_OUTPUT"
 	@echo "changelog_file=$(CI_CHANGELOG_FILE)" >> "$$GITHUB_OUTPUT"
 	@echo "release_notes_file=$(CI_RELEASE_NOTES_FILE)" >> "$$GITHUB_OUTPUT"
 	@echo "git_cliff_config=$(CI_GIT_CLIFF_CONFIG)" >> "$$GITHUB_OUTPUT"
@@ -684,6 +700,54 @@ ci-build-release-assets:
 .PHONY: ci-publish-pypi
 ci-publish-pypi:
 	uv publish
+
+## ci-export-docker-tag   – Export Docker tag (release tag or pyproject version) to $GITHUB_OUTPUT
+.PHONY: ci-export-docker-tag
+ci-export-docker-tag:
+	@if [ -z "$$GITHUB_OUTPUT" ]; then \
+		echo "Error: GITHUB_OUTPUT is not set."; \
+		exit 1; \
+	fi
+	@TAG="$$GITHUB_REF_NAME"; \
+	if [ "$$GITHUB_REF_TYPE" != "tag" ] || [ -z "$$TAG" ]; then \
+		TAG=$$(python3 -c 'from pathlib import Path; import tomllib; data=tomllib.loads(Path("$(FILE_PROJECT_TOML)").read_text(encoding="utf-8")); print(data.get("project", {}).get("version", "latest"))'); \
+	fi; \
+	echo "docker_image_tag=$$TAG" >> "$$GITHUB_OUTPUT"; \
+	echo "Resolved Docker image tag: $$TAG"
+
+## ci-docker-login        – Login to Docker Hub using DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
+.PHONY: ci-docker-login
+ci-docker-login:
+	@if [ -z "$$DOCKERHUB_USERNAME" ] || [ -z "$$DOCKERHUB_TOKEN" ]; then \
+		echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set."; \
+		exit 1; \
+	fi
+	@echo "$$DOCKERHUB_TOKEN" | docker login --username "$$DOCKERHUB_USERNAME" --password-stdin
+
+## ci-docker-build        – Build Docker image for DOCKER_IMAGE_TAG using project.mk Docker settings
+.PHONY: ci-docker-build
+ci-docker-build:
+	@if [ -z "$$DOCKER_IMAGE_TAG" ]; then \
+		echo "Error: DOCKER_IMAGE_TAG is not set."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(CI_DOCKERFILE)" ]; then \
+		echo "Error: Dockerfile not found at $(CI_DOCKERFILE)."; \
+		exit 1; \
+	fi
+	docker build \
+		-f "$(CI_DOCKERFILE)" \
+		-t "$(CI_DOCKERHUB_IMAGE):$$DOCKER_IMAGE_TAG" \
+		"$(CI_DOCKER_BUILD_CONTEXT)"
+
+## ci-publish-dockerhub   – Build and push Docker image (and optional latest tag) to Docker Hub
+.PHONY: ci-publish-dockerhub
+ci-publish-dockerhub: ci-docker-build
+	@docker push "$(CI_DOCKERHUB_IMAGE):$$DOCKER_IMAGE_TAG"
+	@if [ "$(CI_DOCKER_PUSH_LATEST)" = "1" ]; then \
+		docker tag "$(CI_DOCKERHUB_IMAGE):$$DOCKER_IMAGE_TAG" "$(CI_DOCKERHUB_IMAGE):latest"; \
+		docker push "$(CI_DOCKERHUB_IMAGE):latest"; \
+	fi
 
 ## ci-release-branch      – Print RELEASE_CHANGELOG_TARGET_BRANCH
 .PHONY: ci-release-branch
