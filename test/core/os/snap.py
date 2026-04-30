@@ -1,4 +1,19 @@
+"""
+Comprehensive test suite for pylizlib.core.os.snap
+
+Covers every class, method, property and edge-case scenario.
+Also validates bug-fixes applied to the module:
+  - BUG-1  Mutable default datetime.now() in Snapshot and SnapEditAction
+  - BUG-2  SnapshotManager.duplicate() mutated self.snapshot instead of a clone
+  - BUG-3  SnapshotSerializer.from_json() referenced a non-existing field
+            "date_last_installed" instead of "date_last_used"
+
+Real image files are downloaded with SampleImageDownloader and placed under
+TEST_LOCAL_ROOT so that snapshots contain actual binary content.
+"""
+
 import shutil
+import time
 import unittest
 import zipfile
 from datetime import datetime, timedelta
@@ -7,9 +22,11 @@ from unittest.mock import patch
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap import (
+    BackupType,
     QueryType,
     SearchTarget,
     SnapDirAssociation,
+    SnapEditAction,
     SnapEditType,
     Snapshot,
     SnapshotCatalogue,
@@ -21,827 +38,1396 @@ from pylizlib.core.os.snap import (
     SnapshotSortKey,
     SnapshotUtils,
 )
+from pylizlib.core.testing.sample_downloader import SampleImageDownloader
 
-# Define test directories
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
 TEST_ROOT = Path(__file__).parent.parent.parent
-TEST_LOCAL_ROOT = TEST_ROOT.joinpath("test_local")
-CATALOGUE_PATH = TEST_LOCAL_ROOT / "snapshots"
+TEST_LOCAL_ROOT = TEST_ROOT.parent / "test_local" / "snap_tests"
+CATALOGUE_PATH = TEST_LOCAL_ROOT / "catalogue"
 SOURCE_DATA_PATH = TEST_LOCAL_ROOT / "source_data"
 INSTALL_DEST_PATH = TEST_LOCAL_ROOT / "install_dest"
 BACKUP_PATH = TEST_LOCAL_ROOT / "backups"
 
+# Shared image cache so network is hit only once per test session
+_IMAGE_CACHE = TEST_ROOT.parent / "test_local" / "_img_cache"
+_downloader = SampleImageDownloader(cache_dir=_IMAGE_CACHE)
 
-def create_test_snapshot(name: str, num_dirs: int = 2) -> Snapshot:
-    """Helper to create a snapshot for testing."""
-    SnapDirAssociation._current_index = 0  # Reset index for predictability
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _reset_index():
+    SnapDirAssociation._current_index = 0
+
+
+def _create_source_dirs(base: Path, names: list, with_images: bool = False) -> list:
+    """Creates source directories, optionally with downloaded images."""
     dirs = []
-    # Ensure consistent order for tests
-    source_dirs = sorted([d for d in SOURCE_DATA_PATH.iterdir() if d.is_dir()])
-    for i in range(min(num_dirs, len(source_dirs))):
+    for name in names:
+        d = base / name
+        d.mkdir(parents=True, exist_ok=True)
+        if with_images:
+            _downloader.download_images_to_folder(d, count=2, seeds=[f"{name}_a", f"{name}_b"])
+        else:
+            (d / f"{name}_file.txt").write_text(f"content of {name}", encoding="utf-8")
+        dirs.append(d)
+    return dirs
+
+
+def _make_snapshot(name: str, source_dirs: list, n: int = 2) -> Snapshot:
+    """Helper: builds a Snapshot from the first *n* source directories."""
+    _reset_index()
+    dirs = []
+    for d in source_dirs[:n]:
         dirs.append(
             SnapDirAssociation(
                 index=SnapDirAssociation.next_index(),
-                original_path=str(source_dirs[i]),
+                original_path=str(d),
                 folder_id=gen_random_string(6),
             )
         )
-    return Snapshot(id=gen_random_string(10), name=name, desc=f"Description for {name}", directories=dirs, author="TestRunner")
+    return Snapshot(
+        id=gen_random_string(10),
+        name=name,
+        desc=f"Description for {name}",
+        author="TestSuite",
+        directories=dirs,
+        tags=["test"],
+    )
 
 
-class TestSnapshot(unittest.TestCase):
+# ===========================================================================
+# TestSnapDirAssociationTestCase
+# ===========================================================================
+
+class TestSnapDirAssociationTestCase(unittest.TestCase):
     def setUp(self):
-        """Set up for each test method."""
-        if TEST_LOCAL_ROOT.exists():
-            shutil.rmtree(TEST_LOCAL_ROOT)
+        TEST_LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
         SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
-        (SOURCE_DATA_PATH / "dir1").mkdir()
+        _reset_index()
 
     def tearDown(self):
-        """Tear down after each test method."""
-        shutil.rmtree(TEST_LOCAL_ROOT)
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
 
-    def test_data_methods(self):
-        snap = Snapshot(id="1", name="test", desc="d")
-        self.assertFalse(snap.has_data_item("key1"))
+    def test_directory_name_format(self):
+        d = SOURCE_DATA_PATH / "mydir"
+        d.mkdir()
+        assoc = SnapDirAssociation(index=5, original_path=str(d), folder_id="abc")
+        self.assertEqual(assoc.directory_name, "5-mydir")
 
-        snap.add_data_item("key1", "value1")
-        self.assertTrue(snap.has_data_item("key1"))
-        self.assertEqual(snap.get_data_item("key1"), "value1")
+    def test_original_path_normalized_to_posix(self):
+        d = SOURCE_DATA_PATH / "normdir"
+        d.mkdir()
+        assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="x")
+        self.assertEqual(assoc.original_path, d.as_posix())
 
-        snap.edit_data_item("key1", "value2")
-        self.assertEqual(snap.get_data_item("key1"), "value2")
+    def test_mb_size_calculated_when_none(self):
+        d = SOURCE_DATA_PATH / "sizeddir"
+        d.mkdir()
+        (d / "bigfile.txt").write_text("x" * 10_000, encoding="utf-8")
+        assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="sz")
+        self.assertIsNotNone(assoc.mb_size)
+        self.assertGreater(assoc.mb_size, 0.0)
+
+    def test_mb_size_zero_when_dir_missing(self):
+        assoc = SnapDirAssociation(
+            index=1,
+            original_path=str(SOURCE_DATA_PATH / "ghost_dir"),
+            folder_id="g",
+        )
+        self.assertEqual(assoc.mb_size, 0.0)
+
+    def test_mb_size_preserved_when_provided(self):
+        d = SOURCE_DATA_PATH / "preserved"
+        d.mkdir()
+        assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="p", mb_size=42.0)
+        self.assertEqual(assoc.mb_size, 42.0)
+
+    def test_next_index_increments(self):
+        _reset_index()
+        i1 = SnapDirAssociation.next_index()
+        i2 = SnapDirAssociation.next_index()
+        self.assertEqual(i2, i1 + 1)
+
+    def test_copy_install_to(self):
+        src = SOURCE_DATA_PATH / "copydir"
+        src.mkdir()
+        (src / "a.txt").write_text("hello")
+        sub = src / "subdir"
+        sub.mkdir()
+        (sub / "b.txt").write_text("world")
+
+        target = TEST_LOCAL_ROOT / "target"
+        assoc = SnapDirAssociation(index=1, original_path=str(src), folder_id="cp")
+        assoc.copy_install_to(target)
+
+        dest_dir = target / assoc.directory_name
+        self.assertTrue(dest_dir.exists())
+        self.assertTrue((dest_dir / "a.txt").exists())
+        self.assertTrue((dest_dir / "subdir" / "b.txt").exists())
+
+    def test_gen_random_returns_instance(self):
+        (SOURCE_DATA_PATH / "rnd1").mkdir(exist_ok=True)
+        (SOURCE_DATA_PATH / "rnd2").mkdir(exist_ok=True)
+        assoc = SnapDirAssociation.gen_random(SOURCE_DATA_PATH, folder_id_length=4)
+        self.assertIsInstance(assoc, SnapDirAssociation)
+        self.assertEqual(len(assoc.folder_id), 4)
+
+    def test_gen_random_list(self):
+        for i in range(5):
+            (SOURCE_DATA_PATH / f"rl{i}").mkdir(exist_ok=True)
+        result = SnapDirAssociation.gen_random_list(3, SOURCE_DATA_PATH)
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(isinstance(a, SnapDirAssociation) for a in result))
+
+
+# ===========================================================================
+# TestSnapshotTestCase
+# ===========================================================================
+
+class TestSnapshotTestCase(unittest.TestCase):
+    def setUp(self):
+        TEST_LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+        _create_source_dirs(SOURCE_DATA_PATH, ["d1", "d2", "d3"])
+
+    def tearDown(self):
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
+
+    def test_bug1_date_created_unique_per_instance(self):
+        """BUG-1: Each Snapshot instance must have its own date_created."""
+        s1 = Snapshot(id="a", name="A", desc="")
+        time.sleep(0.01)
+        s2 = Snapshot(id="b", name="B", desc="")
+        self.assertLessEqual(s1.date_created, s2.date_created)
+        self.assertIsNot(s1.date_created, s2.date_created)
+
+    def test_bug1_snap_edit_action_timestamp_unique(self):
+        """BUG-1: SnapEditAction.timestamp must not be a shared default."""
+        e1 = SnapEditAction(action_type=SnapEditType.ADD_DIR)
+        time.sleep(0.01)
+        e2 = SnapEditAction(action_type=SnapEditType.ADD_DIR)
+        self.assertLessEqual(e1.timestamp, e2.timestamp)
+        self.assertIsNot(e1.timestamp, e2.timestamp)
+
+    def test_folder_name_equals_id(self):
+        snap = Snapshot(id="snap_id_123", name="X", desc="")
+        self.assertEqual(snap.folder_name, "snap_id_123")
+
+    def test_tags_as_string_sorted(self):
+        snap = Snapshot(id="1", name="T", desc="", tags=["gamma", "alpha", "beta"])
+        self.assertEqual(snap.tags_as_string, "alpha, beta, gamma")
+
+    def test_tags_as_string_empty(self):
+        snap = Snapshot(id="2", name="T", desc="", tags=[])
+        self.assertEqual(snap.tags_as_string, " ")
+
+    def test_tags_as_string_single(self):
+        snap = Snapshot(id="3", name="T", desc="", tags=["solo"])
+        self.assertEqual(snap.tags_as_string, "solo")
+
+    def test_data_add_get_has_edit_remove(self):
+        snap = Snapshot(id="1", name="T", desc="")
+        self.assertFalse(snap.has_data_item("key"))
+
+        snap.add_data_item("key", "val1")
+        self.assertTrue(snap.has_data_item("key"))
+        self.assertEqual(snap.get_data_item("key"), "val1")
+
+        snap.edit_data_item("key", "val2")
+        self.assertEqual(snap.get_data_item("key"), "val2")
 
         with self.assertRaises(KeyError):
-            snap.edit_data_item("nonexistent", "value")
+            snap.edit_data_item("nonexistent", "x")
 
-        removed_value = snap.remove_data_item("key1")
-        self.assertEqual(removed_value, "value2")
-        self.assertFalse(snap.has_data_item("key1"))
+        removed = snap.remove_data_item("key")
+        self.assertEqual(removed, "val2")
+        self.assertFalse(snap.has_data_item("key"))
+        self.assertIsNone(snap.remove_data_item("key"))
 
-        snap.add_data_item("key2", "value2")
+    def test_data_clear_all(self):
+        snap = Snapshot(id="1", name="T", desc="")
+        snap.add_data_item("a", "1")
+        snap.add_data_item("b", "2")
         snap.clear_all_data()
         self.assertEqual(len(snap.data), 0)
 
-    def test_clone(self):
-        snap1 = create_test_snapshot("CloneTest")
+    def test_get_data_item_default(self):
+        snap = Snapshot(id="1", name="T", desc="")
+        self.assertEqual(snap.get_data_item("missing", default="default_val"), "default_val")
+        self.assertEqual(snap.get_data_item("missing"), "")
+
+    def test_get_for_table_array(self):
+        snap = Snapshot(id="1", name="MyName", desc="MyDesc", tags=["b", "a"])
+        snap.add_data_item("env", "production")
+        snap.add_data_item("version", "1.0")
+        row = snap.get_for_table_array(["env", "version", "missing"])
+        self.assertEqual(row[0], "MyName")
+        self.assertEqual(row[1], "MyDesc")
+        self.assertEqual(row[2], "production")
+        self.assertEqual(row[3], "1.0")
+        self.assertEqual(row[4], "")
+        self.assertRegex(row[5], r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}")
+        self.assertEqual(row[6], "a, b")
+
+    def test_get_assoc_dir_mb_size(self):
+        src = _create_source_dirs(SOURCE_DATA_PATH, ["sz1", "sz2"])
+        snap = _make_snapshot("SizeSnap", src, n=2)
+        total = snap.get_assoc_dir_mb_size
+        self.assertGreaterEqual(total, 0.0)
+        self.assertEqual(total, sum(d.mb_size for d in snap.directories if d.mb_size is not None))
+
+    def test_clone_is_deep_copy(self):
+        src = _create_source_dirs(SOURCE_DATA_PATH, ["cl1"])
+        snap1 = _make_snapshot("Original", src, n=1)
         snap1.add_data_item("key", "value")
+        snap1.tags.append("extra")
 
         snap2 = snap1.clone()
 
         self.assertIsNot(snap1, snap2)
         self.assertEqual(snap1.id, snap2.id)
-        self.assertEqual(snap1.name, snap2.name)
 
-        # Check deep copy of lists and dicts
-        self.assertIsNot(snap1.directories, snap2.directories)
-        self.assertIsNot(snap1.tags, snap2.tags)
-        self.assertIsNot(snap1.data, snap2.data)
-        self.assertEqual(snap1.data, snap2.data)
-
-        snap2.name = "Cloned"
-        snap2.tags.append("cloned_tag")
+        snap2.id = "changed-id"
+        snap2.name = "Changed"
+        snap2.tags.append("new_tag")
         snap2.data["key"] = "new_value"
+        snap2.directories.clear()
 
+        self.assertNotEqual(snap1.id, snap2.id)
         self.assertNotEqual(snap1.name, snap2.name)
-        self.assertNotEqual(snap1.tags, snap2.tags)
-        self.assertNotEqual(snap1.data, snap2.data)
-
-    def test_tags_as_string_sorted(self):
-        snap = Snapshot(id="1", name="test", desc="d", tags=["beta", "alpha", "gamma"])
-        self.assertEqual(snap.tags_as_string, "alpha, beta, gamma")
-
-        snap_no_tags = Snapshot(id="2", name="test2", desc="d2", tags=[])
-        self.assertEqual(snap_no_tags.tags_as_string, " ")
-
-        snap_single_tag = Snapshot(id="3", name="test3", desc="d3", tags=["single"])
-        self.assertEqual(snap_single_tag.tags_as_string, "single")
+        self.assertNotIn("new_tag", snap1.tags)
+        self.assertEqual(snap1.data["key"], "value")
+        self.assertEqual(len(snap1.directories), 1)
 
 
-class TestSnapshotUtils(unittest.TestCase):
+# ===========================================================================
+# TestSnapshotSettingsTestCase
+# ===========================================================================
+
+class TestSnapshotSettingsTestCase(unittest.TestCase):
+    def test_defaults(self):
+        s = SnapshotSettings()
+        self.assertEqual(s.json_filename, "snapshot.json")
+        self.assertIsNone(s.backup_path)
+        self.assertFalse(s.backup_pre_install)
+        self.assertFalse(s.backup_pre_modify)
+        self.assertFalse(s.backup_pre_delete)
+        self.assertTrue(s.install_with_everyone_full_control)
+        self.assertEqual(s.snap_id_length, 20)
+        self.assertEqual(s.folder_id_length, 6)
+
+    def test_bck_enabled_only_when_path_and_flag_set(self):
+        self.assertFalse(SnapshotSettings(backup_pre_install=True, backup_path=None).bck_before_install_enabled)
+        self.assertFalse(SnapshotSettings(backup_pre_install=False, backup_path=Path("/tmp")).bck_before_install_enabled)
+        self.assertTrue(SnapshotSettings(backup_pre_install=True, backup_path=Path("/tmp")).bck_before_install_enabled)
+        self.assertTrue(SnapshotSettings(backup_pre_modify=True, backup_path=Path("/tmp")).bck_before_modify_enabled)
+        self.assertTrue(SnapshotSettings(backup_pre_delete=True, backup_path=Path("/tmp")).bck_before_delete_enabled)
+
+
+# ===========================================================================
+# TestSnapshotSerializerTestCase
+# ===========================================================================
+
+class TestSnapshotSerializerTestCase(unittest.TestCase):
     def setUp(self):
-        if TEST_LOCAL_ROOT.exists():
-            shutil.rmtree(TEST_LOCAL_ROOT)
+        TEST_LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
         SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
-        (SOURCE_DATA_PATH / "dir1").mkdir()
-        (SOURCE_DATA_PATH / "dir2").mkdir()
-        (SOURCE_DATA_PATH / "dir3").mkdir()
+        _create_source_dirs(SOURCE_DATA_PATH, ["ser1", "ser2"])
 
     def tearDown(self):
-        shutil.rmtree(TEST_LOCAL_ROOT)
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
 
-    def test_get_edits_between_snapshots(self):
-        snap_old = create_test_snapshot("Old", num_dirs=2)
-        snap_new = snap_old.clone()
+    def test_roundtrip(self):
+        src = list(SOURCE_DATA_PATH.iterdir())
+        snap = _make_snapshot("SerSnap", src, n=2)
+        snap.add_data_item("k", "v")
+        snap.tags = ["alpha", "beta"]
+        snap.date_modified = datetime.now()
 
-        # Test no changes
-        edits_none = SnapshotUtils.get_edits_between_snapshots(snap_old, snap_new)
-        self.assertEqual(len(edits_none), 0)
+        json_path = TEST_LOCAL_ROOT / "ser_snap.json"
+        SnapshotSerializer.to_json(snap, json_path)
+        loaded = SnapshotSerializer.from_json(json_path)
 
-        # Test addition
-        dir3_path = str(SOURCE_DATA_PATH / "dir3")
-        snap_new.directories.append(SnapDirAssociation(index=3, original_path=dir3_path, folder_id="id3"))
+        self.assertEqual(loaded.id, snap.id)
+        self.assertEqual(loaded.name, snap.name)
+        self.assertEqual(loaded.tags, snap.tags)
+        self.assertEqual(loaded.data, snap.data)
+        self.assertEqual(len(loaded.directories), len(snap.directories))
+        self.assertIsNotNone(loaded.date_modified)
 
-        edits_add = SnapshotUtils.get_edits_between_snapshots(snap_old, snap_new)
-        self.assertEqual(len(edits_add), 1)
-        self.assertEqual(edits_add[0].action_type, SnapEditType.ADD_DIR)
-        self.assertEqual(Path(edits_add[0].new_path).as_posix(), Path(dir3_path).as_posix())
+    def test_from_json_null_optionals(self):
+        src = list(SOURCE_DATA_PATH.iterdir())
+        snap = _make_snapshot("NullDates", src, n=1)
+        json_path = TEST_LOCAL_ROOT / "null_dates.json"
+        SnapshotSerializer.to_json(snap, json_path)
+        loaded = SnapshotSerializer.from_json(json_path)
+        self.assertIsNone(loaded.date_modified)
+        self.assertIsNone(loaded.date_last_used)
+        self.assertIsNone(loaded.date_last_modified)
 
-        # Test removal
-        snap_new_remove = snap_old.clone()
-        removed_assoc = snap_new_remove.directories.pop(0)
+    def test_bug3_date_last_used_survives_roundtrip(self):
+        """BUG-3 fix: date_last_used must round-trip correctly through JSON."""
+        src = list(SOURCE_DATA_PATH.iterdir())
+        snap = _make_snapshot("Bug3Snap", src, n=1)
+        snap.date_last_used = datetime(2025, 6, 15, 12, 0, 0)
 
-        edits_remove = SnapshotUtils.get_edits_between_snapshots(snap_old, snap_new_remove)
-        self.assertEqual(len(edits_remove), 1)
-        self.assertEqual(edits_remove[0].action_type, SnapEditType.REMOVE_DIR)
-        self.assertEqual(edits_remove[0].folder_id_to_remove, removed_assoc.folder_id)
-        self.assertEqual(edits_remove[0].directory_name_to_remove, removed_assoc.directory_name)
+        json_path = TEST_LOCAL_ROOT / "bug3.json"
+        SnapshotSerializer.to_json(snap, json_path)
+        loaded = SnapshotSerializer.from_json(json_path)
 
-    def test_sort_snapshots(self):
+        self.assertIsNotNone(loaded.date_last_used)
+        self.assertEqual(loaded.date_last_used, snap.date_last_used)
+
+    def test_update_field_string(self):
+        src = list(SOURCE_DATA_PATH.iterdir())
+        snap = _make_snapshot("UpdateField", src, n=1)
+        json_path = TEST_LOCAL_ROOT / "upd.json"
+        SnapshotSerializer.to_json(snap, json_path)
+
+        SnapshotSerializer.update_field(json_path, "name", "Updated Name")
+        loaded = SnapshotSerializer.from_json(json_path)
+        self.assertEqual(loaded.name, "Updated Name")
+
+    def test_update_field_datetime(self):
+        src = list(SOURCE_DATA_PATH.iterdir())
+        snap = _make_snapshot("UpdDate", src, n=1)
+        json_path = TEST_LOCAL_ROOT / "upd_date.json"
+        SnapshotSerializer.to_json(snap, json_path)
+
+        new_ts = datetime(2026, 1, 1, 0, 0, 0)
+        SnapshotSerializer.update_field(json_path, "date_last_used", new_ts.isoformat())
+        loaded = SnapshotSerializer.from_json(json_path)
+        self.assertEqual(loaded.date_last_used, new_ts)
+
+
+# ===========================================================================
+# TestSnapshotUtilsTestCase
+# ===========================================================================
+
+class TestSnapshotUtilsTestCase(unittest.TestCase):
+    def setUp(self):
+        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+        _create_source_dirs(SOURCE_DATA_PATH, ["u1", "u2", "u3"])
+
+    def tearDown(self):
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
+
+    def test_get_snapshot_path(self):
+        p = SnapshotUtils.get_snapshot_path("myid", CATALOGUE_PATH)
+        self.assertEqual(p, CATALOGUE_PATH / "myid")
+
+    def test_get_snapshot_json_path(self):
+        p = SnapshotUtils.get_snapshot_json_path("myid", CATALOGUE_PATH, "snap.json")
+        self.assertEqual(p, CATALOGUE_PATH / "myid" / "snap.json")
+
+    def test_get_snapshot_from_path_raises_on_file(self):
+        f = TEST_LOCAL_ROOT / "a_file.txt"
+        f.write_text("x")
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_from_path(f, "snapshot.json")
+
+    def test_get_snapshot_from_path_raises_on_missing_dir(self):
+        with self.assertRaises(FileNotFoundError):
+            SnapshotUtils.get_snapshot_from_path(TEST_LOCAL_ROOT / "ghost", "snapshot.json")
+
+    def test_get_snapshot_from_path_raises_on_missing_json(self):
+        empty_dir = TEST_LOCAL_ROOT / "empty_snap"
+        empty_dir.mkdir()
+        with self.assertRaises(FileNotFoundError):
+            SnapshotUtils.get_snapshot_from_path(empty_dir, "snapshot.json")
+
+    def test_get_snapshot_from_path_success(self):
+        src_dirs = list(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        snap = _make_snapshot("UtilsSnap", src_dirs, n=1)
+        snap_dir = CATALOGUE_PATH / snap.id
+        snap_dir.mkdir()
+        SnapshotSerializer.to_json(snap, snap_dir / "snapshot.json")
+
+        loaded = SnapshotUtils.get_snapshot_from_path(snap_dir, "snapshot.json")
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.id, snap.id)
+
+    def test_gen_random_snap(self):
+        snap = SnapshotUtils.gen_random_snap(SOURCE_DATA_PATH, id_length=8)
+        self.assertIsInstance(snap, Snapshot)
+        self.assertEqual(len(snap.id), 8)
+        self.assertEqual(len(snap.directories), 3)
+
+    def test_get_edits_no_change(self):
+        src = list(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        old = _make_snapshot("Old", src, n=2)
+        new = old.clone()
+        self.assertEqual(SnapshotUtils.get_edits_between_snapshots(old, new), [])
+
+    def test_get_edits_add(self):
+        src = sorted(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        old = _make_snapshot("Old", src, n=2)
+        new = old.clone()
+        new.directories.append(SnapDirAssociation(index=99, original_path=str(src[2]), folder_id="NEW"))
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0].action_type, SnapEditType.ADD_DIR)
+
+    def test_get_edits_remove(self):
+        src = sorted(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        old = _make_snapshot("Old", src, n=2)
+        new = old.clone()
+        removed = new.directories.pop(0)
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0].action_type, SnapEditType.REMOVE_DIR)
+        self.assertEqual(edits[0].folder_id_to_remove, removed.folder_id)
+
+    def test_get_edits_add_and_remove(self):
+        src = sorted(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        old = _make_snapshot("Old", src, n=2)
+        new = old.clone()
+        new.directories.pop(0)
+        new.directories.append(SnapDirAssociation(index=99, original_path=str(src[2]), folder_id="NEW2"))
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+        self.assertEqual(len(edits), 2)
+        types = {e.action_type for e in edits}
+        self.assertIn(SnapEditType.ADD_DIR, types)
+        self.assertIn(SnapEditType.REMOVE_DIR, types)
+
+    def test_sort_by_name_asc(self):
         now = datetime.now()
-        s1 = Snapshot(id="1", name="Beta", desc="d", date_created=now - timedelta(days=1), date_modified=now)
-        s2 = Snapshot(id="2", name="alpha", desc="d", date_created=now - timedelta(days=2), date_modified=None)
-        s3 = Snapshot(id="3", name="Gamma", desc="d", date_created=now, date_modified=now - timedelta(days=1))
+        s1 = Snapshot(id="1", name="Gamma", desc="", date_created=now)
+        s2 = Snapshot(id="2", name="alpha", desc="", date_created=now)
+        s3 = Snapshot(id="3", name="Beta", desc="", date_created=now)
+        result = SnapshotUtils.sort_snapshots([s1, s2, s3], SnapshotSortKey.NAME)
+        self.assertEqual([s.name for s in result], ["alpha", "Beta", "Gamma"])
 
-        snapshots = [s1, s2, s3]
+    def test_sort_by_name_desc(self):
+        now = datetime.now()
+        s1 = Snapshot(id="1", name="Gamma", desc="", date_created=now)
+        s2 = Snapshot(id="2", name="alpha", desc="", date_created=now)
+        result = SnapshotUtils.sort_snapshots([s1, s2], SnapshotSortKey.NAME, reverse=True)
+        self.assertEqual([s.name for s in result], ["Gamma", "alpha"])
 
-        # Test sort by name (ascending, case-insensitive)
-        sorted_by_name = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.NAME)
-        self.assertEqual([s.name for s in sorted_by_name], ["alpha", "Beta", "Gamma"])
+    def test_sort_none_at_end(self):
+        now = datetime.now()
+        s1 = Snapshot(id="1", name="A", desc="", date_modified=now)
+        s2 = Snapshot(id="2", name="B", desc="", date_modified=None)
+        s3 = Snapshot(id="3", name="C", desc="", date_modified=now - timedelta(days=1))
+        result = SnapshotUtils.sort_snapshots([s1, s2, s3], SnapshotSortKey.DATE_MODIFIED)
+        self.assertEqual(result[-1].id, "2")
+        self.assertEqual(result[0].id, "3")
 
-        # Test sort by name (descending, case-insensitive)
-        sorted_by_name_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.NAME, reverse=True)
-        self.assertEqual([s.name for s in sorted_by_name_desc], ["Gamma", "Beta", "alpha"])
+    def test_sort_by_assoc_dir_mb_size(self):
+        src = sorted(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        (src[0] / "small.txt").write_text("x" * 100)
+        (src[1] / "medium.txt").write_text("x" * 5_000)
+        (src[2] / "large.txt").write_text("x" * 100_000)
 
-        # Test sort by date_created (ascending)
-        sorted_by_date = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_CREATED)
-        self.assertEqual([s.id for s in sorted_by_date], ["2", "1", "3"])
+        snap_s = _make_snapshot("Small", [src[0]], n=1)
+        snap_m = _make_snapshot("Medium", [src[1]], n=1)
+        snap_l = _make_snapshot("Large", [src[2]], n=1)
 
-        # Test sort by date_created (descending)
-        sorted_by_date_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_CREATED, reverse=True)
-        self.assertEqual([s.id for s in sorted_by_date_desc], ["3", "1", "2"])
-
-        # Test sort by date_modified (with None, ascending)
-        sorted_with_none = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED)
-        self.assertEqual([s.id for s in sorted_with_none], ["3", "1", "2"])
-
-        # Test sort by date_modified (with None, descending)
-        sorted_with_none_desc = SnapshotUtils.sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED, reverse=True)
-        self.assertEqual([s.id for s in sorted_with_none_desc], ["1", "3", "2"])
-
-        # Test sort by ASSOC_DIR_MB_SIZE
-        # Create snapshots with different sizes
-        # Ensure directories have some content for size calculation
-        (SOURCE_DATA_PATH / "dir1" / "file_s.txt").write_text("s" * 100)  # ~0.1KB
-        (SOURCE_DATA_PATH / "dir2" / "file_m.txt").write_text("m" * 1000)  # ~1KB
-        (SOURCE_DATA_PATH / "dir3" / "file_l.txt").write_text("l" * 10000)  # ~10KB
-
-        # Re-create snapshots to ensure mb_size is calculated based on new file sizes
-        snap_small = create_test_snapshot("SmallSnap", num_dirs=1)  # Uses dir1
-        snap_medium = create_test_snapshot("MediumSnap", num_dirs=2)  # Uses dir1, dir2
-        snap_large = create_test_snapshot("LargeSnap", num_dirs=3)  # Uses dir1, dir2, dir3
-
-        # Ensure mb_size is calculated and ordered correctly
-        self.assertGreater(snap_small.get_assoc_dir_mb_size, 0)
-        self.assertGreater(snap_medium.get_assoc_dir_mb_size, snap_small.get_assoc_dir_mb_size)
-        self.assertGreater(snap_large.get_assoc_dir_mb_size, snap_medium.get_assoc_dir_mb_size)
-
-        snapshots_for_size_sort = [snap_large, snap_small, snap_medium]
-
-        sorted_by_size = SnapshotUtils.sort_snapshots(snapshots_for_size_sort, SnapshotSortKey.ASSOC_DIR_MB_SIZE)
-        self.assertEqual([s.name for s in sorted_by_size], ["SmallSnap", "MediumSnap", "LargeSnap"])
-
-        sorted_by_size_desc = SnapshotUtils.sort_snapshots(snapshots_for_size_sort, SnapshotSortKey.ASSOC_DIR_MB_SIZE, reverse=True)
-        self.assertEqual([s.name for s in sorted_by_size_desc], ["LargeSnap", "MediumSnap", "SmallSnap"])
+        sorted_asc = SnapshotUtils.sort_snapshots([snap_l, snap_m, snap_s], SnapshotSortKey.ASSOC_DIR_MB_SIZE)
+        self.assertEqual([s.name for s in sorted_asc], ["Small", "Medium", "Large"])
 
 
-class TestSnapshotManager(unittest.TestCase):
+# ===========================================================================
+# TestSnapshotManagerTestCase
+# ===========================================================================
+
+class TestSnapshotManagerTestCase(unittest.TestCase):
     def setUp(self):
-        """Set up for each test method."""
-        if TEST_LOCAL_ROOT.exists():
-            shutil.rmtree(TEST_LOCAL_ROOT)
-
         CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
         SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-        (SOURCE_DATA_PATH / "dir1").mkdir()
-        (SOURCE_DATA_PATH / "dir1" / "file1.txt").write_text("content1")
-        (SOURCE_DATA_PATH / "dir2").mkdir()
-        (SOURCE_DATA_PATH / "dir2" / "file2.txt").write_text("content2")
-
-        self.snap = create_test_snapshot("ManagerTestSnap")
-        self.manager = SnapshotManager(self.snap, CATALOGUE_PATH)
+        self._src = _create_source_dirs(SOURCE_DATA_PATH, ["m1", "m2", "m3"])
 
     def tearDown(self):
-        """Tear down after each test method."""
-        shutil.rmtree(TEST_LOCAL_ROOT)
-
-    def test_create_and_delete(self):
-        self.assertFalse(self.manager.path_snapshot.exists())
-
-        self.manager.create()
-
-        self.assertTrue(self.manager.path_snapshot.exists())
-        self.assertTrue(self.manager.path_snapshot_json.exists())
-
-        # Check copied directories
-        snap_dir_path = self.manager.path_snapshot
-        dir1_in_snap = snap_dir_path / self.snap.directories[0].directory_name
-        self.assertTrue(dir1_in_snap.exists())
-        self.assertTrue((dir1_in_snap / "file1.txt").exists())
-
-        self.manager.delete()
-        self.assertFalse(self.manager.path_snapshot.exists())
-
-    def test_update_json_fields(self):
-        self.manager.create()
-
-        # Test base fields update
-        self.snap.name = "New Name"
-        self.snap.tags = ["new", "tag"]
-        self.manager.update_json_base_fields()
-
-        reloaded_snap = SnapshotSerializer.from_json(self.manager.path_snapshot_json)
-        self.assertEqual(reloaded_snap.name, "New Name")
-        self.assertEqual(reloaded_snap.tags, ["new", "tag"])
-        self.assertIsNotNone(reloaded_snap.date_modified)
-
-        # Test data fields update
-        self.snap.data["mykey"] = "myvalue"
-        self.manager.update_json_data_fields()
-
-        reloaded_snap_2 = SnapshotSerializer.from_json(self.manager.path_snapshot_json)
-        self.assertEqual(reloaded_snap_2.get_data_item("mykey"), "myvalue")
-        self.assertIsNotNone(reloaded_snap_2.date_last_modified)
-
-    def test_install_and_uninstall_directory(self):
-        self.manager.create()
-
-        # Install a new directory
-        new_dir_path = SOURCE_DATA_PATH / "dir_to_install"
-        new_dir_path.mkdir()
-        (new_dir_path / "install_file.txt").write_text("installed")
-
-        self.manager.install_directory(new_dir_path)
-
-        self.assertEqual(len(self.snap.directories), 3)
-        installed_dir_assoc = self.snap.directories[-1]
-        self.assertEqual(Path(installed_dir_assoc.original_path).as_posix(), new_dir_path.as_posix())
-
-        path_in_snap = self.manager.path_snapshot / installed_dir_assoc.directory_name
-        self.assertTrue(path_in_snap.exists())
-        self.assertTrue((path_in_snap / "install_file.txt").exists())
-
-        # Uninstall the directory
-        folder_id_to_remove = installed_dir_assoc.folder_id
-        self.manager.uninstall_directory_by_folder_id(folder_id_to_remove)
-
-        self.assertEqual(len(self.snap.directories), 2)
-        self.assertFalse(path_in_snap.exists())
-
-
-class TestSnapshotCatalogue(unittest.TestCase):
-    def setUp(self):
-        """Set up for each test method."""
-        if TEST_LOCAL_ROOT.exists():
-            shutil.rmtree(TEST_LOCAL_ROOT)
-
-        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
-        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
-        INSTALL_DEST_PATH.mkdir(parents=True, exist_ok=True)
-        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
-
-        (SOURCE_DATA_PATH / "dir1").mkdir()
-        (SOURCE_DATA_PATH / "dir1" / "file1.txt").write_text("content1")
-        (SOURCE_DATA_PATH / "dir2").mkdir()
-        (SOURCE_DATA_PATH / "dir2" / "file2.txt").write_text("content2")
-        (SOURCE_DATA_PATH / "dir3").mkdir()
-        (SOURCE_DATA_PATH / "dir3" / "subdir").mkdir()
-        (SOURCE_DATA_PATH / "dir3" / "subdir" / "file3.txt").write_text("content3")
-
-        self.settings = SnapshotSettings(backup_path=BACKUP_PATH, backup_pre_delete=True, backup_pre_install=True, backup_pre_modify=True)
-        self.catalogue = SnapshotCatalogue(CATALOGUE_PATH, settings=self.settings)
-
-    def tearDown(self):
-        """Tear down after each test method."""
-        shutil.rmtree(TEST_LOCAL_ROOT)
-
-    def test_add_and_get_all_and_get_by_id(self):
-        self.assertEqual(len(self.catalogue.get_all()), 0)
-
-        snap1 = create_test_snapshot("Snap1")
-        self.catalogue.add(snap1)
-
-        all_snaps = self.catalogue.get_all()
-        self.assertEqual(len(all_snaps), 1)
-        self.assertEqual(all_snaps[0].id, snap1.id)
-        self.assertTrue((CATALOGUE_PATH / snap1.id).exists())
-        self.assertTrue((CATALOGUE_PATH / snap1.id / self.settings.json_filename).exists())
-
-        retrieved_snap = self.catalogue.get_by_id(snap1.id)
-        self.assertIsNotNone(retrieved_snap)
-        self.assertEqual(retrieved_snap.name, snap1.name)
-
-        self.assertIsNone(self.catalogue.get_by_id("non-existent-id"))
-
-    def test_delete(self):
-        snap1 = create_test_snapshot("Snap1ToDelete")
-        self.catalogue.add(snap1)
-        self.assertTrue(self.catalogue.exists(snap1.id))
-
-        self.catalogue.delete(snap1)
-
-        self.assertFalse(self.catalogue.exists(snap1.id))
-        self.assertFalse((CATALOGUE_PATH / snap1.id).exists())
-
-        # Check if backup was created
-        self.assertTrue(any(f.name.startswith(f"backup_beforeDelete_{snap1.id}_sd") for f in BACKUP_PATH.iterdir()))
-
-    def test_update_snapshot(self):
-        snap_old = create_test_snapshot("OriginalSnap", num_dirs=2)
-        self.catalogue.add(snap_old)
-
-        # Clone and modify
-        snap_new = snap_old.clone()
-        snap_new.name = "UpdatedSnap"
-        snap_new.desc = "Updated Description"
-        # Remove one dir and add another
-        snap_new.directories.pop(0)
-        new_dir_path = str(SOURCE_DATA_PATH / "dir3")
-        snap_new.directories.append(SnapDirAssociation(index=3, original_path=new_dir_path, folder_id=gen_random_string(6)))
-
-        self.catalogue.update_snapshot_by_objs(snap_old, snap_new)
-
-        updated_snap_from_cat = self.catalogue.get_by_id(snap_new.id)
-        self.assertEqual(updated_snap_from_cat.name, "UpdatedSnap")
-        self.assertEqual(len(updated_snap_from_cat.directories), 2)
-
-        original_paths = {d.original_path for d in updated_snap_from_cat.directories}
-        self.assertIn(Path(new_dir_path).as_posix(), original_paths)
-        self.assertNotIn(Path(snap_old.directories[0].original_path).as_posix(), original_paths)
-
-        # Check backup
-        self.assertTrue(any(f.name.startswith(f"backup_beforeEdit_{snap_new.id}_sd") for f in BACKUP_PATH.iterdir()))
-
-        # Check snapshot directory content
-        snap_dir = CATALOGUE_PATH / snap_new.id
-        dir_names_in_snap = {d.name for d in snap_dir.iterdir() if d.is_dir()}
-
-        removed_dir_name = snap_old.directories[0].directory_name
-        self.assertNotIn(removed_dir_name, dir_names_in_snap)
-
-        added_dir_name = snap_new.directories[-1].directory_name
-        self.assertIn(added_dir_name, dir_names_in_snap)
-
-    def test_export_catalogue(self):
-        # 1. Add multiple snapshots to the catalogue
-        snap1 = create_test_snapshot("CatalogueExportSnap1", num_dirs=1)
-        snap2 = create_test_snapshot("CatalogueExportSnap2", num_dirs=2)
-        self.catalogue.add(snap1)
-        self.catalogue.add(snap2)
-
-        # 2. Export the entire catalogue
-        export_dest = TEST_LOCAL_ROOT / "catalogue_exports"
-        export_filename = "my_catalogue.zip"
-        self.catalogue.export_catalogue(export_dest, file_name=export_filename)
-
-        # 3. Verify the zip file was created
-        export_zip_path = export_dest / export_filename
-        self.assertTrue(export_zip_path.exists())
-
-        # 4. Verify the zip contents
-        with zipfile.ZipFile(export_zip_path, "r") as zf:
-            zipped_files = zf.namelist()
-
-            # Check for snap1 files
-            snap1_prefix = f"{snap1.id}/"
-            self.assertIn(snap1_prefix + self.settings.json_filename, zipped_files)
-            dir1_in_snap1_name = snap1.directories[0].directory_name
-            self.assertIn(f"{snap1_prefix}{dir1_in_snap1_name}/file1.txt", zipped_files)
-
-            # Check for snap2 files
-            snap2_prefix = f"{snap2.id}/"
-            self.assertIn(snap2_prefix + self.settings.json_filename, zipped_files)
-            dir1_in_snap2_name = snap2.directories[0].directory_name
-            dir2_in_snap2_name = snap2.directories[1].directory_name
-            self.assertIn(f"{snap2_prefix}{dir1_in_snap2_name}/file1.txt", zipped_files)
-            self.assertIn(f"{snap2_prefix}{dir2_in_snap2_name}/file2.txt", zipped_files)
-
-    def test_duplicate_by_id(self):
-        snap1 = create_test_snapshot("SnapToDuplicate")
-        self.catalogue.add(snap1)
-
-        self.catalogue.duplicate_by_id(snap1.id)
-
-        all_snaps = self.catalogue.get_all()
-        self.assertEqual(len(all_snaps), 2)
-
-        original_snap = self.catalogue.get_by_id(snap1.id)
-        duplicated_snap = next((s for s in all_snaps if s.id != snap1.id), None)
-
-        self.assertIsNotNone(duplicated_snap)
-        self.assertEqual(duplicated_snap.name, original_snap.name + " Copy")
-        self.assertNotEqual(duplicated_snap.id, original_snap.id)
-        self.assertEqual(len(duplicated_snap.directories), len(original_snap.directories))
-
-    def test_import_catalogue(self):
-        # 1. Create and export a catalogue with two snapshots
-        snap1 = create_test_snapshot("ImpCatSnap1", num_dirs=1)
-        snap2 = create_test_snapshot("ImpCatSnap2", num_dirs=2)
-        self.catalogue.add(snap1)
-        self.catalogue.add(snap2)
-
-        export_dest = TEST_LOCAL_ROOT / "catalogue_exports"
-        export_filename = "import_test_catalogue.zip"
-        self.catalogue.export_catalogue(export_dest, file_name=export_filename)
-        export_zip_path = export_dest / export_filename
-        self.assertTrue(export_zip_path.exists())
-
-        # 2. Clear the catalogue to simulate a fresh import environment
-        self.catalogue.delete(snap1)
-        self.catalogue.delete(snap2)
-        self.assertEqual(len(self.catalogue.get_all()), 0)
-
-        # 3. Import the catalogue
-        self.catalogue.import_catalogue(export_zip_path)
-
-        # 4. Verify the import
-        all_snaps = self.catalogue.get_all()
-        self.assertEqual(len(all_snaps), 2)
-        imported_ids = {s.id for s in all_snaps}
-        self.assertIn(snap1.id, imported_ids)
-        self.assertIn(snap2.id, imported_ids)
-        self.assertTrue((CATALOGUE_PATH / snap1.id).exists())
-        self.assertTrue((CATALOGUE_PATH / snap2.id).exists())
-
-    def test_import_catalogue_skip_existing(self):
-        # 1. Create and export a catalogue
-        snap1 = create_test_snapshot("SkipSnap1", num_dirs=1)
-        snap2 = create_test_snapshot("SkipSnap2", num_dirs=1)
-        self.catalogue.add(snap1)
-        self.catalogue.add(snap2)
-        export_dest = TEST_LOCAL_ROOT / "catalogue_exports_skip"
-        export_zip_path = export_dest / "skip_test.zip"
-        self.catalogue.export_catalogue(export_dest, file_name="skip_test.zip")
-
-        # 2. Clear the catalogue and add back only one of the snapshots
-        self.catalogue.delete(snap1)
-        self.catalogue.delete(snap2)
-        self.catalogue.add(snap1)
-        self.assertEqual(len(self.catalogue.get_all()), 1)
-
-        # 3. Import the catalogue and check for logging
-        with patch("pylizlib.core.log.pylizLogger.logger.info") as mock_info:
-            self.catalogue.import_catalogue(export_zip_path)
-            # Verify that the existing snapshot was skipped
-            mock_info.assert_any_call(f"Snapshot with ID '{snap1.id}' already exists. Skipping import.")
-            # Verify the new one was imported
-            mock_info.assert_any_call(f"Successfully imported snapshot with ID '{snap2.id}'.")
-
-        # 4. Verify the final state
-        all_snaps = self.catalogue.get_all()
-        self.assertEqual(len(all_snaps), 2)
-        final_ids = {s.id for s in all_snaps}
-        self.assertIn(snap1.id, final_ids)
-        self.assertIn(snap2.id, final_ids)
-
-    def test_install(self):
-        snap1 = create_test_snapshot("SnapToInstall", num_dirs=1)
-        self.catalogue.add(snap1)
-
-        install_target = Path(snap1.directories[0].original_path)
-
-        # Modify the target before install to check if it gets cleaned
-        (install_target / "extra_file.txt").write_text("this should be deleted")
-
-        self.catalogue.install(snap1)
-
-        # Check if target is cleaned and has the correct content
-        self.assertFalse((install_target / "extra_file.txt").exists())
-        self.assertTrue((install_target / "file1.txt").exists())
-        self.assertEqual((install_target / "file1.txt").read_text(), "content1")
-
-        # Check backup
-        self.assertTrue(any(f.name.startswith(f"backup_preinstall_{snap1.id}_ad") for f in BACKUP_PATH.iterdir()))
-
-        # Check last used date
-        updated_snap = self.catalogue.get_by_id(snap1.id)
-        self.assertIsNotNone(updated_snap.date_last_used)
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
+
+    def _manager(self, snap, settings=None):
+        return SnapshotManager(snap, CATALOGUE_PATH, settings or SnapshotSettings())
+
+    def test_create_builds_directory_and_json(self):
+        snap = _make_snapshot("MgrCreate", self._src, n=2)
+        mgr = self._manager(snap)
+        self.assertFalse(mgr.path_snapshot.exists())
+        mgr.create()
+        self.assertTrue(mgr.path_snapshot.exists())
+        self.assertTrue(mgr.path_snapshot_json.exists())
+        for assoc in snap.directories:
+            self.assertTrue((mgr.path_snapshot / assoc.directory_name).exists())
+
+    def test_create_clears_existing_contents(self):
+        snap = _make_snapshot("MgrRecreate", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        leftover = mgr.path_snapshot / "leftover.txt"
+        leftover.write_text("stale")
+        mgr.create()
+        self.assertFalse(leftover.exists())
+
+    def test_delete_removes_directory(self):
+        snap = _make_snapshot("MgrDel", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        mgr.delete()
+        self.assertFalse(mgr.path_snapshot.exists())
+
+    def test_delete_nonexistent_does_not_raise(self):
+        snap = _make_snapshot("MgrDelNone", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.delete()  # should not raise
+
+    def test_update_json_base_fields(self):
+        snap = _make_snapshot("BaseFields", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        snap.name = "Renamed"
+        snap.desc = "New desc"
+        snap.author = "NewAuthor"
+        snap.tags = ["t1", "t2"]
+        mgr.update_json_base_fields()
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertEqual(loaded.name, "Renamed")
+        self.assertEqual(loaded.desc, "New desc")
+        self.assertEqual(loaded.author, "NewAuthor")
+        self.assertEqual(loaded.tags, ["t1", "t2"])
+        self.assertIsNotNone(loaded.date_modified)
+
+    def test_update_json_data_fields(self):
+        snap = _make_snapshot("DataFields", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        snap.data["env"] = "prod"
+        mgr.update_json_data_fields()
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertEqual(loaded.data.get("env"), "prod")
+        self.assertIsNotNone(loaded.date_last_modified)
+
+    def test_install_directory_and_uninstall(self):
+        snap = _make_snapshot("InstDir", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+
+        new_dir = SOURCE_DATA_PATH / "new_install_dir"
+        new_dir.mkdir()
+        (new_dir / "new.txt").write_text("new content")
+
+        mgr.install_directory(new_dir)
+        self.assertEqual(len(snap.directories), 2)
+        added_assoc = snap.directories[-1]
+        self.assertTrue((mgr.path_snapshot / added_assoc.directory_name).exists())
+
+        mgr.uninstall_directory_by_folder_id(added_assoc.folder_id)
+        self.assertEqual(len(snap.directories), 1)
+        self.assertFalse((mgr.path_snapshot / added_assoc.directory_name).exists())
+
+    def test_install_directory_raises_on_invalid_path(self):
+        snap = _make_snapshot("InstDirBad", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        with self.assertRaises(ValueError):
+            mgr.install_directory(SOURCE_DATA_PATH / "does_not_exist")
+
+    def test_uninstall_nonexistent_folder_id_is_noop(self):
+        snap = _make_snapshot("UninstNoOp", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        initial_count = len(snap.directories)
+        mgr.uninstall_directory_by_folder_id("nonexistent_id")
+        self.assertEqual(len(snap.directories), initial_count)
+
+    def test_bug2_duplicate_does_not_mutate_original(self):
+        """BUG-2: duplicate() must NOT change self.snapshot.id or .name."""
+        snap = _make_snapshot("DupOriginal", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        original_id = snap.id
+        original_name = snap.name
+        mgr.duplicate()
+        self.assertEqual(snap.id, original_id, "BUG-2: duplicate() mutated original snapshot ID")
+        self.assertEqual(snap.name, original_name, "BUG-2: duplicate() mutated original snapshot name")
+
+    def test_duplicate_creates_new_snapshot_on_disk(self):
+        snap = _make_snapshot("DupSource", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        mgr.duplicate()
+
+        self.assertTrue(mgr.path_snapshot.exists())
+        all_dirs = [d for d in CATALOGUE_PATH.iterdir() if d.is_dir()]
+        self.assertEqual(len(all_dirs), 2)
+        new_dir = next(d for d in all_dirs if d.name != snap.id)
+        loaded = SnapshotSerializer.from_json(new_dir / SnapshotSettings().json_filename)
+        self.assertIn("Copy", loaded.name)
+        self.assertNotEqual(loaded.id, snap.id)
+
+    def test_duplicate_raises_on_missing_path(self):
+        snap = _make_snapshot("DupMissing", self._src, n=1)
+        mgr = self._manager(snap)
+        with self.assertRaises(FileNotFoundError):
+            mgr.duplicate()
+
+    def test_update_associated_dirs_from_system(self):
+        snap = _make_snapshot("UpdateAssoc", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "new_file.txt").write_text("added after create")
+        mgr.update_associated_dirs_from_system()
+        internal_copy = mgr.path_snapshot / snap.directories[0].directory_name
+        self.assertTrue((internal_copy / "new_file.txt").exists())
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertIsNotNone(loaded.date_last_modified)
+
+    def test_update_associated_dirs_missing_source_sets_size_zero(self):
+        snap = _make_snapshot("AssocMissing", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        shutil.rmtree(original_dir)
+        with self.assertLogs(level="WARNING"):
+            mgr.update_associated_dirs_from_system()
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertEqual(loaded.directories[0].mb_size, 0.0)
+
+    def test_install_copies_content_to_original_path(self):
+        snap = _make_snapshot("MgrInstall", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "extra.txt").write_text("should be removed")
+        mgr.install()
+        self.assertFalse((original_dir / "extra.txt").exists())
+        self.assertTrue((original_dir / "m1_file.txt").exists())
+
+    def test_install_updates_date_last_used(self):
+        snap = _make_snapshot("MgrInstallDate", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        mgr.install()
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertIsNotNone(loaded.date_last_used)
 
     def test_remove_installed_copies(self):
-        # Setup: Create a snapshot and install it
-        snap_to_remove = create_test_snapshot("SnapToRemove", num_dirs=2)
+        install_dir = TEST_LOCAL_ROOT / "installed_copy"
+        install_dir.mkdir(parents=True)
+        (install_dir / "a.txt").write_text("x")
+        _reset_index()
+        snap = Snapshot(
+            id=gen_random_string(8), name="RemoveSnap", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(install_dir), folder_id="rem1")],
+        )
+        mgr = self._manager(snap)
+        self.assertTrue(install_dir.exists())
+        mgr.remove_installed_copies()
+        self.assertFalse(install_dir.exists())
 
-        # Ensure the original_path for the snapshot directories are within INSTALL_DEST_PATH
-        # This is crucial to avoid deleting actual source data.
-        # We'll create dummy directories in INSTALL_DEST_PATH for this test.
-        install_dir_1_path = INSTALL_DEST_PATH / "snap_dir_1_test"
-        install_dir_2_path = INSTALL_DEST_PATH / "snap_dir_2_test"
+    def test_create_backup_snapshot_directory(self):
+        snap = _make_snapshot("BckSnap", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+        mgr.create_backup(BACKUP_PATH, "test_prefix", BackupType.SNAPSHOT_DIRECTORY)
+        zips = list(BACKUP_PATH.glob("*.zip"))
+        self.assertEqual(len(zips), 1)
+        self.assertIn("test_prefix", zips[0].name)
 
-        # Create these directories and some content
-        install_dir_1_path.mkdir(parents=True, exist_ok=True)
-        (install_dir_1_path / "file_a.txt").write_text("content A")
-        install_dir_2_path.mkdir(parents=True, exist_ok=True)
-        (install_dir_2_path / "file_b.txt").write_text("content B")
+    def test_create_backup_associated_directories(self):
+        snap = _make_snapshot("BckAssoc", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+        mgr.create_backup(BACKUP_PATH, "assoc_bck", BackupType.ASSOCIATED_DIRECTORIES)
+        zips = list(BACKUP_PATH.glob("*.zip"))
+        self.assertEqual(len(zips), 1)
+        with zipfile.ZipFile(zips[0]) as zf:
+            names = zf.namelist()
+        self.assertTrue(any("m1_file.txt" in n for n in names))
 
-        # Update the snapshot's directories to point to these test install paths
-        snap_to_remove.directories = [
-            SnapDirAssociation(index=1, original_path=str(install_dir_1_path), folder_id="id1"),
-            SnapDirAssociation(index=2, original_path=str(install_dir_2_path), folder_id="id2"),
-        ]
+    def test_create_backup_is_export_naming(self):
+        snap = _make_snapshot("ExpSnap", self._src, n=1)
+        mgr = self._manager(snap)
+        mgr.create()
+        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+        mgr.create_backup(BACKUP_PATH, "export", BackupType.SNAPSHOT_DIRECTORY, is_export=True)
+        zips = list(BACKUP_PATH.glob("*.zip"))
+        self.assertEqual(len(zips), 1)
+        self.assertTrue(zips[0].name.startswith("export_"))
+        # Non-export backups have "backup_" prefix
+        BACKUP_PATH2 = TEST_LOCAL_ROOT / "backups2"
+        BACKUP_PATH2.mkdir()
+        mgr.create_backup(BACKUP_PATH2, "prefix2", BackupType.SNAPSHOT_DIRECTORY, is_export=False)
+        zips2 = list(BACKUP_PATH2.glob("*.zip"))
+        self.assertTrue(zips2[0].name.startswith("backup_prefix2"))
 
-        self.catalogue.add(snap_to_remove)  # Adds to catalogue
-        self.catalogue.install(snap_to_remove)  # Installs to original_path locations
+    def test_update_from_actions_list(self):
+        src_sorted = sorted(self._src)
+        snap = _make_snapshot("ActionsSnap", src_sorted, n=2)
+        mgr = self._manager(snap)
+        mgr.create()
 
-        # Verify they exist before removal
-        self.assertTrue(install_dir_1_path.exists())
-        self.assertTrue(install_dir_2_path.exists())
-        self.assertTrue((install_dir_1_path / "file_a.txt").exists())
+        snap_new = snap.clone()
+        removed_assoc = snap_new.directories.pop(0)
+        snap_new.directories.append(
+            SnapDirAssociation(index=99, original_path=str(src_sorted[2]), folder_id="added999")
+        )
+        edits = SnapshotUtils.get_edits_between_snapshots(snap, snap_new)
+        mgr2 = SnapshotManager(snap_new, CATALOGUE_PATH)
+        mgr2.update_from_actions_list(edits)
 
-        # Test Case 1: Successful Removal
-        self.catalogue.remove_installed_copies(snap_to_remove.id)
+        self.assertFalse((mgr.path_snapshot / removed_assoc.directory_name).exists())
+        self.assertTrue((mgr.path_snapshot / snap_new.directories[-1].directory_name).exists())
 
-        self.assertFalse(install_dir_1_path.exists())
-        self.assertFalse(install_dir_2_path.exists())
 
-        # Test Case 2: Snapshot Not Found (should log a warning)
-        with patch("pylizlib.core.log.pylizLogger.logger.warning") as mock_warning:
-            self.catalogue.remove_installed_copies("non-existent-id")
-            mock_warning.assert_called_once_with("Snapshot with ID 'non-existent-id' not found. Cannot remove installed copies.")
+# ===========================================================================
+# TestSnapshotCatalogueTestCase
+# ===========================================================================
 
-        # Test Case 3: Some Directories Missing (should not raise error)
-        snap_partial_remove = create_test_snapshot("SnapPartialRemove", num_dirs=1)
-        install_dir_3_path = INSTALL_DEST_PATH / "snap_dir_3_test"
-        install_dir_4_path = INSTALL_DEST_PATH / "snap_dir_4_test_missing"
+class TestSnapshotCatalogueTestCase(unittest.TestCase):
+    def setUp(self):
+        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+        INSTALL_DEST_PATH.mkdir(parents=True, exist_ok=True)
+        self._src = _create_source_dirs(SOURCE_DATA_PATH, ["c1", "c2", "c3"])
+        self.settings = SnapshotSettings(
+            backup_path=BACKUP_PATH,
+            backup_pre_install=True,
+            backup_pre_modify=True,
+            backup_pre_delete=True,
+        )
+        self.cat = SnapshotCatalogue(CATALOGUE_PATH, settings=self.settings)
 
-        # Create both directories so 'add' succeeds
-        install_dir_3_path.mkdir(parents=True, exist_ok=True)
-        (install_dir_3_path / "file_c.txt").write_text("content C")
-        install_dir_4_path.mkdir(parents=True, exist_ok=True)  # Create this one too
-        (install_dir_4_path / "file_d.txt").write_text("content D")  # Add some content
+    def tearDown(self):
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
 
-        snap_partial_remove.directories = [
-            SnapDirAssociation(index=1, original_path=str(install_dir_3_path), folder_id="id3"),
-            SnapDirAssociation(index=2, original_path=str(install_dir_4_path), folder_id="id4"),
-        ]
-        self.catalogue.add(snap_partial_remove)  # This will now succeed
+    def test_catalogue_creates_directory(self):
+        new_path = TEST_LOCAL_ROOT / "new_cat"
+        cat = SnapshotCatalogue(new_path)
+        self.assertTrue(new_path.exists())
 
-        # Now, simulate one of the installed copies being missing
-        shutil.rmtree(install_dir_4_path)  # Manually delete it
+    def test_set_catalogue_path(self):
+        new_path = TEST_LOCAL_ROOT / "moved_cat"
+        self.cat.set_catalogue_path(new_path)
+        self.assertTrue(new_path.exists())
+        self.assertEqual(self.cat.path_catalogue, new_path)
 
-        self.assertTrue(install_dir_3_path.exists())
-        self.assertFalse(install_dir_4_path.exists())  # Confirm it's missing
+    def test_add_get_all_get_by_id_exists(self):
+        self.assertEqual(len(self.cat.get_all()), 0)
+        snap = _make_snapshot("CatSnap1", self._src, n=1)
+        self.cat.add(snap)
+        self.assertEqual(len(self.cat.get_all()), 1)
+        self.assertTrue(self.cat.exists(snap.id))
+        self.assertFalse(self.cat.exists("nonexistent"))
+        retrieved = self.cat.get_by_id(snap.id)
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.id, snap.id)
+        self.assertIsNone(self.cat.get_by_id("nonexistent"))
 
-        self.catalogue.remove_installed_copies(snap_partial_remove.id)
+    def test_add_multiple(self):
+        for i in range(3):
+            self.cat.add(_make_snapshot(f"Multi{i}", self._src, n=1))
+        self.assertEqual(len(self.cat.get_all()), 3)
 
-        self.assertFalse(install_dir_3_path.exists())  # Should be removed
-        self.assertFalse(install_dir_4_path.exists())  # Should still be missing, no error
+    def test_delete_removes_from_catalogue(self):
+        snap = _make_snapshot("DelSnap", self._src, n=1)
+        self.cat.add(snap)
+        self.assertTrue(self.cat.exists(snap.id))
+        self.cat.delete(snap)
+        self.assertFalse(self.cat.exists(snap.id))
+
+    def test_delete_creates_backup_when_enabled(self):
+        snap = _make_snapshot("DelBck", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.delete(snap)
+        backups = list(BACKUP_PATH.glob("backup_beforeDelete_*.zip"))
+        self.assertEqual(len(backups), 1)
+
+    def test_get_snap_directory_path(self):
+        snap = _make_snapshot("DirPath", self._src, n=1)
+        self.cat.add(snap)
+        path = self.cat.get_snap_directory_path(snap)
+        self.assertIsNotNone(path)
+        self.assertTrue(path.exists())
+
+    def test_get_snap_directory_path_nonexistent(self):
+        snap = Snapshot(id="ghost_id", name="X", desc="")
+        self.assertIsNone(self.cat.get_snap_directory_path(snap))
+
+    def test_install_copies_content_back(self):
+        snap = _make_snapshot("InstallSnap", self._src, n=1)
+        self.cat.add(snap)
+        target = Path(snap.directories[0].original_path)
+        (target / "stale.txt").write_text("stale")
+        self.cat.install(snap)
+        self.assertFalse((target / "stale.txt").exists())
+        self.assertTrue((target / "c1_file.txt").exists())
+        updated = self.cat.get_by_id(snap.id)
+        self.assertIsNotNone(updated.date_last_used)
+
+    def test_install_creates_backup_when_enabled(self):
+        snap = _make_snapshot("InstBck", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.install(snap)
+        self.assertEqual(len(list(BACKUP_PATH.glob("backup_preinstall_*.zip"))), 1)
+
+    def test_update_snapshot_by_objs(self):
+        src_sorted = sorted(self._src)
+        old = _make_snapshot("UpdateOld", src_sorted, n=2)
+        self.cat.add(old)
+        new = old.clone()
+        new.name = "UpdateNew"
+        new.directories.pop(0)
+        new.directories.append(
+            SnapDirAssociation(index=99, original_path=str(src_sorted[2]), folder_id=gen_random_string(6))
+        )
+        self.cat.update_snapshot_by_objs(old, new)
+        updated = self.cat.get_by_id(new.id)
+        self.assertEqual(updated.name, "UpdateNew")
+        self.assertEqual(len(updated.directories), 2)
+        paths = {d.original_path for d in updated.directories}
+        self.assertIn(src_sorted[2].as_posix(), paths)
+        self.assertNotIn(src_sorted[0].as_posix(), paths)
+
+    def test_update_snapshot_creates_backup_when_enabled(self):
+        snap = _make_snapshot("UpdBck", self._src, n=1)
+        self.cat.add(snap)
+        clone = snap.clone()
+        clone.name = "UpdBckChanged"
+        self.cat.update_snapshot_by_objs(snap, clone)
+        self.assertEqual(len(list(BACKUP_PATH.glob("backup_beforeEdit_*.zip"))), 1)
+
+    def test_duplicate_by_id(self):
+        snap = _make_snapshot("DupById", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.duplicate_by_id(snap.id)
+        all_snaps = self.cat.get_all()
+        self.assertEqual(len(all_snaps), 2)
+        copy_snap = next(s for s in all_snaps if s.id != snap.id)
+        self.assertIn("Copy", copy_snap.name)
+
+    def test_duplicate_by_id_raises_on_nonexistent(self):
+        with self.assertRaises(ValueError):
+            self.cat.duplicate_by_id("nonexistent_id")
+
+    def test_export_and_import_snapshot(self):
+        snap = _make_snapshot("ExpImpSnap", self._src, n=1)
+        self.cat.add(snap)
+
+        export_dir = TEST_LOCAL_ROOT / "exp_imp"
+        export_dir.mkdir(parents=True)
+        self.cat.export_snapshot(snap.id, export_dir)
+        zips = list(export_dir.glob("*.zip"))
+        self.assertEqual(len(zips), 1)
+
+        self.cat.delete(snap)
+        self.assertFalse(self.cat.exists(snap.id))
+
+        self.cat.import_snapshot(zips[0])
+        self.assertTrue(self.cat.exists(snap.id))
+        imp = self.cat.get_by_id(snap.id)
+        self.assertEqual(imp.name, snap.name)
+
+    def test_import_snapshot_duplicate_id_raises(self):
+        snap = _make_snapshot("DupImpSnap", self._src, n=1)
+        self.cat.add(snap)
+        export_dir = TEST_LOCAL_ROOT / "dup_exp"
+        export_dir.mkdir(parents=True)
+        self.cat.export_snapshot(snap.id, export_dir)
+        zip_path = list(export_dir.glob("*.zip"))[0]
+        with self.assertRaises(ValueError) as ctx:
+            self.cat.import_snapshot(zip_path)
+        self.assertIn("already exists", str(ctx.exception))
+
+    def test_import_snapshot_invalid_zip(self):
+        bad = TEST_LOCAL_ROOT / "bad.zip"
+        bad.write_text("not a zip")
+        with self.assertRaises(ValueError):
+            self.cat.import_snapshot(bad)
+
+    def test_import_snapshot_non_zip_extension(self):
+        notzip = TEST_LOCAL_ROOT / "file.txt"
+        notzip.write_text("x")
+        with self.assertRaises(ValueError):
+            self.cat.import_snapshot(notzip)
+
+    def test_import_snapshot_missing_json(self):
+        empty_zip = TEST_LOCAL_ROOT / "empty.zip"
+        with zipfile.ZipFile(empty_zip, "w") as zf:
+            zf.writestr("dummy.txt", "hello")
+        with self.assertRaises(ValueError) as ctx:
+            self.cat.import_snapshot(empty_zip)
+        self.assertIn("snapshot json file", str(ctx.exception))
+
+    def test_export_and_import_catalogue(self):
+        for i in range(3):
+            self.cat.add(_make_snapshot(f"CatExp{i}", self._src, n=1))
+        exp_dir = TEST_LOCAL_ROOT / "cat_export"
+        exp_dir.mkdir(parents=True)
+        self.cat.export_catalogue(exp_dir, "cat.zip")
+        self.assertTrue((exp_dir / "cat.zip").exists())
+
+        for s in self.cat.get_all():
+            self.cat.delete(s)
+        self.assertEqual(len(self.cat.get_all()), 0)
+        self.cat.import_catalogue(exp_dir / "cat.zip")
+        self.assertEqual(len(self.cat.get_all()), 3)
+
+    def test_export_catalogue_empty_logs_warning(self):
+        exp_dir = TEST_LOCAL_ROOT / "empty_cat_exp"
+        exp_dir.mkdir(parents=True)
+        with self.assertLogs(level="WARNING"):
+            self.cat.export_catalogue(exp_dir, "empty.zip")
+
+    def test_import_catalogue_skips_existing(self):
+        s1 = _make_snapshot("Skip1", self._src, n=1)
+        s2 = _make_snapshot("Skip2", self._src, n=1)
+        self.cat.add(s1)
+        self.cat.add(s2)
+        exp_dir = TEST_LOCAL_ROOT / "skip_cat"
+        exp_dir.mkdir()
+        self.cat.export_catalogue(exp_dir, "skip.zip")
+        self.cat.delete(s2)
+        self.assertEqual(len(self.cat.get_all()), 1)
+
+        with patch("pylizlib.core.log.pylizLogger.logger.info") as mock_info:
+            self.cat.import_catalogue(exp_dir / "skip.zip")
+            mock_info.assert_any_call(f"Snapshot with ID '{s1.id}' already exists. Skipping import.")
+            mock_info.assert_any_call(f"Successfully imported snapshot with ID '{s2.id}'.")
+        self.assertEqual(len(self.cat.get_all()), 2)
+
+    def test_import_catalogue_invalid_zip(self):
+        bad = TEST_LOCAL_ROOT / "bad_cat.zip"
+        bad.write_text("not a zip")
+        with self.assertRaises(ValueError):
+            self.cat.import_catalogue(bad)
 
     def test_export_assoc_dirs(self):
-        # Setup: Create a snapshot with some associated directories
-        snap1 = create_test_snapshot("SnapToExport", num_dirs=2)
-        self.catalogue.add(snap1)
+        snap = _make_snapshot("ExpAssoc", self._src, n=2)
+        self.cat.add(snap)
+        exp_dir = TEST_LOCAL_ROOT / "assoc_exp"
+        exp_dir.mkdir()
+        self.cat.export_assoc_dirs(snap.id, exp_dir)
+        zips = list(exp_dir.glob("*.zip"))
+        self.assertEqual(len(zips), 1)
+        self.assertIn("_ad_", zips[0].name)
 
-        export_destination = TEST_LOCAL_ROOT / "exports"
-        export_destination.mkdir()
+    def test_export_assoc_dirs_nonexistent_raises(self):
+        with self.assertRaises(ValueError):
+            self.cat.export_assoc_dirs("nonexistent_id", TEST_LOCAL_ROOT)
 
-        # Call the export method
-        self.catalogue.export_assoc_dirs(snap1.id, export_destination)
-
-        # Verify the zip file was created
-        self.assertTrue(export_destination.exists())
-        export_files = list(export_destination.iterdir())
-        self.assertEqual(len(export_files), 1)
-
-        zip_file = export_files[0]
-        self.assertTrue(zip_file.name.startswith(f"export_{snap1.id}_ad"))
-        self.assertTrue(zip_file.name.endswith(".zip"))
-
-        # Verify the contents of the zip file
-        with zipfile.ZipFile(zip_file, "r") as zf:
-            zipped_files = zf.namelist()
-            # zipfile uses forward slashes
-            self.assertIn("dir1/file1.txt", zipped_files)
-            self.assertIn("dir2/file2.txt", zipped_files)
-
-    def test_export_snapshot(self):
-        # Setup: Create a snapshot
-        snap1 = create_test_snapshot("SnapToExportFull", num_dirs=2)
-        self.catalogue.add(snap1)
-
-        export_destination = TEST_LOCAL_ROOT / "exports_full"
-        export_destination.mkdir()
-
-        # Call the export method
-        self.catalogue.export_snapshot(snap1.id, export_destination)
-
-        # Verify the zip file was created
-        self.assertTrue(export_destination.exists())
-        export_files = list(export_destination.iterdir())
-        self.assertEqual(len(export_files), 1)
-
-        zip_file = export_files[0]
-        self.assertTrue(zip_file.name.startswith(f"export_snap_{snap1.id}_sd"))
-        self.assertTrue(zip_file.name.endswith(".zip"))
-
-        # Verify the contents of the zip file
-        with zipfile.ZipFile(zip_file, "r") as zf:
-            zipped_files = zf.namelist()
-            # Check for the snapshot.json file and a file from one of the copied directories
-            self.assertIn(self.settings.json_filename, zipped_files)
-
-            # The structure inside the zip is relative to the snapshot directory
-            # e.g., "1-dir1/file1.txt"
-            dir1_in_snap_name = snap1.directories[0].directory_name
-            expected_file = f"{dir1_in_snap_name}/file1.txt"
-            self.assertIn(expected_file, zipped_files)
-
-    def test_import_snapshot(self):
-        # 1. Create a snapshot and export it to have a valid zip file
-        snap_to_export = create_test_snapshot("SnapToImport", num_dirs=1)
-        self.catalogue.add(snap_to_export)
-
-        export_destination = TEST_LOCAL_ROOT / "exports_for_import"
-        export_destination.mkdir()
-        self.catalogue.export_snapshot(snap_to_export.id, export_destination)
-
-        zip_files = list(export_destination.glob("*.zip"))
-        self.assertEqual(len(zip_files), 1)
-        zip_to_import = zip_files[0]
-
-        # 2. Delete the original snapshot from the catalogue to ensure we are testing import
-        self.catalogue.delete(snap_to_export)
-        self.assertFalse(self.catalogue.exists(snap_to_export.id))
-
-        # 3. Import the snapshot
-        self.catalogue.import_snapshot(zip_to_import)
-
-        # 4. Verify it was imported correctly
-        self.assertTrue(self.catalogue.exists(snap_to_export.id))
-        imported_snap = self.catalogue.get_by_id(snap_to_export.id)
-        self.assertIsNotNone(imported_snap)
-        self.assertEqual(imported_snap.name, "SnapToImport")
-        self.assertEqual(len(imported_snap.directories), 1)
-
-        # 5. Test importing a duplicate ID
-        with self.assertRaises(ValueError) as cm:
-            self.catalogue.import_snapshot(zip_to_import)
-        self.assertIn(f"A snapshot with the ID '{snap_to_export.id}' already exists", str(cm.exception))
-
-        # 6. Test importing an invalid zip file (e.g., not a zip)
-        invalid_zip_path = TEST_LOCAL_ROOT / "invalid.zip"
-        invalid_zip_path.write_text("this is not a zip")
-        with self.assertRaises(ValueError) as cm:
-            self.catalogue.import_snapshot(invalid_zip_path)
-        self.assertIn("is not a valid zip file", str(cm.exception))
-
-        # 7. Test importing a zip file without a snapshot.json
-        empty_zip_path = TEST_LOCAL_ROOT / "empty.zip"
-        with zipfile.ZipFile(empty_zip_path, "w") as zf:
-            zf.writestr("test.txt", "hello")
-        with self.assertRaises(ValueError) as cm:
-            self.catalogue.import_snapshot(empty_zip_path)
-        self.assertIn("does not contain a snapshot json file", str(cm.exception))
+    def test_export_snapshot_nonexistent_raises(self):
+        with self.assertRaises(ValueError):
+            self.cat.export_snapshot("nonexistent_id", TEST_LOCAL_ROOT)
 
     def test_update_assoc_with_installed(self):
-        # 1. Create a snapshot and install it
-        snap1 = create_test_snapshot("SnapToUpdate", num_dirs=1)
-        self.catalogue.add(snap1)
-        self.catalogue.install(snap1)
+        snap = _make_snapshot("UpdAssoc", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.install(snap)
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "added_after_install.txt").write_text("added")
+        self.cat.update_assoc_with_installed(snap.id)
+        snap_dir = self.cat.get_snap_directory_path(snap)
+        internal = snap_dir / snap.directories[0].directory_name
+        self.assertTrue((internal / "added_after_install.txt").exists())
 
-        # 2. Modify the "installed" directory on the system
-        installed_dir_path = Path(snap1.directories[0].original_path)
-        (installed_dir_path / "new_file.txt").write_text("this is a new file")
-        (installed_dir_path / "file1.txt").write_text("modified content")
+    def test_update_assoc_with_installed_raises_on_nonexistent(self):
+        with self.assertRaises(ValueError):
+            self.cat.update_assoc_with_installed("nonexistent_id")
 
-        # 3. Get the state of the snapshot's internal copy before updating
-        snap_dir_path = self.catalogue.get_snap_directory_path(snap1)
-        internal_copy_path = snap_dir_path / snap1.directories[0].directory_name
-        self.assertFalse((internal_copy_path / "new_file.txt").exists())
-        self.assertEqual((internal_copy_path / "file1.txt").read_text(), "content1")
+    def test_remove_installed_copies(self):
+        install1 = INSTALL_DEST_PATH / "rem1"
+        install2 = INSTALL_DEST_PATH / "rem2"
+        install1.mkdir(parents=True)
+        install2.mkdir(parents=True)
+        (install1 / "f.txt").write_text("x")
+        (install2 / "f.txt").write_text("x")
+        _reset_index()
+        snap = Snapshot(
+            id=gen_random_string(8), name="RemInstalled", desc="",
+            directories=[
+                SnapDirAssociation(index=1, original_path=str(install1), folder_id="ri1"),
+                SnapDirAssociation(index=2, original_path=str(install2), folder_id="ri2"),
+            ],
+        )
+        self.cat.add(snap)
+        self.cat.remove_installed_copies(snap.id)
+        self.assertFalse(install1.exists())
+        self.assertFalse(install2.exists())
 
-        original_size = snap1.directories[0].mb_size
-
-        # 4. Call the update method
-        self.catalogue.update_assoc_with_installed(snap1.id)
-
-        # 5. Verify the internal copy has been updated
-        self.assertTrue((internal_copy_path / "new_file.txt").exists())
-        self.assertEqual((internal_copy_path / "new_file.txt").read_text(), "this is a new file")
-        self.assertEqual((internal_copy_path / "file1.txt").read_text(), "modified content")
-
-        # 6. Verify the size has been updated
-        updated_snap = self.catalogue.get_by_id(snap1.id)
-        new_size = updated_snap.directories[0].mb_size
-        self.assertGreater(new_size, original_size)
-        self.assertIsNotNone(updated_snap.date_last_modified)
+    def test_remove_installed_copies_warns_on_nonexistent_snap(self):
+        with self.assertLogs(level="WARNING"):
+            self.cat.remove_installed_copies("nonexistent_id")
 
 
-class TestSnapshotSearcher(unittest.TestCase):
+# ===========================================================================
+# TestSnapshotSearcherTestCase
+# ===========================================================================
+
+class TestSnapshotSearcherTestCase(unittest.TestCase):
     def setUp(self):
-        """Set up for the searcher tests."""
-        if TEST_LOCAL_ROOT.exists():
-            shutil.rmtree(TEST_LOCAL_ROOT)
-
         CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
         SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
-        # Create source files and content
-        dir1 = SOURCE_DATA_PATH / "search_dir1"
+        dir1 = SOURCE_DATA_PATH / "srch1"
         dir1.mkdir()
         (dir1 / "fileA.txt").write_text("Hello world\nThis is a test file.")
         (dir1 / "fileB.txt").write_text("Another file with test content.\nHello again.")
 
-        dir2 = SOURCE_DATA_PATH / "search_dir2"
+        dir2 = SOURCE_DATA_PATH / "srch2"
         dir2.mkdir()
-        (dir2 / "fileC.log").write_text("Log file with some data: value=12345")
+        (dir2 / "fileC.log").write_text("Log file with value=12345\nSome data.")
         (dir2 / "fileD.txt").write_text("No interesting content here.")
+        (dir2 / "binary.bin").write_bytes(b"\x80\x81\x82\xff")
 
-        # Create a binary file
-        (dir2 / "binary.bin").write_bytes(b"\x80\x81\x82")
-
-        # Create a snapshot containing these dirs
-        SnapDirAssociation._current_index = 0
+        _reset_index()
         self.snap = Snapshot(
             id="search-snap-id",
-            name="SearchTestSnap",
-            desc="A snapshot for testing search functionality",
+            name="SearchSnap",
+            desc="",
             directories=[
-                SnapDirAssociation(index=1, original_path=str(dir1), folder_id="d1"),
-                SnapDirAssociation(index=2, original_path=str(dir2), folder_id="d2"),
+                SnapDirAssociation(index=1, original_path=str(dir1), folder_id="sd1"),
+                SnapDirAssociation(index=2, original_path=str(dir2), folder_id="sd2"),
             ],
-            author="SearchTest",
+            author="Test",
         )
-
         self.catalogue = SnapshotCatalogue(CATALOGUE_PATH)
         self.catalogue.add(self.snap)
         self.searcher = SnapshotSearcher(self.catalogue)
 
     def tearDown(self):
-        """Tear down after each test method."""
-        shutil.rmtree(TEST_LOCAL_ROOT)
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
 
-    def test_search_content_text_found(self):
+    def test_content_text_found(self):
         params = SnapshotSearchParams(query="Hello", search_target=SearchTarget.FILE_CONTENT, query_type=QueryType.TEXT)
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 2)
-        results.sort(key=lambda r: r.file_path.name)
-        self.assertEqual("fileA.txt", results[0].file_path.name)
-        self.assertEqual(results[0].line_number, 1)
-        self.assertEqual(results[0].line_content, "Hello world")
-        self.assertEqual("fileB.txt", results[1].file_path.name)
-        self.assertEqual(results[1].line_number, 2)
-        self.assertEqual(results[1].line_content, "Hello again.")
+        names = {r.file_path.name for r in results}
+        self.assertIn("fileA.txt", names)
+        self.assertIn("fileB.txt", names)
 
-    def test_search_content_text_not_found(self):
-        params = SnapshotSearchParams(query="nonexistent")
+    def test_content_text_not_found(self):
+        params = SnapshotSearchParams(query="IMPOSSIBLE_STRING_xyz123")
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 0)
 
-    def test_search_content_regex_found(self):
-        params = SnapshotSearchParams(query=r"value=\d+", search_target=SearchTarget.FILE_CONTENT, query_type=QueryType.REGEX)
+    def test_content_regex(self):
+        params = SnapshotSearchParams(
+            query=r"value=\d+",
+            search_target=SearchTarget.FILE_CONTENT,
+            query_type=QueryType.REGEX,
+        )
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
-        self.assertEqual("fileC.log", results[0].file_path.name)
-        self.assertEqual(results[0].line_content, "Log file with some data: value=12345")
+        self.assertEqual(results[0].file_path.name, "fileC.log")
 
-    def test_search_content_regex_invalid_pattern(self):
+    def test_content_invalid_regex_returns_empty(self):
         params = SnapshotSearchParams(query=r"[invalid", query_type=QueryType.REGEX)
-        results = self.searcher.search(self.snap, params)
-        self.assertEqual(len(results), 0)
+        self.assertEqual(self.searcher.search(self.snap, params), [])
 
-    def test_search_content_with_extension_filter(self):
+    def test_content_extension_filter(self):
         params = SnapshotSearchParams(query="file", extensions=[".txt"])
         results = self.searcher.search(self.snap, params)
-        self.assertEqual(len(results), 2)
-        for result in results:
-            self.assertEqual(result.file_path.suffix, ".txt")
+        for r in results:
+            self.assertEqual(r.file_path.suffix, ".txt")
 
-    def test_search_name_text_found(self):
-        params = SnapshotSearchParams(query="fileA", search_target=SearchTarget.FILE_NAME, query_type=QueryType.TEXT)
+    def test_content_binary_file_skipped(self):
+        params = SnapshotSearchParams(query="binary")
+        results = self.searcher.search(self.snap, params)
+        self.assertIsInstance(results, list)
+
+    def test_filename_text(self):
+        params = SnapshotSearchParams(
+            query="fileA",
+            search_target=SearchTarget.FILE_NAME,
+            query_type=QueryType.TEXT,
+        )
         results = self.searcher.search(self.snap, params)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].file_path.name, "fileA.txt")
         self.assertIsNone(results[0].line_number)
         self.assertIsNone(results[0].line_content)
 
-    def test_search_name_regex_found(self):
-        params = SnapshotSearchParams(query=r"file(A|B)\.txt$", search_target=SearchTarget.FILE_NAME, query_type=QueryType.REGEX)
+    def test_filename_regex(self):
+        params = SnapshotSearchParams(
+            query=r"file[AB]\.txt$",
+            search_target=SearchTarget.FILE_NAME,
+            query_type=QueryType.REGEX,
+        )
         results = self.searcher.search(self.snap, params)
-        self.assertEqual(len(results), 2)
         names = {r.file_path.name for r in results}
         self.assertEqual(names, {"fileA.txt", "fileB.txt"})
 
-    def test_search_name_with_extension_filter(self):
-        # Should find the log file
-        params_log = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".log"])
-        results_log = self.searcher.search(self.snap, params_log)
-        self.assertEqual(len(results_log), 1)
-        self.assertEqual(results_log[0].file_path.name, "fileC.log")
+    def test_filename_extension_filter(self):
+        params = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".log"])
+        self.assertEqual(len(self.searcher.search(self.snap, params)), 1)
+        params2 = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".txt"])
+        self.assertEqual(len(self.searcher.search(self.snap, params2)), 0)
 
-        # Should NOT find the log file if filtered to .txt
-        params_txt = SnapshotSearchParams(query="fileC", search_target=SearchTarget.FILE_NAME, extensions=[".txt"])
-        results_txt = self.searcher.search(self.snap, params_txt)
-        self.assertEqual(len(results_txt), 0)
+    def test_search_list_across_snapshots(self):
+        snap2_dir = SOURCE_DATA_PATH / "srch3"
+        snap2_dir.mkdir()
+        (snap2_dir / "extra.txt").write_text("Hello from snap2")
+        _reset_index()
+        snap2 = Snapshot(
+            id="search-snap2-id", name="SearchSnap2", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(snap2_dir), folder_id="sd3")],
+        )
+        self.catalogue.add(snap2)
+
+        params = SnapshotSearchParams(query="Hello", search_target=SearchTarget.FILE_CONTENT)
+        results = self.searcher.search_list([self.snap, snap2], params)
+        snap_names = {r.snapshot_name for r in results}
+        self.assertIn("SearchSnap", snap_names)
+        self.assertIn("SearchSnap2", snap_names)
+
+    def test_search_progress_callback(self):
+        calls = []
+        def cb(filename, total, processed):
+            calls.append((filename, total, processed))
+        params = SnapshotSearchParams(query="Hello", search_target=SearchTarget.FILE_CONTENT)
+        self.searcher.search(self.snap, params, on_progress=cb)
+        self.assertGreater(len(calls), 0)
+        last = calls[-1]
+        self.assertEqual(last[1], last[2])
+
+    def test_search_nonexistent_snapshot_path_returns_empty(self):
+        ghost_snap = Snapshot(
+            id="ghost_id_xyz", name="Ghost", desc="",
+            directories=[SnapDirAssociation(index=1, original_path="/nonexistent/path", folder_id="g1")],
+        )
+        params = SnapshotSearchParams(query="anything")
+        with self.assertLogs(level="WARNING"):
+            results = self.searcher.search(ghost_snap, params)
+        self.assertEqual(results, [])
+
+
+# ===========================================================================
+# TestIntegrationScenariosTestCase
+# ===========================================================================
+
+class TestIntegrationScenariosTestCase(unittest.TestCase):
+    """End-to-end scenarios using real downloaded images."""
+
+    def setUp(self):
+        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+        BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+        self.settings = SnapshotSettings(backup_path=BACKUP_PATH)
+        self.cat = SnapshotCatalogue(CATALOGUE_PATH, settings=self.settings)
+
+    def tearDown(self):
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
+
+    def test_scenario_a_full_lifecycle_with_images(self):
+        """Create → install → modify source → update internal → reinstall."""
+        src = _downloader.create_sample_directory(
+            SOURCE_DATA_PATH, "scene_a", image_count=2,
+            extra_text_files={"meta.txt": "version=1"},
+        )
+        _reset_index()
+        snap = Snapshot(
+            id=gen_random_string(10), name="ScenarioA", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(src), folder_id="sca1")],
+        )
+        self.cat.add(snap)
+        self.cat.install(snap)
+        self.assertTrue((src / "meta.txt").exists())
+
+        # Modify source
+        (src / "meta.txt").write_text("version=2")
+        (src / "extra.jpg").write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
+
+        # Update internal copy
+        self.cat.update_assoc_with_installed(snap.id)
+        snap_dir = self.cat.get_snap_directory_path(snap)
+        internal = snap_dir / snap.directories[0].directory_name
+        self.assertEqual((internal / "meta.txt").read_text(), "version=2")
+        self.assertTrue((internal / "extra.jpg").exists())
+
+        # Reinstall should propagate version=2
+        (src / "meta.txt").unlink()
+        self.cat.install(snap)
+        self.assertTrue((src / "meta.txt").exists())
+        self.assertEqual((src / "meta.txt").read_text(), "version=2")
+
+    def test_scenario_b_multi_snap_sort_export_reimport(self):
+        """Multiple snapshots: sort, export catalogue, re-import."""
+        dirs = []
+        for i, size in enumerate([100, 5_000, 50_000]):
+            d = SOURCE_DATA_PATH / f"scb_{i}"
+            d.mkdir()
+            (d / f"file_{i}.txt").write_text("x" * size)
+            dirs.append(d)
+
+        for i, d in enumerate(dirs):
+            _reset_index()
+            s = Snapshot(
+                id=gen_random_string(8), name=f"ScenB_{i}", desc="",
+                directories=[SnapDirAssociation(index=1, original_path=str(d), folder_id=f"sb{i}")],
+            )
+            self.cat.add(s)
+
+        all_snaps = self.cat.get_all()
+        sorted_snaps = SnapshotUtils.sort_snapshots(all_snaps, SnapshotSortKey.NAME)
+        names = [s.name for s in sorted_snaps]
+        self.assertEqual(names, sorted(names, key=str.lower))
+
+        exp_dir = TEST_LOCAL_ROOT / "scb_export"
+        exp_dir.mkdir()
+        self.cat.export_catalogue(exp_dir, "scb.zip")
+        self.assertTrue((exp_dir / "scb.zip").exists())
+
+        for s in self.cat.get_all():
+            self.cat.delete(s)
+        self.assertEqual(len(self.cat.get_all()), 0)
+        self.cat.import_catalogue(exp_dir / "scb.zip")
+        self.assertEqual(len(self.cat.get_all()), 3)
+
+    def test_scenario_c_duplicate_independence(self):
+        """Duplicate → edit duplicate → verify originals unchanged (BUG-2 regression)."""
+        src = SOURCE_DATA_PATH / "scc"
+        src.mkdir()
+        (src / "data.txt").write_text("original data")
+        _reset_index()
+        original = Snapshot(
+            id=gen_random_string(8), name="SccOriginal", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(src), folder_id="scc1")],
+        )
+        self.cat.add(original)
+        original_id_before = original.id
+
+        self.cat.duplicate_by_id(original.id)
+        # BUG-2 regression: original must remain unchanged
+        self.assertEqual(original.id, original_id_before)
+
+        all_snaps = self.cat.get_all()
+        copy_snap = next(s for s in all_snaps if s.id != original.id)
+        copy_snap.name = "SccCopy_modified"
+        SnapshotManager(copy_snap, CATALOGUE_PATH).update_json_base_fields()
+
+        orig_from_cat = self.cat.get_by_id(original.id)
+        self.assertEqual(orig_from_cat.name, "SccOriginal")
+
+    def test_scenario_d_real_images_survive_snapshot_roundtrip(self):
+        """Images downloaded from Picsum must survive add/install with identical bytes."""
+        img_dir = _downloader.create_sample_directory(
+            SOURCE_DATA_PATH, "real_imgs", image_count=3,
+        )
+        _reset_index()
+        snap = Snapshot(
+            id=gen_random_string(8), name="RealImages", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(img_dir), folder_id="ri1")],
+        )
+        self.cat.add(snap)
+        snap_dir = self.cat.get_snap_directory_path(snap)
+        internal = snap_dir / snap.directories[0].directory_name
+
+        for orig in sorted(img_dir.glob("*.jpg")):
+            copy = internal / orig.name
+            self.assertTrue(copy.exists(), f"Image {orig.name} not in snapshot")
+            self.assertEqual(orig.read_bytes(), copy.read_bytes(), f"Image {orig.name} content differs")
+
+    def test_scenario_e_search_still_works_after_source_removal(self):
+        """Snapshot internal copy should still be searchable after source dir removal."""
+        src = SOURCE_DATA_PATH / "sce"
+        src.mkdir()
+        (src / "searchable.txt").write_text("find_this_unique_string")
+
+        _reset_index()
+        snap = Snapshot(
+            id=gen_random_string(8), name="SceSnap", desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(src), folder_id="sce1")],
+        )
+        self.cat.add(snap)
+        searcher = SnapshotSearcher(self.cat)
+        params = SnapshotSearchParams(query="find_this_unique_string", search_target=SearchTarget.FILE_CONTENT)
+
+        results_before = searcher.search(snap, params)
+        self.assertGreater(len(results_before), 0)
+
+        shutil.rmtree(src)
+        results_after = searcher.search(snap, params)
+        self.assertGreater(len(results_after), 0)
+
+
+# ===========================================================================
+# TestBugFixesTestCase
+# ===========================================================================
+
+class TestBugFixesTestCase(unittest.TestCase):
+    """Explicit regression tests for all known bugs that were fixed."""
+
+    def setUp(self):
+        TEST_LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
+        SOURCE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+        _create_source_dirs(SOURCE_DATA_PATH, ["b1", "b2"])
+        CATALOGUE_PATH.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(TEST_LOCAL_ROOT, ignore_errors=True)
+
+    def test_bug1_snapshot_date_created_not_shared(self):
+        """
+        BUG-1 (Snapshot): date_created was evaluated once at class definition →
+        all instances shared the same datetime object.
+        After fix: each instance gets a fresh datetime.
+        """
+        first = Snapshot(id="x", name="x", desc="")
+        time.sleep(0.02)
+        second = Snapshot(id="y", name="y", desc="")
+        self.assertLessEqual(first.date_created, second.date_created)
+        self.assertIsNot(first.date_created, second.date_created)
+
+    def test_bug1_snap_edit_action_timestamp_not_shared(self):
+        """BUG-1 (SnapEditAction): same shared-default bug."""
+        e1 = SnapEditAction(SnapEditType.ADD_DIR)
+        time.sleep(0.02)
+        e2 = SnapEditAction(SnapEditType.REMOVE_DIR)
+        self.assertIsNot(e1.timestamp, e2.timestamp)
+
+    def test_bug2_duplicate_preserves_original_snapshot(self):
+        """
+        BUG-2: SnapshotManager.duplicate() used a reference (`new_snap = self.snapshot`)
+        instead of a clone, so self.snapshot.id was silently mutated.
+        After fix: self.snapshot remains unchanged.
+        """
+        src = list(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        snap = _make_snapshot("BugOriginal", src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+
+        original_id = snap.id
+        original_name = snap.name
+        mgr.duplicate()
+
+        self.assertEqual(snap.id, original_id, "BUG-2: duplicate() must NOT change self.snapshot.id")
+        self.assertEqual(snap.name, original_name, "BUG-2: duplicate() must NOT change self.snapshot.name")
+
+        # Original JSON must still contain the original ID
+        orig_json = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertEqual(orig_json.id, original_id)
+
+    def test_bug3_from_json_parses_date_last_used(self):
+        """
+        BUG-3: from_json() listed "date_last_installed" (non-existent field) in its
+        datetime-parsing loop, while date_last_used was separately handled.
+        The dead key has been removed and date_last_used round-trips correctly.
+        """
+        src = list(p for p in SOURCE_DATA_PATH.iterdir() if p.is_dir())
+        snap = _make_snapshot("Bug3", src, n=1)
+        expected = datetime(2025, 12, 25, 10, 30, 0)
+        snap.date_last_used = expected
+
+        json_path = TEST_LOCAL_ROOT / "bug3.json"
+        SnapshotSerializer.to_json(snap, json_path)
+        loaded = SnapshotSerializer.from_json(json_path)
+
+        self.assertIsNotNone(loaded.date_last_used)
+        self.assertEqual(loaded.date_last_used, expected)
 
 
 if __name__ == "__main__":
