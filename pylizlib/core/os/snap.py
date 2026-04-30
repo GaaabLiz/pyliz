@@ -163,7 +163,7 @@ class SnapEditAction:
     """
 
     action_type: SnapEditType
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = field(default_factory=datetime.now)
     new_path: str = ""
     folder_id_to_remove: str = ""
     directory_name_to_remove: str = ""
@@ -238,7 +238,7 @@ class Snapshot:
     author: str = field(default="UnknownUser")
     directories: list[SnapDirAssociation] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    date_created: datetime = datetime.now()
+    date_created: datetime = field(default_factory=datetime.now)
     date_modified: datetime | None = None
     date_last_used: datetime | None = None
     date_last_modified: datetime | None = None
@@ -575,7 +575,6 @@ class SnapshotSerializer:
         # Convert datetime fields from ISO8601 string to datetime
         for key in [
             "date_created",
-            "date_last_installed",
             "date_modified",
             "date_last_used",
             "date_last_modified",
@@ -762,7 +761,7 @@ class SnapshotManager:
         """
         if not self.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
-        new_snap = self.snapshot
+        new_snap = self.snapshot.clone()
         new_snap.id = gen_random_string(self.settings.snap_id_length)
         new_snap.name = self.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
