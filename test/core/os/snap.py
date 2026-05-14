@@ -1062,6 +1062,88 @@ class TestSnapshotCatalogueTestCase(unittest.TestCase):
         with self.assertLogs(level="WARNING"):
             self.cat.remove_installed_copies("nonexistent_id")
 
+    def test_list_backups_returns_entries(self):
+        snap = _make_snapshot("ListBackups", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
+        mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
+
+        backups = self.cat.list_backups(BACKUP_PATH)
+        self.assertGreaterEqual(len(backups), 2)
+
+        types = {b.backup_type for b in backups}
+        self.assertIn(BackupType.SNAPSHOT_DIRECTORY, types)
+        self.assertIn(BackupType.ASSOCIATED_DIRECTORIES, types)
+
+        for backup in backups:
+            self.assertTrue(backup.path.exists())
+            self.assertTrue(backup.file_name.endswith(".zip"))
+
+    def test_list_backups_invalid_folder_raises(self):
+        with self.assertRaises(ValueError):
+            self.cat.list_backups(TEST_LOCAL_ROOT / "does_not_exist")
+
+    def test_restore_backup_snapshot_directory(self):
+        snap = _make_snapshot("RestoreSD", self._src, n=1)
+        self.cat.add(snap)
+
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
+        backup_zip = sorted(BACKUP_PATH.glob("*_*_sd_*.zip"))[-1]
+
+        # Destroy current snapshot directory and restore from backup
+        shutil.rmtree(CATALOGUE_PATH / snap.id)
+        self.assertFalse((CATALOGUE_PATH / snap.id).exists())
+
+        self.cat.restore_backup(backup_zip)
+
+        self.assertTrue((CATALOGUE_PATH / snap.id).exists())
+        restored = self.cat.get_by_id(snap.id)
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.id, snap.id)
+
+    def test_restore_backup_associated_directories(self):
+        snap = _make_snapshot("RestoreAD", self._src, n=1)
+        self.cat.add(snap)
+
+        source_dir = Path(snap.directories[0].original_path)
+        target_file = source_dir / "c1_file.txt"
+        original_content = target_file.read_text()
+
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
+        backup_zip = sorted(BACKUP_PATH.glob("*_*_ad_*.zip"))[-1]
+
+        # Corrupt content then restore
+        target_file.write_text("CORRUPTED")
+        self.assertEqual(target_file.read_text(), "CORRUPTED")
+
+        self.cat.restore_backup(backup_zip)
+
+        self.assertEqual(target_file.read_text(), original_content)
+
+    def test_restore_backup_unknown_type_raises(self):
+        unknown_zip = BACKUP_PATH / "unknown_backup.zip"
+        with zipfile.ZipFile(unknown_zip, "w") as zf:
+            zf.writestr("dummy.txt", "x")
+
+        with self.assertRaises(ValueError):
+            self.cat.restore_backup(unknown_zip)
+
+    def test_restore_backup_associated_requires_existing_snapshot(self):
+        snap = _make_snapshot("RestoreADMissingSnap", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
+        backup_zip = sorted(BACKUP_PATH.glob("*_*_ad_*.zip"))[-1]
+
+        # Remove snapshot metadata so restore cannot map folders
+        shutil.rmtree(CATALOGUE_PATH / snap.id)
+
+        with self.assertRaises(ValueError):
+            self.cat.restore_backup(backup_zip)
+
 
 # ===========================================================================
 # TestSnapshotSearcherTestCase
