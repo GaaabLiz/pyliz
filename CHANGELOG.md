@@ -4,6 +4,31 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.3] - 2026-05-31
+
+### Bump
+
+- V0.6.3
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🐛 Bug Fixes
+
+- Update timestamp fields to use default_factory for datetime initialization
+- Update requests dependency to version 2.34.1
+
+### 🚀 Features
+
+- Add SampleImageDownloader utility for downloading sample images from Picsum Photos
+- Update test for snap.py
+- Add snapshot backup metadata parsing and restore functionality
+- **snapshot**: Implement core snapshot domain models and lifecycle management. Moved old boilplate class to separate files.
+
+### 🧪 Testing
+
+- Add unit tests for SnapshotManager, SnapshotSearcher, SnapshotSerializer, and SnapshotUtils
 ## [0.6.2] - 2026-04-24
 
 ### Bump
