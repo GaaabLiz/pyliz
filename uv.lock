@@ -1280,7 +1280,7 @@ wheels = [
 
 [[package]]
 name = "pylizlib"
-version = "0.6.3"
+version = "0.6.4"
 source = { editable = "." }
 dependencies = [
     { name = "psutil" },

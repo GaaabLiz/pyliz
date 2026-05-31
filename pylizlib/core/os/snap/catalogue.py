@@ -219,6 +219,20 @@ class SnapshotCatalogue:
             if restored_count == 0:
                 raise ValueError("No associated directories were restored from the backup archive.")
 
+    def delete_backup(self, backup_zip_path: Path):
+        """
+        Deletes a backup archive from the filesystem.
+
+        Args:
+            backup_zip_path: Path of the backup .zip archive to delete.
+
+        Raises:
+            ValueError: If the path is not a valid .zip file or does not exist.
+        """
+        if not backup_zip_path.is_file() or backup_zip_path.suffix != ".zip":
+            raise ValueError(f"Provided path '{backup_zip_path}' is not a valid .zip file.")
+        backup_zip_path.unlink()
+
     def set_catalogue_path(self, new_path: Path):
         """
         Sets a new path for the snapshot catalogue.
