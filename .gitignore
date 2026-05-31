@@ -167,3 +167,5 @@ cython_debug/
 test_local
 temp_local
 
+.vscode/
+
