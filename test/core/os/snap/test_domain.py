@@ -14,6 +14,7 @@ import shutil
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.domain import (
@@ -73,6 +74,18 @@ class TestSnapDirAssociationConstruction(unittest.TestCase):
             original_path=str(SOURCE_DATA_PATH / "ghost_dir"),
             folder_id="g",
         )
+        self.assertEqual(assoc.mb_size, 0.0)
+
+    @patch("pylizlib.core.os.snap.domain.get_folder_size_mb")
+    def test_mb_size_file_not_found(self, mock_get_size):
+        mock_get_size.side_effect = FileNotFoundError()
+        assoc = SnapDirAssociation(index=1, original_path="/dummy", folder_id="g")
+        self.assertEqual(assoc.mb_size, 0.0)
+
+    @patch("pylizlib.core.os.snap.domain.get_folder_size_mb")
+    def test_mb_size_exception(self, mock_get_size):
+        mock_get_size.side_effect = Exception("General error")
+        assoc = SnapDirAssociation(index=1, original_path="/dummy", folder_id="g")
         self.assertEqual(assoc.mb_size, 0.0)
 
     def test_mb_size_preserved_when_explicitly_provided(self):

@@ -19,7 +19,9 @@ import shutil
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.domain import (
     BackupType,
@@ -369,6 +371,131 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         zips = list(BACKUP_PATH.glob("*.zip"))
         self.assertEqual(len(zips), 1)
         self.assertTrue(zips[0].name.startswith("backup_prefix2"))
+
+
+class TestSnapshotManagerCoverage(unittest.TestCase):
+    def setUp(self):
+        setup_test_dirs()
+        self._src = create_source_dirs(SOURCE_DATA_PATH, ["cov1"])
+
+    def tearDown(self):
+        teardown_test_dirs()
+
+    def test_remove_installed_copies_exceptions(self):
+        # coverage 229-232
+        snap = make_snapshot("RemCov", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        install_path = Path(snap.directories[0].original_path)
+        
+        # Test 231-232
+        shutil.rmtree(install_path)
+        with self.assertLogs(level="DEBUG") as cm:
+            logger.setLevel("DEBUG")
+            mgr.remove_installed_copies()
+        self.assertTrue(any("does not exist or is not a directory" in out for out in cm.output))
+        
+        # Test 229-230
+        install_path.mkdir(parents=True, exist_ok=True)
+        with patch('shutil.rmtree', side_effect=Exception("mocked error")):
+            with self.assertLogs(level="ERROR") as cm2:
+                mgr.remove_installed_copies()
+            self.assertTrue(any("Failed to remove directory" in out for out in cm2.output))
+
+    @patch('sys.platform', 'win32')
+    def test_install_win32_no_pywin32(self):
+        # coverage 247-252
+        snap = make_snapshot("Win32NoPywin32", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        with patch.dict('sys.modules', {'ntsecuritycon': None, 'win32security': None}):
+            with self.assertLogs(level="ERROR") as cm:
+                mgr.install()
+            self.assertTrue(any("pywin32 not installed" in out for out in cm.output))
+
+    @patch('sys.platform', 'win32')
+    def test_install_win32_with_pywin32_success(self):
+        # coverage 295-306
+        snap = make_snapshot("Win32Pywin32Succ", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        import types
+        mock_win32security = types.ModuleType('win32security')
+        mock_ntsecuritycon = types.ModuleType('ntsecuritycon')
+        
+        mock_win32security.LookupAccountName = MagicMock(return_value=("everyone_sid", "domain", 1))
+        mock_win32security.DACL_SECURITY_INFORMATION = 1
+        mock_win32security.ACL_REVISION = 2
+        mock_win32security.SetFileSecurity = MagicMock()
+        
+        mock_sd = MagicMock()
+        mock_dacl = MagicMock()
+        mock_sd.GetSecurityDescriptorDacl.return_value = mock_dacl
+        mock_win32security.GetFileSecurity = MagicMock(return_value=mock_sd)
+        
+        mock_ntsecuritycon.OBJECT_INHERIT_ACE = 1
+        mock_ntsecuritycon.CONTAINER_INHERIT_ACE = 2
+        mock_ntsecuritycon.GENERIC_ALL = 3
+        
+        with patch.dict('sys.modules', {'ntsecuritycon': mock_ntsecuritycon, 'win32security': mock_win32security}):
+            mgr.install()
+            mock_win32security.LookupAccountName.assert_called()
+            mock_win32security.GetFileSecurity.assert_called()
+            mock_dacl.AddAccessAllowedAceEx.assert_called()
+            mock_sd.SetSecurityDescriptorDacl.assert_called()
+            mock_win32security.SetFileSecurity.assert_called()
+
+    @patch('sys.platform', 'win32')
+    def test_install_win32_with_pywin32_exceptions(self):
+        # coverage 290-313
+        snap = make_snapshot("Win32Pywin32", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        import types
+        mock_win32security = types.ModuleType('win32security')
+        mock_ntsecuritycon = types.ModuleType('ntsecuritycon')
+        
+        mock_win32security.LookupAccountName = MagicMock(side_effect=Exception("win32 error"))
+        
+        with patch.dict('sys.modules', {'ntsecuritycon': mock_ntsecuritycon, 'win32security': mock_win32security}):
+            with self.assertLogs(level="ERROR") as cm:
+                mgr.install()
+            self.assertTrue(any("Failed to set permissions" in out for out in cm.output))
+
+    def test_install_remove_and_copy_exceptions(self):
+        # coverage 270, 273-274, 282, 285-286
+        snap = make_snapshot("InstallExceptions", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        
+        install_location = Path(snap.directories[0].original_path)
+        install_location.mkdir(parents=True, exist_ok=True)
+        (install_location / "some_dir").mkdir()
+        (install_location / "some_file.txt").write_text("x")
+        
+        source_dir = mgr.path_snapshot / snap.directories[0].directory_name
+        (source_dir / "src_dir").mkdir()
+        (source_dir / "src_file.txt").write_text("x")
+        
+        with patch('shutil.rmtree', side_effect=Exception("rmtree err")), \
+             patch('pathlib.Path.unlink', side_effect=Exception("unlink err")), \
+             patch('shutil.copytree', side_effect=Exception("copytree err")), \
+             patch('shutil.copy2', side_effect=Exception("copy2 err")):
+            with self.assertLogs(level="ERROR") as cm:
+                mgr.install()
+            out = " ".join(cm.output)
+            self.assertIn("Could not remove item", out)
+            self.assertIn("Could not copy item", out)
+
+    def test_create_backup_exceptions(self):
+        # coverage 371-372
+        snap = make_snapshot("BackupExceptions", self._src, n=1)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr.create()
+        with patch('zipfile.ZipFile', side_effect=Exception("zip error")):
+            with self.assertLogs(level="ERROR") as cm:
+                mgr.create_backup(BACKUP_PATH, "pref", BackupType.SNAPSHOT_DIRECTORY)
+            self.assertIn("zip error", " ".join(cm.output))
 
 
 if __name__ == "__main__":

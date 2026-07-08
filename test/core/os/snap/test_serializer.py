@@ -13,6 +13,7 @@ Covers:
 import json
 import unittest
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
@@ -164,6 +165,12 @@ class TestSnapshotSerializerConverter(unittest.TestCase):
         result = SnapshotSerializer._converter(dt)
         self.assertIsInstance(result, str)
         self.assertIn("2026", result)
+
+    def test_converter_handles_enum(self):
+        class DummyEnum(Enum):
+            FOO = "bar"
+        result = SnapshotSerializer._converter(DummyEnum.FOO)
+        self.assertEqual(result, "bar")
 
 
 if __name__ == "__main__":

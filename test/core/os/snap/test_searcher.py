@@ -16,6 +16,7 @@ Covers every public and private method of SnapshotSearcher:
 import shutil
 import unittest
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
@@ -126,6 +127,44 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
         self.assertEqual(match.line_number, 1)
         self.assertEqual(match.line_content, "Hello world")
         self.assertEqual(match.snapshot_name, "SearchSnap")
+
+    def test_search_not_dir(self):
+        # Add a dummy directory association that doesn't exist
+        self.snap.directories.append(SnapDirAssociation(index=99, original_path="/dummy", folder_id="dummy"))
+        params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)
+        results = self.searcher.search(self.snap, params)
+        self.assertNotIn("dummy", [r.file_path.name for r in results])
+
+    def test_search_should_search_file_not_file(self):
+        # Create a subdirectory inside srch1 and rebuild the snap
+        sub_dir = SOURCE_DATA_PATH / "srch1" / "subdir"
+        sub_dir.mkdir(exist_ok=True)
+        self.catalogue, self.snap = _build_catalogue()
+
+        # rglob("*") will yield the subdirectory, which is not a file
+        params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)
+        results = self.searcher.search(self.snap, params)
+        # Should not throw exception, handles dir gracefully
+        self.assertTrue(True)
+
+    def test_search_in_file_exception(self):
+        original_open = Path.open
+        def mocked_open(self_path, *args, **kwargs):
+            if "unreadable" in self_path.name:
+                raise Exception("Read error")
+            return original_open(self_path, *args, **kwargs)
+
+        unreadable_file = SOURCE_DATA_PATH / "srch1" / "unreadable.txt"
+        unreadable_file.write_text("test")
+        # We need to recreate the snap to include this file
+        self.catalogue, self.snap = _build_catalogue()
+
+        with patch.object(Path, "open", autospec=True, side_effect=mocked_open):
+            params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)
+            results = self.searcher.search(self.snap, params)
+            # Make sure it didn't crash and we got some results but skipped the exception one
+            self.assertTrue(len(results) > 0)
+
 
 
 class TestSnapshotSearcherFilenameSearch(unittest.TestCase):
