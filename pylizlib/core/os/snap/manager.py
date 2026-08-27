@@ -60,7 +60,7 @@ class SnapshotManager:
         """Saves the current snapshot object state to its JSON file."""
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
 
-    def create(self):
+    def create(self, progress_callback=None):
         """
         Creates the snapshot on the filesystem. This involves creating the main snapshot
         directory and copying all associated directories into it. If the directory
@@ -69,8 +69,18 @@ class SnapshotManager:
         if self.path_snapshot.exists():
             clear_folder_contents(self.path_snapshot)
         self.path_snapshot.mkdir(parents=True, exist_ok=True)
-        for snap_dir in self.snapshot.directories:
-            snap_dir.copy_install_to(self.path_snapshot)
+        
+        # We need to distribute the progress among directories if there are multiple.
+        total_dirs = len(self.snapshot.directories)
+        for i, snap_dir in enumerate(self.snapshot.directories):
+            def dir_progress(copied, total):
+                if progress_callback:
+                    # Calculate overall percentage based on dir index and dir progress
+                    dir_pct = (copied / total) if total > 0 else 1.0
+                    overall_pct = ((i + dir_pct) / total_dirs) * 100
+                    progress_callback(int(overall_pct))
+                    
+            snap_dir.copy_install_to(self.path_snapshot, progress_callback=dir_progress)
         self.__save_json()
 
     def delete(self):
@@ -231,7 +241,7 @@ class SnapshotManager:
             else:
                 logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
 
-    def install(self, enable_everyone_full_control: bool = True):
+    def install(self, enable_everyone_full_control: bool = True, progress_callback=None):
         """
         Installs the snapshot's contents to their original locations on the filesystem.
         This will clear the destination directories before copying the snapshot's contents.
@@ -242,6 +252,7 @@ class SnapshotManager:
                 installed directories.
         """
         import sys
+        import os
 
         if sys.platform == "win32":
             try:
@@ -253,7 +264,8 @@ class SnapshotManager:
         else:
             win32security = None
 
-        for dir_assoc in self.snapshot.directories:
+        total_dirs = len(self.snapshot.directories)
+        for i, dir_assoc in enumerate(self.snapshot.directories):
             source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
             install_location = Path(dir_assoc.original_path)
 
@@ -274,14 +286,28 @@ class SnapshotManager:
                     logger.error(f"Could not remove item {item} during clean install: {e}")
 
             # 3. Copy the contents from the source directory to the now-empty destination.
+            total_bytes = 0
+            if progress_callback:
+                total_bytes = sum(f.stat().st_size for f in source_dir.rglob('*') if f.is_file())
+            
+            copied_bytes = [0]
+            
+            def copy_with_prog(src, dst, *, follow_symlinks=True):
+                shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+                if progress_callback:
+                    copied_bytes[0] += os.path.getsize(src)
+                    dir_pct = (copied_bytes[0] / total_bytes) if total_bytes > 0 else 1.0
+                    overall_pct = ((i + dir_pct) / total_dirs) * 100
+                    progress_callback(int(overall_pct))
+                    
             for item in source_dir.iterdir():
                 src_item = source_dir / item.name
                 dst_item = install_location / item.name
                 try:
                     if src_item.is_dir():
-                        shutil.copytree(src_item, dst_item)
+                        shutil.copytree(src_item, dst_item, copy_function=copy_with_prog)
                     else:
-                        shutil.copy2(src_item, dst_item)
+                        copy_with_prog(src_item, dst_item)
                 except Exception as e:
                     logger.error(f"Could not copy item {src_item} during install: {e}")
 
