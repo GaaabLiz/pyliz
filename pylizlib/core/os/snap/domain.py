@@ -109,7 +109,7 @@ class SnapDirAssociation:
         """
         return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
-    def copy_install_to(self, catalogue_target_path: Path):
+    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None):
         """
         Copies the entire content of the directory specified by `original_path`
         into a subdirectory within the given `catalogue_target_path`.
@@ -119,17 +119,34 @@ class SnapDirAssociation:
         Args:
             catalogue_target_path: The base path in the catalogue where the directory
                                    content will be copied.
+            progress_callback: A callable taking (copied_bytes: int, total_bytes: int)
         """
+        import os
         source = Path(self.original_path)
         destination = catalogue_target_path.joinpath(self.directory_name)
         destination.mkdir(parents=True, exist_ok=True)
+        
+        total_bytes = 0
+        if progress_callback:
+            total_bytes = int((self.mb_size or 0) * 1024 * 1024)
+            if total_bytes == 0:
+                # If size wasn't computed properly, try to get it here
+                total_bytes = sum(f.stat().st_size for f in source.rglob('*') if f.is_file())
+                
+        copied_bytes = [0]
+        
+        def copy_with_prog(src, dst, *, follow_symlinks=True):
+            shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+            if progress_callback:
+                copied_bytes[0] += os.path.getsize(src)
+                progress_callback(copied_bytes[0], total_bytes)
 
         for src_path in source.iterdir():
             dst_path = destination / src_path.name
             if src_path.is_dir():
-                shutil.copytree(src_path, dst_path)
+                shutil.copytree(src_path, dst_path, copy_function=copy_with_prog)
             else:
-                shutil.copy2(src_path, dst_path)
+                copy_with_prog(src_path, dst_path)
 
 
 class SnapEditType(Enum):
