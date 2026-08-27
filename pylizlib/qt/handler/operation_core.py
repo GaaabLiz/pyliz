@@ -48,6 +48,18 @@ class Task(QObject):
     def gen_update_task_progress(self, current: int, total: int):
         self.update_task_progress(get_step_progress_percentage(current, total))
 
+class GenericTask(Task):
+    def __init__(self, name: str, func: Callable):
+        super().__init__(name)
+        self.func = func
+
+    def execute(self):
+        import inspect
+        sig = inspect.signature(self.func)
+        if len(sig.parameters) == 1:
+            return self.func(self)
+        return self.func()
+
 
 class OperationSignals(QObject):
     op_start = Signal()
