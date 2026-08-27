@@ -244,15 +244,13 @@ class SnapshotCatalogue:
         self.path_catalogue = new_path
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
-    def add(self, snap: Snapshot):
+
+    def add(self, snap: Snapshot, progress_callback=None):
         """
         Adds a new snapshot to the catalogue.
-
-        Args:
-            snap: The Snapshot object to add.
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.create()
+        snap_manager.create(progress_callback=progress_callback)
 
     def delete(self, snap: Snapshot):
         """
@@ -542,7 +540,7 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.remove_installed_copies()
 
-    def install(self, snap: Snapshot):
+    def install(self, snap: Snapshot, progress_callback=None):
         """
         Installs a snapshot's contents to their original target locations.
 
@@ -558,7 +556,7 @@ class SnapshotCatalogue:
                 "preinstall",
                 BackupType.ASSOCIATED_DIRECTORIES,
             )
-        snap_manager.install(self.settings.install_with_everyone_full_control)
+        snap_manager.install(self.settings.install_with_everyone_full_control, progress_callback=progress_callback)
 
     def exists(self, snap_id: str) -> bool:
         """
