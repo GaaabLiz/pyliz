@@ -4,6 +4,22 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.6] - 2026-08-27
+
+### Bump
+
+- V0.6.6
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Add progress callback to add and install methods in catalogue
+- Add progress callback to copy_install_to method for enhanced feedback during copying
+- Add progress callback to create and install methods for improved feedback during operations
+- Add GenericTask class for flexible task execution with dynamic parameter handling
 ## [0.6.5] - 2026-07-08
 
 ### Bump
