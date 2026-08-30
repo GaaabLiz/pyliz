@@ -72,6 +72,9 @@ class SnapshotSerializer:
         if "directories" in data and isinstance(data["directories"], list):
             data["directories"] = [SnapDirAssociation(**d) if isinstance(d, dict) else d for d in data["directories"]]
 
+        if "os_created" not in data:
+            data["os_created"] = "Windows"  # Legacy snapshots were created on Windows
+
         return Snapshot(**data)
 
     @classmethod

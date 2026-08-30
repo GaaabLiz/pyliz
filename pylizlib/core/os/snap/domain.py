@@ -22,6 +22,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
+import platform
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
@@ -278,6 +279,7 @@ class Snapshot:
     date_modified: datetime | None = None
     date_last_used: datetime | None = None
     date_last_modified: datetime | None = None
+    os_created: str = field(default_factory=platform.system)
     data: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -408,5 +410,6 @@ class Snapshot:
             date_modified=self.date_modified,
             date_last_used=self.date_last_used,
             date_last_modified=self.date_last_modified,
+            os_created=self.os_created,
             data=dict(self.data),
         )

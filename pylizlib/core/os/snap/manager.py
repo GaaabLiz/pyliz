@@ -253,6 +253,10 @@ class SnapshotManager:
         """
         import sys
         import os
+        import platform
+
+        if self.snapshot.os_created and self.snapshot.os_created != platform.system():
+            raise RuntimeError(f"Cannot install snapshot: created on {self.snapshot.os_created}, but current OS is {platform.system()}.")
 
         if sys.platform == "win32":
             try:
