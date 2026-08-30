@@ -1,3 +1,4 @@
+import sys
 import getpass
 import os
 import platform
@@ -31,18 +32,22 @@ def get_folder_size_mb(path) -> float:
 
 def open_system_folder(path):
     """
-    Open a system folder in the default file explorer
-    :param path: path to the folder
+    Open a system folder (or file) in the default file explorer/application.
+    :param path: path to the folder or file
     :return:
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Path {path} does not exist!")
-    if os.name == "nt":  # For Windows
-        subprocess.Popen(["explorer", path])
-    elif os.name == "posix":  # For Linux, Mac
+    
+    if sys.platform == "win32":
+        if hasattr(os, "startfile"):
+            os.startfile(path)
+        else:
+            subprocess.Popen(["explorer", path])
+    elif sys.platform == "darwin":
         subprocess.Popen(["open", path])
     else:
-        raise OSError("Unsupported OS")
+        subprocess.Popen(["xdg-open", path])
 
 
 def has_disk_free_space(path_of_disk, mb_free):
