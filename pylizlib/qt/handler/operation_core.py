@@ -52,11 +52,13 @@ class GenericTask(Task):
     def __init__(self, name: str, func: Callable):
         super().__init__(name)
         self.func = func
-
-    def execute(self):
+        
         import inspect
         sig = inspect.signature(self.func)
-        if len(sig.parameters) == 1:
+        self.supports_progress = len(sig.parameters) == 1
+
+    def execute(self):
+        if self.supports_progress:
             return self.func(self)
         return self.func()
 
@@ -117,6 +119,7 @@ class Operation(QRunnable):
                 self.current_task = task
                 result = task.execute()
                 task.result = result
+                task.update_task_progress(100)
                 task.update_task_status(OperationStatus.Completed)
             except Exception as e:
                 task.update_task_status(OperationStatus.Failed)
