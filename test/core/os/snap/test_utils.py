@@ -50,6 +50,19 @@ class TestSnapshotUtilsPaths(unittest.TestCase):
     def test_get_snapshot_json_path(self):
         p = SnapshotUtils.get_snapshot_json_path("myid", CATALOGUE_PATH, "snap.json")
         self.assertEqual(p, CATALOGUE_PATH / "myid" / "snap.json")
+        
+    def test_get_snapshot_path_traversal_blocked(self):
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_path("../outside", CATALOGUE_PATH)
+        
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_path("foo/bar", CATALOGUE_PATH)
+            
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_path("..", CATALOGUE_PATH)
+            
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_path("", CATALOGUE_PATH)
 
 
 class TestSnapshotUtilsGetFromPath(unittest.TestCase):
