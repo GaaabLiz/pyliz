@@ -402,15 +402,31 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
 
         snap_new = snap.clone()
         removed_assoc = snap_new.directories.pop(0)
+        # B is now at index 0 in the list, but its obj still says index 1.
+        # Let's fix its index to 0, which simulates UI reordering
+        kept_assoc = snap_new.directories[0]
+        old_kept_dir_name = kept_assoc.directory_name
+        kept_assoc.index = 0
+        new_kept_dir_name = kept_assoc.directory_name
+        
+        # Add a new one
         snap_new.directories.append(
-            SnapDirAssociation(index=99, original_path=str(src_sorted[2]), folder_id="added999")
+            SnapDirAssociation(index=1, original_path=str(src_sorted[2]), folder_id="added999")
         )
+        
         edits = SnapshotUtils.get_edits_between_snapshots(snap, snap_new)
+        # edits should contain a REMOVE, an ADD, and a RENAME (because kept_assoc index changed)
+        self.assertEqual(len(edits), 3)
+        self.assertTrue(any(e.action_type.name == "RENAME_DIR" for e in edits))
+        
         mgr2 = SnapshotManager(snap_new, CATALOGUE_PATH)
         mgr2.update_from_actions_list(edits)
 
         self.assertFalse((mgr.path_snapshot / removed_assoc.directory_name).exists())
         self.assertTrue((mgr.path_snapshot / snap_new.directories[-1].directory_name).exists())
+        # The kept directory should have been renamed on disk to match its new index
+        self.assertFalse((mgr.path_snapshot / old_kept_dir_name).exists())
+        self.assertTrue((mgr.path_snapshot / new_kept_dir_name).exists())
 
     def test_create_backup_snapshot_directory(self):
         snap = make_snapshot("BckSnap", self._src, n=1)
