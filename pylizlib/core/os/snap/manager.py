@@ -158,18 +158,24 @@ class SnapshotManager:
         Args:
             edits: A list of SnapEditAction objects.
         """
-        # The `self.snapshot` is the NEW snapshot.
-
-        # Handle additions
-        add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
-        added_paths = {e.new_path for e in add_actions}
-
-        for dir_assoc in self.snapshot.directories:
-            # Find the newly added directories in the snapshot's list
-            # The path in dir_assoc is already normalized by __post_init__
-            if dir_assoc.original_path in added_paths:
-                # This is a new directory. Copy its content to the snapshot storage.
-                dir_assoc.copy_install_to(self.path_snapshot)
+        # Handle renames (first, to free up any conflicting names if reordering)
+        # We rename to temporary names first to avoid collisions during a complex reorder
+        rename_actions = [e for e in edits if e.action_type == SnapEditType.RENAME_DIR]
+        temp_renames = []
+        for edit in rename_actions:
+            if edit.old_directory_name and edit.new_directory_name:
+                old_dir_path = self.path_snapshot.joinpath(edit.old_directory_name)
+                if old_dir_path.exists():
+                    temp_name = f"{edit.new_directory_name}_staging_{gen_random_string(6)}"
+                    temp_dir_path = self.path_snapshot.joinpath(temp_name)
+                    old_dir_path.rename(temp_dir_path)
+                    temp_renames.append((temp_dir_path, self.path_snapshot.joinpath(edit.new_directory_name)))
+                    
+        # Apply final renames
+        for temp_path, final_path in temp_renames:
+            if final_path.exists():
+                clear_or_move_to_temp(final_path)
+            temp_path.rename(final_path)
 
         # Handle removals
         remove_actions = [e for e in edits if e.action_type == SnapEditType.REMOVE_DIR]
@@ -178,8 +184,22 @@ class SnapshotManager:
                 dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
                 if dir_path.exists():
                     clear_or_move_to_temp(dir_path)
+                    
+        # Handle additions
+        add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
+        added_paths = {e.new_path for e in add_actions}
 
-        # After all filesystem changes, save the final state of the new snapshot.
+        for dir_assoc in self.snapshot.directories:
+            if dir_assoc.original_path in added_paths:
+                dir_assoc.copy_install_to(self.path_snapshot)
+
+        # 4. Validate that every directory_name described by JSON actually exists on disk before commit
+        for dir_assoc in self.snapshot.directories:
+            expected_path = self.path_snapshot / dir_assoc.directory_name
+            if not expected_path.exists() or not expected_path.is_dir():
+                raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
+
+        # After all filesystem changes and validation, save the final state of the new snapshot.
         self.__save_json()
 
     def duplicate(self):

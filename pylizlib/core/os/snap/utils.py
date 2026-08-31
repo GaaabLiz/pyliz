@@ -166,6 +166,20 @@ class SnapshotUtils:
                     directory_name_to_remove=assoc.directory_name,
                 )
             )
+            
+        # Find renamed folders (present in both, but directory_name changed because index changed)
+        kept_paths = old_paths & new_paths
+        for path in kept_paths:
+            old_assoc = old_path_to_assoc[path]
+            new_assoc = new_path_to_assoc[path]
+            if old_assoc.directory_name != new_assoc.directory_name:
+                edits.append(
+                    SnapEditAction(
+                        action_type=SnapEditType.RENAME_DIR,
+                        old_directory_name=old_assoc.directory_name,
+                        new_directory_name=new_assoc.directory_name,
+                    )
+                )
 
         return edits
 

@@ -153,11 +153,13 @@ class SnapDirAssociation:
 class SnapEditType(Enum):
     ADD_DIR = "Add"
     REMOVE_DIR = "Remove"
-
+    RENAME_DIR = "Rename"
 
 class BackupType(Enum):
     ASSOCIATED_DIRECTORIES = 1
     SNAPSHOT_DIRECTORY = 2
+
+
 
 
 @dataclass
@@ -204,6 +206,8 @@ class SnapEditAction:
     new_path: str = ""
     folder_id_to_remove: str = ""
     directory_name_to_remove: str = ""
+    old_directory_name: str = ""
+    new_directory_name: str = ""
 
 
 @dataclass
