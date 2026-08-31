@@ -524,6 +524,8 @@ class SnapshotCatalogue:
             raise ValueError(f"No snapshot found with ID {snap_id}")
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        if self.settings.bck_before_modify_enabled:
+            snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_associated_dirs_from_system()
 
     def remove_installed_copies(self, snap_id: str):

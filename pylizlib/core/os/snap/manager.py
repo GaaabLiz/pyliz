@@ -206,19 +206,74 @@ class SnapshotManager:
         Updates the snapshot's internal copy of each associated directory
         with the current version from the original system path.
         """
+        # 1 & 2. Validate all sources before deleting anything
         for dir_assoc in self.snapshot.directories:
-            snapshot_copy_path = self.path_snapshot / dir_assoc.directory_name
             system_path = Path(dir_assoc.original_path)
+            if not system_path.exists() or not system_path.is_dir():
+                raise FileNotFoundError(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist or is not a directory. Update aborted.")
 
-            if snapshot_copy_path.exists():
-                shutil.rmtree(snapshot_copy_path)
+        rollbacks = []
+        try:
+            for dir_assoc in self.snapshot.directories:
+                system_path = Path(dir_assoc.original_path)
+                snapshot_copy_path = self.path_snapshot / dir_assoc.directory_name
+                
+                # 4. Copy each source to staging
+                staging_dir = self.path_snapshot / f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}"
+                backup_dir = self.path_snapshot / f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}"
+                
+                logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
+                
+                try:
+                    shutil.copytree(system_path, staging_dir)
+                except Exception as e:
+                    if staging_dir.exists():
+                        shutil.rmtree(staging_dir)
+                    raise RuntimeError(f"Failed to copy system path '{system_path}' to staging '{staging_dir}': {e}") from e
+                
+                rollbacks.append({
+                    "snapshot_copy_path": snapshot_copy_path,
+                    "staging_dir": staging_dir,
+                    "backup_dir": backup_dir,
+                    "dir_assoc": dir_assoc,
+                    "system_path": system_path,
+                })
 
-            if system_path.exists() and system_path.is_dir():
-                dir_assoc.copy_install_to(self.path_snapshot)
-                dir_assoc.mb_size = get_folder_size_mb(system_path)
-            else:
-                dir_assoc.mb_size = 0.0
-                logger.warning(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist. The snapshot's copy has been cleared.")
+            # Replace internal copy only at the end
+            for rb in rollbacks:
+                snap_path = rb["snapshot_copy_path"]
+                staging_dir = rb["staging_dir"]
+                backup_dir = rb["backup_dir"]
+                
+                if snap_path.exists():
+                    snap_path.rename(backup_dir)
+                
+                staging_dir.rename(snap_path)
+                
+            # Cleanup backups and update metadata
+            for rb in rollbacks:
+                backup_dir = rb["backup_dir"]
+                if backup_dir.exists():
+                    shutil.rmtree(backup_dir)
+                    
+                dir_assoc = rb["dir_assoc"]
+                dir_assoc.mb_size = get_folder_size_mb(rb["system_path"])
+
+        except Exception as e:
+            logger.error(f"Update from system failed during transaction. Rolling back. Reason: {e}")
+            for rb in rollbacks:
+                snap_path = rb["snapshot_copy_path"]
+                staging_dir = rb["staging_dir"]
+                backup_dir = rb["backup_dir"]
+                
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+                    
+                if backup_dir.exists():
+                    if snap_path.exists():
+                        shutil.rmtree(snap_path)
+                    backup_dir.rename(snap_path)
+            raise
 
         self.snapshot.date_last_modified = datetime.now()
         self.__save_json()
