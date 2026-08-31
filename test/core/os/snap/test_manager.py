@@ -342,6 +342,10 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         zips = list(BACKUP_PATH.glob("*.zip"))
         self.assertEqual(len(zips), 1)
         self.assertIn("test_prefix", zips[0].name)
+        
+        with zipfile.ZipFile(zips[0]) as zf:
+            names = zf.namelist()
+        self.assertTrue(any("snapshot.json" in n for n in names))
 
     def test_create_backup_associated_directories_contains_source_files(self):
         snap = make_snapshot("BckAssoc", self._src, n=1)

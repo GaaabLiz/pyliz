@@ -143,8 +143,20 @@ class TestSnapshotCatalogueBackupTriggers(unittest.TestCase):
     def test_install_creates_backup_when_enabled(self):
         snap = make_snapshot("InstBck", self._src, n=1)
         self.cat.add(snap)
+        
+        # Populate the original directory with some content so the backup has something to save
+        original_dir = Path(snap.directories[0].original_path)
+        original_dir.mkdir(parents=True, exist_ok=True)
+        (original_dir / "pre_install_file.txt").write_text("content to backup")
+        
         self.cat.install(snap)
-        self.assertEqual(len(list(BACKUP_PATH.glob("backup_preinstall_*.zip"))), 1)
+        backups = list(BACKUP_PATH.glob("backup_preinstall_*.zip"))
+        self.assertEqual(len(backups), 1)
+        
+        # Verify the content of the ZIP, not just its existence (P0-02)
+        with zipfile.ZipFile(backups[0]) as zf:
+            names = zf.namelist()
+        self.assertTrue(any("pre_install_file.txt" in n for n in names))
 
     def test_update_creates_backup_when_enabled(self):
         snap = make_snapshot("UpdBck", self._src, n=1)
