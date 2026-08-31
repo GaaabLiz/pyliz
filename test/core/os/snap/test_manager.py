@@ -247,16 +247,21 @@ class TestSnapshotManagerUpdateAssocDirs(unittest.TestCase):
         loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
         self.assertIsNotNone(loaded.date_last_modified)
 
-    def test_missing_source_sets_size_to_zero(self):
+    def test_missing_source_aborts_update(self):
         snap = make_snapshot("AssocMissing", self._src, n=1)
         mgr = self._mgr(snap)
         mgr.create()
         original_dir = Path(snap.directories[0].original_path)
         shutil.rmtree(original_dir)
-        with self.assertLogs(level="WARNING"):
+        
+        with self.assertRaises(FileNotFoundError) as ctx:
             mgr.update_associated_dirs_from_system()
-        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
-        self.assertEqual(loaded.directories[0].mb_size, 0.0)
+        self.assertIn("does not exist", str(ctx.exception))
+        
+        # Verify the original snapshot backup still exists (no data loss)
+        snapshot_copy_path = mgr.path_snapshot / snap.directories[0].directory_name
+        self.assertTrue(snapshot_copy_path.exists())
+        self.assertTrue((snapshot_copy_path / "ua1_file.txt").exists())
 
 
 class TestSnapshotManagerInstall(unittest.TestCase):
