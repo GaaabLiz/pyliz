@@ -21,7 +21,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import clear_folder_contents, clear_or_move_to_temp, duplicate_directory
+from pylizlib.core.os.path import clear_folder_contents, remove_directory_or_move_to_temp, duplicate_directory
 from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
 from pylizlib.core.os.snap.domain import (
     BackupType,
@@ -89,7 +89,7 @@ class SnapshotManager:
         The directory is moved to a temporary location before being permanently deleted.
         """
         if self.path_snapshot.exists():
-            clear_or_move_to_temp(self.path_snapshot)
+            remove_directory_or_move_to_temp(self.path_snapshot)
 
     def update_json_data_fields(self):
         """
@@ -146,7 +146,7 @@ class SnapshotManager:
         if dir_to_remove:
             dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
             if dir_path.exists():
-                clear_or_move_to_temp(dir_path)
+                remove_directory_or_move_to_temp(dir_path)
             self.snapshot.directories.remove(dir_to_remove)
             self.__save_json()
 
@@ -174,7 +174,7 @@ class SnapshotManager:
         # Apply final renames
         for temp_path, final_path in temp_renames:
             if final_path.exists():
-                clear_or_move_to_temp(final_path)
+                remove_directory_or_move_to_temp(final_path)
             temp_path.rename(final_path)
 
         # Handle removals
@@ -183,7 +183,7 @@ class SnapshotManager:
             if edit.directory_name_to_remove:
                 dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
                 if dir_path.exists():
-                    clear_or_move_to_temp(dir_path)
+                    remove_directory_or_move_to_temp(dir_path)
                     
         # Handle additions
         add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]

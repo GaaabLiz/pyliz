@@ -22,8 +22,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import clear_or_move_to_temp
+from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -161,9 +162,21 @@ class SnapshotCatalogue:
                 restored_snapshot = SnapshotSerializer.from_json(json_path)
                 destination_path = SnapshotUtils.get_snapshot_path(restored_snapshot.id, self.path_catalogue)
 
-                if destination_path.exists():
-                    clear_or_move_to_temp(destination_path)
-                shutil.copytree(temp_dir_path, destination_path)
+                backup_dest = destination_path.with_name(f"{destination_path.name}_bck_{gen_random_string(6)}")
+                try:
+                    if destination_path.exists():
+                        destination_path.rename(backup_dest)
+                    shutil.copytree(temp_dir_path, destination_path)
+                except Exception as e:
+                    logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
+                    if destination_path.exists():
+                        shutil.rmtree(destination_path)
+                    if backup_dest.exists():
+                        backup_dest.rename(destination_path)
+                    raise IOError(f"Failed to restore snapshot directory: {e}") from e
+                else:
+                    if backup_dest.exists():
+                        shutil.rmtree(backup_dest)
                 return
 
             # ASSOCIATED_DIRECTORIES restore
@@ -181,7 +194,8 @@ class SnapshotCatalogue:
             for assoc in snapshot.directories:
                 name_to_assoc.setdefault(Path(assoc.original_path).name, []).append(assoc)
 
-            restored_count = 0
+            # Preflight: collect all targets and validate unambiguously
+            tasks = []
             for extracted_dir in temp_dir_path.iterdir():
                 if not extracted_dir.is_dir():
                     continue
@@ -199,25 +213,43 @@ class SnapshotCatalogue:
                     )
 
                 destination = Path(candidates[0].original_path)
-                destination.mkdir(parents=True, exist_ok=True)
+                tasks.append({
+                    "extracted_dir": extracted_dir,
+                    "destination": destination,
+                    "backup_dest": destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
+                })
 
-                for item in destination.iterdir():
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-
-                for item in extracted_dir.iterdir():
-                    dst = destination / item.name
-                    if item.is_dir():
-                        shutil.copytree(item, dst)
-                    else:
-                        shutil.copy2(item, dst)
-
-                restored_count += 1
-
-            if restored_count == 0:
+            if not tasks:
                 raise ValueError("No associated directories were restored from the backup archive.")
+
+            # Swap transaction
+            completed_rollbacks = []
+            try:
+                for task in tasks:
+                    destination = task["destination"]
+                    backup_dest = task["backup_dest"]
+                    extracted_dir = task["extracted_dir"]
+                    
+                    if destination.exists():
+                        destination.rename(backup_dest)
+                    
+                    shutil.copytree(extracted_dir, destination)
+                    completed_rollbacks.append(task)
+                    
+                # Commit successful, delete backups
+                for task in tasks:
+                    if task["backup_dest"].exists():
+                        shutil.rmtree(task["backup_dest"])
+            except Exception as e:
+                logger.error(f"Failed to restore associated directories: {e}. Rolling back.")
+                for task in tasks:
+                    destination = task["destination"]
+                    backup_dest = task["backup_dest"]
+                    if backup_dest.exists():
+                        if destination.exists():
+                            shutil.rmtree(destination)
+                        backup_dest.rename(destination)
+                raise IOError(f"Failed to restore associated directories: {e}") from e
 
     def delete_backup(self, backup_zip_path: Path):
         """
