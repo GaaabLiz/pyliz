@@ -254,6 +254,7 @@ class SnapshotManager:
             enable_everyone_full_control (bool): If True and on Windows, it will attempt
                 to set full control permissions for the 'Everyone' group on the
                 installed directories.
+            clear_destination (bool): If True, clears the destination directories before copying.
         """
         import sys
         import os
@@ -273,83 +274,123 @@ class SnapshotManager:
             win32security = None
 
         total_dirs = len(self.snapshot.directories)
-        for i, dir_assoc in enumerate(self.snapshot.directories):
-            source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
-            install_location = Path(dir_assoc.original_path)
 
+        # 1. Preflight
+        for dir_assoc in self.snapshot.directories:
+            source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
+            if not source_dir.exists() or not source_dir.is_dir():
+                raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
+            install_location = Path(dir_assoc.original_path)
             if is_critical_system_path(install_location):
                 raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
 
-            logger.info(f"Performing clean installation from '{source_dir}' to '{install_location}'")
-
-            # 1. Ensure the destination directory exists.
-            install_location.mkdir(parents=True, exist_ok=True)
-
-            # 2. Clear the contents of the destination directory if requested.
-            if clear_destination:
-                logger.info(f"Clearing contents of '{install_location}' before install.")
-                for item in install_location.iterdir():
-                    try:
-                        if item.is_dir():
-                            shutil.rmtree(item)
-                        else:
-                            item.unlink()
-                    except Exception as e:
-                        logger.error(f"Could not remove item {item} during clean install: {e}")
-
-            # 3. Copy the contents from the source directory to the now-empty destination.
-            total_bytes = 0
-            if progress_callback:
-                total_bytes = sum(f.stat().st_size for f in source_dir.rglob('*') if f.is_file())
-            
-            copied_bytes = [0]
-            
-            def copy_with_prog(src, dst, *, follow_symlinks=True):
-                shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+        rollbacks = []
+        try:
+            for i, dir_assoc in enumerate(self.snapshot.directories):
+                source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
+                install_location = Path(dir_assoc.original_path)
+                
+                # 2. Copiare in una directory temporanea (Staging)
+                staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
+                backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
+                
+                total_bytes = 0
                 if progress_callback:
-                    copied_bytes[0] += os.path.getsize(src)
-                    dir_pct = (copied_bytes[0] / total_bytes) if total_bytes > 0 else 1.0
-                    overall_pct = ((i + dir_pct) / total_dirs) * 100
-                    progress_callback(int(overall_pct))
+                    total_bytes = sum(f.stat().st_size for f in source_dir.rglob('*') if f.is_file())
+                copied_bytes = [0]
+                
+                def copy_with_prog(src, dst, *, follow_symlinks=True):
+                    shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+                    if progress_callback:
+                        copied_bytes[0] += os.path.getsize(src)
+                        dir_pct = (copied_bytes[0] / total_bytes) if total_bytes > 0 else 1.0
+                        overall_pct = ((i + dir_pct) / total_dirs) * 100
+                        progress_callback(int(overall_pct))
+
+                logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
+                try:
+                    shutil.copytree(source_dir, staging_dir, copy_function=copy_with_prog)
+                except Exception as e:
+                    if staging_dir.exists():
+                        shutil.rmtree(staging_dir)
+                    raise RuntimeError(f"Failed to copy to staging '{staging_dir}': {e}") from e
+
+                # 3. Se copytree termina senza eccezioni, l'operazione è integra (non catturiamo errori per singoli file)
+                
+                rollbacks.append({
+                    "install_loc": install_location,
+                    "staging_dir": staging_dir,
+                    "backup_dir": backup_dir
+                })
+
+            # 4. Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
+            for rb in rollbacks:
+                install_loc = rb["install_loc"]
+                staging_dir = rb["staging_dir"]
+                backup_dir = rb["backup_dir"]
+                
+                install_loc.parent.mkdir(parents=True, exist_ok=True)
+                
+                if clear_destination:
+                    if install_loc.exists():
+                        install_loc.rename(backup_dir)
+                    staging_dir.rename(install_loc)
+                else:
+                    if not install_loc.exists():
+                        install_loc.mkdir(parents=True, exist_ok=True)
+                    # Spostamento manuale per merge
+                    for item in staging_dir.iterdir():
+                        dst = install_loc / item.name
+                        if dst.exists():
+                            if dst.is_dir():
+                                shutil.rmtree(dst)
+                            else:
+                                dst.unlink()
+                        shutil.move(str(item), str(dst))
+                    shutil.rmtree(staging_dir)
+
+            # Cleanup: delete backups on success
+            for rb in rollbacks:
+                backup_dir = rb["backup_dir"]
+                if backup_dir.exists():
+                    shutil.rmtree(backup_dir)
                     
-            for item in source_dir.iterdir():
-                src_item = source_dir / item.name
-                dst_item = install_location / item.name
-                try:
-                    if src_item.is_dir():
-                        shutil.copytree(src_item, dst_item, copy_function=copy_with_prog)
-                    else:
-                        copy_with_prog(src_item, dst_item)
-                except Exception as e:
-                    logger.error(f"Could not copy item {src_item} during install: {e}")
-
-            # 4. Set permissions if on Windows and pywin32 is installed
             if win32security:
-                try:
-                    logger.info(f"Setting full control permissions for Everyone on '{install_location}'")
+                for rb in rollbacks:
+                    install_loc = rb["install_loc"]
+                    try:
+                        everyone, domain, type = win32security.LookupAccountName("", "Everyone")
+                        sd = win32security.GetFileSecurity(str(install_loc), win32security.DACL_SECURITY_INFORMATION)
+                        dacl = sd.GetSecurityDescriptorDacl()
+                        dacl.AddAccessAllowedAceEx(
+                            win32security.ACL_REVISION,
+                            con.OBJECT_INHERIT_ACE | con.CONTAINER_INHERIT_ACE,
+                            con.GENERIC_ALL,
+                            everyone,
+                        )
+                        sd.SetSecurityDescriptorDacl(1, dacl, 0)
+                        win32security.SetFileSecurity(str(install_loc), win32security.DACL_SECURITY_INFORMATION, sd)
+                    except Exception as e:
+                        logger.error(f"Failed to set permissions on '{install_loc}': {e}")
 
-                    everyone, domain, type = win32security.LookupAccountName("", "Everyone")
+        except Exception as e:
+            # 5. Ripristinare la vecchia directory se lo swap fallisce
+            logger.error(f"Installation failed during transaction. Rolling back. Reason: {e}")
+            for rb in rollbacks:
+                install_loc = rb["install_loc"]
+                staging_dir = rb["staging_dir"]
+                backup_dir = rb["backup_dir"]
+                
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+                    
+                if clear_destination and backup_dir.exists():
+                    if install_loc.exists():
+                        shutil.rmtree(install_loc)
+                    backup_dir.rename(install_loc)
+            raise
 
-                    sd = win32security.GetFileSecurity(str(install_location), win32security.DACL_SECURITY_INFORMATION)
-                    dacl = sd.GetSecurityDescriptorDacl()
-
-                    dacl.AddAccessAllowedAceEx(
-                        win32security.ACL_REVISION,
-                        con.OBJECT_INHERIT_ACE | con.CONTAINER_INHERIT_ACE,
-                        con.GENERIC_ALL,
-                        everyone,
-                    )
-
-                    sd.SetSecurityDescriptorDacl(1, dacl, 0)
-                    win32security.SetFileSecurity(
-                        str(install_location),
-                        win32security.DACL_SECURITY_INFORMATION,
-                        sd,
-                    )
-
-                except Exception as e:
-                    logger.error(f"Failed to set permissions on '{install_location}': {e}")
-
+        # 7. Aggiornare `date_last_used` soltanto dopo commit riuscito
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(
             self.path_snapshot_json,
