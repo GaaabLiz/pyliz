@@ -241,7 +241,7 @@ class SnapshotManager:
             else:
                 logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
 
-    def install(self, enable_everyone_full_control: bool = True, progress_callback=None):
+    def install(self, enable_everyone_full_control: bool = True, clear_destination: bool = True, progress_callback=None):
         """
         Installs the snapshot's contents to their original locations on the filesystem.
         This will clear the destination directories before copying the snapshot's contents.
@@ -278,16 +278,17 @@ class SnapshotManager:
             # 1. Ensure the destination directory exists.
             install_location.mkdir(parents=True, exist_ok=True)
 
-            # 2. Clear the contents of the destination directory.
-            logger.info(f"Clearing contents of '{install_location}' before install.")
-            for item in install_location.iterdir():
-                try:
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-                except Exception as e:
-                    logger.error(f"Could not remove item {item} during clean install: {e}")
+            # 2. Clear the contents of the destination directory if requested.
+            if clear_destination:
+                logger.info(f"Clearing contents of '{install_location}' before install.")
+                for item in install_location.iterdir():
+                    try:
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                    except Exception as e:
+                        logger.error(f"Could not remove item {item} during clean install: {e}")
 
             # 3. Copy the contents from the source directory to the now-empty destination.
             total_bytes = 0

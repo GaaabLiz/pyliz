@@ -540,7 +540,7 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.remove_installed_copies()
 
-    def install(self, snap: Snapshot, progress_callback=None):
+    def install(self, snap: Snapshot, clear_destination: bool = True, progress_callback=None):
         """
         Installs a snapshot's contents to their original target locations.
 
@@ -548,6 +548,8 @@ class SnapshotCatalogue:
 
         Args:
             snap: The Snapshot object to install.
+            clear_destination: If True, clears the destination directories before copying.
+            progress_callback: Optional callback for installation progress.
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_install_enabled:
@@ -556,7 +558,7 @@ class SnapshotCatalogue:
                 "preinstall",
                 BackupType.ASSOCIATED_DIRECTORIES,
             )
-        snap_manager.install(self.settings.install_with_everyone_full_control, progress_callback=progress_callback)
+        snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback)
 
     def exists(self, snap_id: str) -> bool:
         """
