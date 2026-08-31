@@ -22,7 +22,7 @@ from pathlib import Path
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import clear_folder_contents, clear_or_move_to_temp, duplicate_directory
-from pylizlib.core.os.utils import get_folder_size_mb
+from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -232,6 +232,10 @@ class SnapshotManager:
         """
         for dir_assoc in self.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
+            
+            if is_critical_system_path(install_path):
+                raise ValueError(f"Cannot remove installed copy at '{install_path}': it is a critical system path.")
+                
             if install_path.exists() and install_path.is_dir():
                 logger.info(f"Removing installed copy at '{install_path}'")
                 try:
@@ -272,6 +276,9 @@ class SnapshotManager:
         for i, dir_assoc in enumerate(self.snapshot.directories):
             source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
             install_location = Path(dir_assoc.original_path)
+
+            if is_critical_system_path(install_location):
+                raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
 
             logger.info(f"Performing clean installation from '{source_dir}' to '{install_location}'")
 

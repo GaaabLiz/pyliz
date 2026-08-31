@@ -11,6 +11,49 @@ import psutil
 PATH_DEFAULT_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 
+def is_critical_system_path(path: str | Path) -> bool:
+    """
+    Check if a path is a critical system directory to prevent accidental recursive deletion.
+    """
+    try:
+        p = Path(path).resolve(strict=False)
+    except Exception:
+        return False
+        
+    # Block root directories (e.g., /, C:\)
+    if p == p.parent:
+        return True
+        
+    # Block the home directory itself
+    if p == Path.home().resolve(strict=False):
+        return True
+        
+    # Block critical system paths and everything inside them
+    critical_bases = [
+        Path("/usr"),
+        Path("/bin"),
+        Path("/sbin"),
+        Path("/etc"),
+        Path("/var"),
+        Path("/System"),
+    ]
+    
+    if sys.platform == "win32":
+        critical_bases.extend([
+            Path(os.environ.get("windir", "C:\\Windows")),
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")),
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))
+        ])
+        
+    for cp in critical_bases:
+        try:
+            if p == cp.resolve(strict=False) or p.is_relative_to(cp.resolve(strict=False)):
+                return True
+        except ValueError:
+            pass
+            
+    return False
+
 def get_folder_size_mb(path) -> float:
     """
     Get the size of a folder in megabytes
