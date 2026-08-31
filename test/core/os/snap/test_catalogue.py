@@ -541,6 +541,27 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.cat.restore_backup(backup_zip)
         self.assertTrue((CATALOGUE_PATH / snap.id).exists())
 
+    @patch('shutil.copytree')
+    def test_restore_backup_sd_rolls_back_on_error(self, mock_copytree):
+        snap = make_snapshot("RestoreSDFail", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "bck", BackupType.SNAPSHOT_DIRECTORY)
+        backup_zip = sorted(BACKUP_PATH.glob("*_*_sd_*.zip"))[-1]
+        
+        # Put something in the snapshot directory to verify rollback
+        dest = CATALOGUE_PATH / snap.id
+        (dest / "old_file.txt").write_text("should_stay")
+        
+        mock_copytree.side_effect = Exception("simulated copy failure")
+        
+        with self.assertRaises(IOError) as ctx:
+            self.cat.restore_backup(backup_zip)
+        self.assertIn("Failed to restore snapshot directory", str(ctx.exception))
+        
+        self.assertTrue((dest / "old_file.txt").exists())
+        self.assertEqual((dest / "old_file.txt").read_text(), "should_stay")
+
     def test_restore_backup_ad_no_snapshot_id(self):
         # coverage for 171
         zip_path = BACKUP_PATH / "backup__ad_20230101_120000.zip"
@@ -596,6 +617,31 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         
         self.cat.restore_backup(zip_path)
         self.assertTrue((dest / "subdir" / "file.txt").exists())
+        self.assertFalse((dest / "old_file.txt").exists())
+
+    @patch('shutil.copytree')
+    def test_restore_backup_ad_rolls_back_on_error(self, mock_copytree):
+        snap = make_snapshot("RestoreADFail", self._src, n=1)
+        self.cat.add(snap)
+        zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
+        
+        dir_name = Path(snap.directories[0].original_path).name
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr(f"{dir_name}/file.txt", "x")
+            
+        dest = Path(snap.directories[0].original_path)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "old_file.txt").write_text("should_stay")
+        
+        mock_copytree.side_effect = Exception("simulated failure")
+        
+        with self.assertRaises(IOError) as ctx:
+            self.cat.restore_backup(zip_path)
+        self.assertIn("Failed to restore associated directories", str(ctx.exception))
+        
+        # The rollback should have restored old_file.txt
+        self.assertTrue((dest / "old_file.txt").exists())
+        self.assertEqual((dest / "old_file.txt").read_text(), "should_stay")
 
     def test_import_catalogue_invalid_path(self):
         # coverage for 414
