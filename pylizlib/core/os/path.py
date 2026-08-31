@@ -301,12 +301,16 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
     return items
 
 
-def clear_or_move_to_temp(path: Path, temp_path: Path | None = None, move_to_temp: bool = False):
+def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, move_to_temp: bool = False):
     """
-    Clear a directory or move it to a temporary location.
-    :param path: Path to the directory to clear or move.
-    :param temp_path: Path to the temporary directory.
-    :param move_to_temp: Whether to move the directory to a temporary location instead of deleting it.
+    Remove a directory (default) or move it to a temporary location.
+    
+    WARNING: By default, this permanently deletes the directory using shutil.rmtree.
+    If you need to preserve data temporarily for rollback, set move_to_temp=True.
+    
+    :param path: Path to the directory to remove or move.
+    :param temp_path: Optional path to the temporary directory used if move_to_temp is True.
+    :param move_to_temp: Whether to move the directory to a temporary location instead of permanently deleting it.
     :return: None
     """
     if not move_to_temp:
