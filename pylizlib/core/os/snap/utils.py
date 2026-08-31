@@ -78,6 +78,7 @@ class SnapshotUtils:
     def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
         """
         Constructs the full path to a snapshot's directory within the catalogue.
+        Validates the folder name to prevent path traversal.
 
         Args:
             folder_name: The name of the snapshot's folder (usually the snapshot ID).
@@ -85,8 +86,33 @@ class SnapshotUtils:
 
         Returns:
             The full path to the snapshot's directory.
+            
+        Raises:
+            ValueError: If the folder_name attempts path traversal or is invalid.
         """
-        return catalogue_path.joinpath(folder_name)
+        if not folder_name or not folder_name.strip():
+            raise ValueError("Snapshot ID cannot be empty.")
+        if folder_name in (".", ".."):
+            raise ValueError(f"Invalid Snapshot ID: '{folder_name}'.")
+        if "/" in folder_name or "\\" in folder_name:
+            raise ValueError(f"Snapshot ID cannot contain path separators: '{folder_name}'.")
+
+        destination_path = catalogue_path / folder_name
+        
+        try:
+            catalogue_resolved = catalogue_path.resolve(strict=False)
+            destination_resolved = destination_path.resolve(strict=False)
+            
+            # Ensure destination is strictly inside catalogue
+            if destination_resolved == catalogue_resolved or not str(destination_resolved).startswith(str(catalogue_resolved)):
+                raise ValueError(f"Snapshot path must be strictly contained within catalogue. Resolved: {destination_resolved}")
+        except Exception as e:
+            if isinstance(e, ValueError):
+                raise
+            raise ValueError(f"Invalid snapshot path: {e}")
+
+        return destination_path
+
 
     @staticmethod
     def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:

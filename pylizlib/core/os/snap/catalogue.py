@@ -159,7 +159,7 @@ class SnapshotCatalogue:
                     )
 
                 restored_snapshot = SnapshotSerializer.from_json(json_path)
-                destination_path = self.path_catalogue / restored_snapshot.id
+                destination_path = SnapshotUtils.get_snapshot_path(restored_snapshot.id, self.path_catalogue)
 
                 if destination_path.exists():
                     clear_or_move_to_temp(destination_path)
@@ -461,7 +461,7 @@ class SnapshotCatalogue:
                         continue
 
                     # 4. Copy the extracted folder to the catalogue
-                    destination_path = self.path_catalogue / snap_id
+                    destination_path = SnapshotUtils.get_snapshot_path(snap_id, self.path_catalogue)
                     shutil.copytree(potential_snap_dir, destination_path)
                     logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
 
@@ -511,7 +511,7 @@ class SnapshotCatalogue:
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
             # 4. Copy the extracted folder to the catalogue
-            destination_path = self.path_catalogue / snapshot_to_import.id
+            destination_path = SnapshotUtils.get_snapshot_path(snapshot_to_import.id, self.path_catalogue)
             shutil.copytree(temp_dir_path, destination_path)
 
     def update_assoc_with_installed(self, snap_id: str):
