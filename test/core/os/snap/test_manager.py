@@ -290,7 +290,7 @@ class TestSnapshotManagerInstall(unittest.TestCase):
 
     def test_remove_installed_copies_deletes_original_paths(self):
         install_dir = TEST_LOCAL_ROOT / "installed_copy"
-        install_dir.mkdir(parents=True)
+        install_dir.mkdir(parents=True, exist_ok=True)
         (install_dir / "a.txt").write_text("x")
         reset_index()
         snap = Snapshot(
@@ -303,6 +303,30 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         self.assertTrue(install_dir.exists())
         mgr.remove_installed_copies()
         self.assertFalse(install_dir.exists())
+
+    def test_remove_installed_copies_blocks_critical_paths(self):
+        snap = Snapshot(
+            id=gen_random_string(8),
+            name="RemCriticalSnap",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path="/usr/bin/test", folder_id="remcrit")],
+        )
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        with self.assertRaises(ValueError) as ctx:
+            mgr.remove_installed_copies()
+        self.assertIn("critical system path", str(ctx.exception))
+        
+    def test_install_blocks_critical_paths(self):
+        snap = Snapshot(
+            id=gen_random_string(8),
+            name="InstCriticalSnap",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path="/usr/bin", folder_id="inscrit")],
+        )
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        with self.assertRaises(ValueError) as ctx:
+            mgr.install()
+        self.assertIn("critical system path", str(ctx.exception))
 
 
 class TestSnapshotManagerActionsAndBackup(unittest.TestCase):

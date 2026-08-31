@@ -19,7 +19,23 @@ from pylizlib.core.os.utils import (
     is_os_windows,
     is_software_installed,
     open_system_folder,
+    is_critical_system_path,
 )
+
+class IsCriticalSystemPathTestCase(unittest.TestCase):
+    def test_root_is_critical(self):
+        self.assertTrue(is_critical_system_path("/"))
+        
+    def test_home_is_critical(self):
+        self.assertTrue(is_critical_system_path(Path.home()))
+        
+    def test_usr_bin_is_critical(self):
+        self.assertTrue(is_critical_system_path("/usr/bin/test"))
+        self.assertTrue(is_critical_system_path("/usr"))
+        
+    def test_regular_path_is_not_critical(self):
+        self.assertFalse(is_critical_system_path(Path.home() / "Documents" / "MyProject"))
+        self.assertFalse(is_critical_system_path("/tmp/test_dir"))
 
 
 class GetFolderSizeMbTestCase(unittest.TestCase):
