@@ -276,17 +276,64 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         mgr.create()
         original_dir = Path(snap.directories[0].original_path)
         (original_dir / "extra.txt").write_text("should be removed")
-        mgr.install()
+        mgr.install(clear_destination=True)
         self.assertFalse((original_dir / "extra.txt").exists())
         self.assertTrue((original_dir / "i1_file.txt").exists())
-
-    def test_install_updates_date_last_used_in_json(self):
-        snap = make_snapshot("MgrInstallDate", self._src, n=1)
-        mgr = self._mgr(snap)
-        mgr.create()
-        mgr.install()
         loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
         self.assertIsNotNone(loaded.date_last_used)
+
+    def test_install_merges_content_when_clear_destination_false(self):
+        snap = make_snapshot("MgrInstallMerge", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "extra.txt").write_text("should be kept")
+        mgr.install(clear_destination=False)
+        # extra.txt should still exist because we didn't clear
+        self.assertTrue((original_dir / "extra.txt").exists())
+        self.assertTrue((original_dir / "i1_file.txt").exists())
+        
+    def test_install_rolls_back_if_staging_fails(self):
+        snap = make_snapshot("MgrInstallFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "important_file.txt").write_text("dont lose me")
+        
+        # We mock copytree to fail
+        with patch('shutil.copytree', side_effect=Exception("Simulated copy failure")):
+            with self.assertRaises(RuntimeError):
+                mgr.install(clear_destination=True)
+                
+        # The installation failed, so the original directory must remain untouched
+        self.assertTrue((original_dir / "important_file.txt").exists())
+        self.assertEqual((original_dir / "important_file.txt").read_text(), "dont lose me")
+        # Ensure no staging or backup dirs leaked
+        for item in original_dir.parent.iterdir():
+            self.assertFalse("_staging_" in item.name)
+            self.assertFalse("_bck_" in item.name)
+
+    def test_install_creates_missing_destinations(self):
+        snap = make_snapshot("MgrInstallMiss", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        shutil.rmtree(original_dir) # Make it disappear before install
+        
+        mgr.install(clear_destination=True)
+        self.assertTrue(original_dir.exists())
+        self.assertTrue((original_dir / "i1_file.txt").exists())
+        
+    def test_install_fails_preflight_if_source_missing(self):
+        snap = make_snapshot("InstPreflight", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        source_dir = mgr.path_snapshot / snap.directories[0].directory_name
+        shutil.rmtree(source_dir) # Make source disappear
+        
+        with self.assertRaises(FileNotFoundError) as ctx:
+            mgr.install(clear_destination=True)
+        self.assertIn("does not exist inside the snapshot", str(ctx.exception))
 
     def test_remove_installed_copies_deletes_original_paths(self):
         install_dir = TEST_LOCAL_ROOT / "installed_copy"
@@ -324,6 +371,8 @@ class TestSnapshotManagerInstall(unittest.TestCase):
             directories=[SnapDirAssociation(index=1, original_path="/usr/bin", folder_id="inscrit")],
         )
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        source_dir = mgr.path_snapshot / snap.directories[0].directory_name
+        source_dir.mkdir(parents=True, exist_ok=True)
         with self.assertRaises(ValueError) as ctx:
             mgr.install()
         self.assertIn("critical system path", str(ctx.exception))
@@ -505,15 +554,10 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         (source_dir / "src_dir").mkdir()
         (source_dir / "src_file.txt").write_text("x")
         
-        with patch('shutil.rmtree', side_effect=Exception("rmtree err")), \
-             patch('pathlib.Path.unlink', side_effect=Exception("unlink err")), \
-             patch('shutil.copytree', side_effect=Exception("copytree err")), \
-             patch('shutil.copy2', side_effect=Exception("copy2 err")):
-            with self.assertLogs(level="ERROR") as cm:
+        with patch('shutil.copytree', side_effect=Exception("copytree err")):
+            with self.assertRaises(RuntimeError) as cm:
                 mgr.install()
-            out = " ".join(cm.output)
-            self.assertIn("Could not remove item", out)
-            self.assertIn("Could not copy item", out)
+            self.assertIn("Failed to copy", str(cm.exception))
 
     def test_create_backup_exceptions(self):
         # coverage 371-372
