@@ -518,14 +518,14 @@ class SnapshotManager:
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-                    dirs_to_backup = [Path(d.original_path) for d in self.snapshot.directories]
-                    for folder in dirs_to_backup:
+                    for d in self.snapshot.directories:
+                        folder = Path(d.original_path)
                         if folder.is_dir():
                             for file_path in folder.rglob("*"):
                                 if file_path.is_file():
                                     archive.write(
                                         file_path,
-                                        arcname=os.path.join(folder.name, file_path.relative_to(folder)),
+                                        arcname=os.path.join(d.directory_name, file_path.relative_to(folder)),
                                     )
                 elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
                     source_dir = self.path_snapshot

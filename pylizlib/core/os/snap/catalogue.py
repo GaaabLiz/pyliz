@@ -190,9 +190,9 @@ class SnapshotCatalogue:
                     "Associated-directories restore requires an existing snapshot metadata entry."
                 )
 
-            name_to_assoc: dict[str, list[SnapDirAssociation]] = {}
-            for assoc in snapshot.directories:
-                name_to_assoc.setdefault(Path(assoc.original_path).name, []).append(assoc)
+            dir_name_to_assoc: dict[str, SnapDirAssociation] = {
+                assoc.directory_name: assoc for assoc in snapshot.directories
+            }
 
             # Preflight: collect all targets and validate unambiguously
             tasks = []
@@ -200,19 +200,14 @@ class SnapshotCatalogue:
                 if not extracted_dir.is_dir():
                     continue
 
-                candidates = name_to_assoc.get(extracted_dir.name, [])
-                if not candidates:
+                candidate = dir_name_to_assoc.get(extracted_dir.name)
+                if not candidate:
                     logger.warning(
                         f"No matching associated directory found for backup folder '{extracted_dir.name}'. Skipping."
                     )
                     continue
-                if len(candidates) > 1:
-                    raise ValueError(
-                        f"Ambiguous restore target for folder '{extracted_dir.name}': "
-                        "multiple associated directories share the same name."
-                    )
 
-                destination = Path(candidates[0].original_path)
+                destination = Path(candidate.original_path)
                 tasks.append({
                     "extracted_dir": extracted_dir,
                     "destination": destination,
