@@ -4,6 +4,23 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.10] - 2026-09-01
+
+### Bump
+
+- V0.6.10
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Add message callback to copy_install_to for progress reporting
+- Add message callback to snapshot management methods for improved feedback
+- Add message callback to various snapshot management methods for enhanced user feedback
+- Add message callback for directory removal and copying operations
+- Add update_task_message method for task message updates
 ## [0.6.9] - 2026-09-01
 
 ### Bump
