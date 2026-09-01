@@ -106,6 +106,21 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
             self.cat.add(make_snapshot(f"Multi{i}", self._src, n=1))
         self.assertEqual(len(self.cat.get_all()), 3)
 
+    def test_get_all_skips_corrupted_entries(self):
+        # Create a valid snapshot
+        snap = make_snapshot("ValidSnap", self._src, n=1)
+        self.cat.add(snap)
+        
+        # Create a corrupted entry (directory without json)
+        corrupted_dir = CATALOGUE_PATH / "corrupted_id"
+        corrupted_dir.mkdir()
+        (corrupted_dir / "some_file.txt").write_text("x")
+        
+        # get_all should skip the corrupted entry and return only the valid one
+        all_snaps = self.cat.get_all()
+        self.assertEqual(len(all_snaps), 1)
+        self.assertEqual(all_snaps[0].id, snap.id)
+
     def test_delete_removes_snapshot(self):
         snap = make_snapshot("DelSnap", self._src, n=1)
         self.cat.add(snap)

@@ -137,6 +137,19 @@ class TestSnapshotManagerJsonUpdates(unittest.TestCase):
         self.assertEqual(loaded.data.get("env"), "prod")
         self.assertIsNotNone(loaded.date_last_modified)
 
+    @patch('pylizlib.core.os.snap.domain.SnapDirAssociation.copy_install_to')
+    def test_create_rollback_on_failure(self, mock_copy):
+        snap = make_snapshot("CreateFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mock_copy.side_effect = Exception("simulated copy error")
+        
+        with self.assertRaises(Exception):
+            mgr.create()
+            
+        # Ensure that no partial directory or staging directory is left behind
+        staging_dirs = list(mgr.path_catalogue.glob(f"_staging_create_{snap.id}_*"))
+        self.assertEqual(len(staging_dirs), 0)
+        self.assertFalse(mgr.path_snapshot.exists())
 
 class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
     def setUp(self):
