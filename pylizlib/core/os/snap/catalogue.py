@@ -272,14 +272,14 @@ class SnapshotCatalogue:
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
 
-    def add(self, snap: Snapshot, progress_callback=None):
+    def add(self, snap: Snapshot, progress_callback=None, message_callback=None):
         """
         Adds a new snapshot to the catalogue.
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.create(progress_callback=progress_callback)
+        snap_manager.create(progress_callback=progress_callback, message_callback=message_callback)
 
-    def delete(self, snap: Snapshot):
+    def delete(self, snap: Snapshot, message_callback=None):
         """
         Deletes a snapshot from the catalogue.
 
@@ -291,7 +291,7 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_delete_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
-        snap_manager.delete()
+        snap_manager.delete(message_callback=message_callback)
 
     def get_all(self) -> list[Snapshot]:
         """
@@ -328,7 +328,7 @@ class SnapshotCatalogue:
                 return snap
         return None
 
-    def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot):
+    def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot, message_callback=None):
         """
         Updates a snapshot by comparing the old and new Snapshot objects.
         It calculates the differences and applies them.
@@ -338,9 +338,9 @@ class SnapshotCatalogue:
             new: The new Snapshot object with the desired changes.
         """
         edits = SnapshotUtils.get_edits_between_snapshots(old, new)
-        self.update_snapshot_by_edits(new, edits)
+        self.update_snapshot_by_edits(new, edits, message_callback=message_callback)
 
-    def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction]):
+    def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction], message_callback=None):
         """
         Updates a snapshot using a pre-computed list of edit actions.
 
@@ -355,9 +355,9 @@ class SnapshotCatalogue:
             snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_json_base_fields()
         snap_manager.update_json_data_fields()
-        snap_manager.update_from_actions_list(edits)
+        snap_manager.update_from_actions_list(edits, message_callback=message_callback)
 
-    def duplicate_by_id(self, snap_id: str):
+    def duplicate_by_id(self, snap_id: str, message_callback=None):
         """
         Duplicates a snapshot by its ID.
 
@@ -371,9 +371,9 @@ class SnapshotCatalogue:
         if snap is None:
             raise ValueError(f"No snapshot found with ID {snap_id}")
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.duplicate()
+        snap_manager.duplicate(message_callback=message_callback)
 
-    def export_assoc_dirs(self, snap_id: str, destination_path: Path):
+    def export_assoc_dirs(self, snap_id: str, destination_path: Path, message_callback=None):
         """
         Exports the associated directories of a snapshot to a zip file.
 
@@ -392,9 +392,10 @@ class SnapshotCatalogue:
             "export",
             BackupType.ASSOCIATED_DIRECTORIES,
             is_export=True,
+            message_callback=message_callback
         )
 
-    def export_snapshot(self, snap_id: str, destination_path: Path):
+    def export_snapshot(self, snap_id: str, destination_path: Path, message_callback=None):
         """
         Exports the entire snapshot directory (the internal backup) to a zip file.
 
@@ -412,6 +413,7 @@ class SnapshotCatalogue:
             "export_snap",
             BackupType.SNAPSHOT_DIRECTORY,
             is_export=True,
+            message_callback=message_callback
         )
 
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
@@ -544,7 +546,7 @@ class SnapshotCatalogue:
             destination_path = SnapshotUtils.get_snapshot_path(snapshot_to_import.id, self.path_catalogue)
             shutil.copytree(temp_dir_path, destination_path)
 
-    def update_assoc_with_installed(self, snap_id: str):
+    def update_assoc_with_installed(self, snap_id: str, message_callback=None):
         """
         Updates the snapshot's internal copy of associated directories
         with the current state of those directories on the filesystem.
@@ -556,9 +558,9 @@ class SnapshotCatalogue:
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         if self.settings.bck_before_modify_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
-        snap_manager.update_associated_dirs_from_system()
+        snap_manager.update_associated_dirs_from_system(message_callback=message_callback)
 
-    def remove_installed_copies(self, snap_id: str):
+    def remove_installed_copies(self, snap_id: str, message_callback=None):
         """
         Removes the installed copies of a snapshot's associated directories from the system.
 
@@ -570,9 +572,9 @@ class SnapshotCatalogue:
             logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
             return
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.remove_installed_copies()
+        snap_manager.remove_installed_copies(message_callback=message_callback)
 
-    def install(self, snap: Snapshot, clear_destination: bool = True, progress_callback=None):
+    def install(self, snap: Snapshot, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """
         Installs a snapshot's contents to their original target locations.
 
@@ -590,7 +592,7 @@ class SnapshotCatalogue:
                 "preinstall",
                 BackupType.ASSOCIATED_DIRECTORIES,
             )
-        snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback)
+        snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
 
     def exists(self, snap_id: str) -> bool:
         """
