@@ -4,6 +4,37 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.8] - 2026-09-01
+
+### Bump
+
+- V0.6.8
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Add OS compatibility checks and store OS information in snapshots
+- Enhance snapshot path handling with validation and utility function
+- Add clear_destination option to install method for snapshot management
+- Enhance backup tests to verify content in ZIP files
+- Enhance backup tests to verify content in ZIP files
+- Add tests to block removal and installation on critical system paths
+- Implement staging and rollback mechanism for installation with optional destination clearing
+- Enhance install method with clear_destination option and add rollback tests
+- Implement backup and rollback mechanism during snapshot updates
+- Update test to abort on missing source and verify snapshot backup integrity
+- Implement directory renaming and integrity validation during snapshot updates
+- Enhance snapshot editing tests to validate directory renaming and index updates
+- Implement backup and rollback mechanism for directory restoration during snapshot updates
+- Rename clear_or_move_to_temp to remove_directory_or_move_to_temp and update docstring for clarity
+- Add rollback mechanism for backup restoration to handle errors gracefully
+- Implement staging path for snapshot creation with error handling and cleanup
+- Add tests to skip corrupted entries and ensure rollback on failure during snapshot creation
+- Refactor directory association handling for snapshot restoration
+- Update error messages and improve directory name handling in backup restoration tests
 ## [0.6.7] - 2026-08-30
 
 ### Bump
