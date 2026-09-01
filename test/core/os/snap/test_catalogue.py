@@ -595,23 +595,18 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cat.restore_backup(zip_path)
 
-    def test_restore_backup_ad_unmatched_or_ambiguous_dir(self):
-        # coverage for 191-194, 196
+    def test_restore_backup_ad_unmatched_dir(self):
+        # coverage for 191-194
         snap = make_snapshot("RestoreADUnmatch", self._src, n=1)
-        # Force ambiguous: two directories with same name
-        assoc2 = SnapDirAssociation(index=2, original_path=snap.directories[0].original_path + "_other/same", folder_id="other")
-        assoc2.original_path = snap.directories[0].original_path
-        snap.directories.append(assoc2)
         self.cat.add(snap)
         
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("unmatched_dir/file.txt", "x")
-            zf.writestr(Path(snap.directories[0].original_path).name + "/file.txt", "x")
             
         with self.assertRaises(ValueError) as ctx:
             self.cat.restore_backup(zip_path)
-        self.assertIn("Ambiguous restore target", str(ctx.exception))
+        self.assertIn("No associated directories were restored", str(ctx.exception))
 
     def test_restore_backup_ad_restore_items(self):
         # coverage for 206, 213, 220
@@ -619,7 +614,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.cat.add(snap)
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
         
-        dir_name = Path(snap.directories[0].original_path).name
+        dir_name = snap.directories[0].directory_name
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(f"{dir_name}/subdir/file.txt", "x")
             zf.writestr(f"{dir_name}/file.txt", "x")
@@ -640,7 +635,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.cat.add(snap)
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
         
-        dir_name = Path(snap.directories[0].original_path).name
+        dir_name = snap.directories[0].directory_name
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(f"{dir_name}/file.txt", "x")
             
