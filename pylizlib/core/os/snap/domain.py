@@ -110,7 +110,7 @@ class SnapDirAssociation:
         """
         return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
-    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None):
+    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None, message_callback=None):
         """
         Copies the entire content of the directory specified by `original_path`
         into a subdirectory within the given `catalogue_target_path`.
@@ -121,6 +121,7 @@ class SnapDirAssociation:
             catalogue_target_path: The base path in the catalogue where the directory
                                    content will be copied.
             progress_callback: A callable taking (copied_bytes: int, total_bytes: int)
+            message_callback: A callable taking (message: str) to report the current file.
         """
         import os
         source = Path(self.original_path)
@@ -137,6 +138,8 @@ class SnapDirAssociation:
         copied_bytes = [0]
         
         def copy_with_prog(src, dst, *, follow_symlinks=True):
+            if message_callback:
+                message_callback(f"Elaborazione: {Path(src).name}")
             shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
             if progress_callback:
                 copied_bytes[0] += os.path.getsize(src)
