@@ -45,6 +45,9 @@ class Task(QObject):
         if self.on_progress_changed:
             self.on_progress_changed(self.name, progress)
 
+    def update_task_message(self, message: str):
+        self.task_update_message.emit(self.name, message)
+
     def gen_update_task_progress(self, current: int, total: int):
         self.update_task_progress(get_step_progress_percentage(current, total))
 
