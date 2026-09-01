@@ -66,22 +66,32 @@ class SnapshotManager:
         directory and copying all associated directories into it. If the directory
         already exists, its contents are cleared first.
         """
-        if self.path_snapshot.exists():
-            clear_folder_contents(self.path_snapshot)
-        self.path_snapshot.mkdir(parents=True, exist_ok=True)
-        
-        # We need to distribute the progress among directories if there are multiple.
-        total_dirs = len(self.snapshot.directories)
-        for i, snap_dir in enumerate(self.snapshot.directories):
-            def dir_progress(copied, total):
-                if progress_callback:
-                    # Calculate overall percentage based on dir index and dir progress
-                    dir_pct = (copied / total) if total > 0 else 1.0
-                    overall_pct = ((i + dir_pct) / total_dirs) * 100
-                    progress_callback(int(overall_pct))
-                    
-            snap_dir.copy_install_to(self.path_snapshot, progress_callback=dir_progress)
-        self.__save_json()
+        staging_path = self.path_catalogue / f"_staging_create_{self.snapshot.id}_{gen_random_string(4)}"
+        try:
+            staging_path.mkdir(parents=True, exist_ok=False)
+            
+            # We need to distribute the progress among directories if there are multiple.
+            total_dirs = len(self.snapshot.directories)
+            for i, snap_dir in enumerate(self.snapshot.directories):
+                def dir_progress(copied, total):
+                    if progress_callback:
+                        # Calculate overall percentage based on dir index and dir progress
+                        dir_pct = (copied / total) if total > 0 else 1.0
+                        overall_pct = ((i + dir_pct) / total_dirs) * 100
+                        progress_callback(int(overall_pct))
+                        
+                snap_dir.copy_install_to(staging_path, progress_callback=dir_progress)
+            
+            # Write json to staging BEFORE making it the final destination
+            SnapshotSerializer.to_json(self.snapshot, staging_path / self.settings.json_filename)
+            
+            if self.path_snapshot.exists():
+                remove_directory_or_move_to_temp(self.path_snapshot)
+            staging_path.rename(self.path_snapshot)
+        except Exception as e:
+            if staging_path.exists():
+                shutil.rmtree(staging_path, ignore_errors=True)
+            raise e
 
     def delete(self):
         """

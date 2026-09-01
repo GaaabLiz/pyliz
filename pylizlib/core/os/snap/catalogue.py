@@ -309,9 +309,12 @@ class SnapshotCatalogue:
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
             if current_dir.is_dir():
-                snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
-                if snap is not None:
-                    snapshots.append(snap)
+                try:
+                    snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
+                    if snap is not None:
+                        snapshots.append(snap)
+                except Exception as e:
+                    logger.error(f"Failed to load snapshot from {current_dir}: {e}. Skipping corrupted entry.")
         return snapshots
 
     def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
