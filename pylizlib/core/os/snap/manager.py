@@ -60,7 +60,7 @@ class SnapshotManager:
         """Saves the current snapshot object state to its JSON file."""
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
 
-    def create(self, progress_callback=None):
+    def create(self, progress_callback=None, message_callback=None):
         """
         Creates the snapshot on the filesystem. This involves creating the main snapshot
         directory and copying all associated directories into it. If the directory
@@ -80,7 +80,7 @@ class SnapshotManager:
                         overall_pct = ((i + dir_pct) / total_dirs) * 100
                         progress_callback(int(overall_pct))
                         
-                snap_dir.copy_install_to(staging_path, progress_callback=dir_progress)
+                snap_dir.copy_install_to(staging_path, progress_callback=dir_progress, message_callback=message_callback)
             
             # Write json to staging BEFORE making it the final destination
             SnapshotSerializer.to_json(self.snapshot, staging_path / self.settings.json_filename)
@@ -93,13 +93,13 @@ class SnapshotManager:
                 shutil.rmtree(staging_path, ignore_errors=True)
             raise e
 
-    def delete(self):
+    def delete(self, message_callback=None):
         """
         Deletes the snapshot's directory from the filesystem.
         The directory is moved to a temporary location before being permanently deleted.
         """
         if self.path_snapshot.exists():
-            remove_directory_or_move_to_temp(self.path_snapshot)
+            remove_directory_or_move_to_temp(self.path_snapshot, message_callback=message_callback)
 
     def update_json_data_fields(self):
         """
@@ -160,7 +160,7 @@ class SnapshotManager:
             self.snapshot.directories.remove(dir_to_remove)
             self.__save_json()
 
-    def update_from_actions_list(self, edits: list[SnapEditAction]):
+    def update_from_actions_list(self, edits: list[SnapEditAction], message_callback=None):
         """
         Applies a list of edit actions (add/remove directories) to the snapshot.
         This updates the snapshot's contents on the filesystem based on the provided actions.
@@ -184,7 +184,7 @@ class SnapshotManager:
         # Apply final renames
         for temp_path, final_path in temp_renames:
             if final_path.exists():
-                remove_directory_or_move_to_temp(final_path)
+                remove_directory_or_move_to_temp(final_path, message_callback=message_callback)
             temp_path.rename(final_path)
 
         # Handle removals
@@ -193,7 +193,7 @@ class SnapshotManager:
             if edit.directory_name_to_remove:
                 dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
                 if dir_path.exists():
-                    remove_directory_or_move_to_temp(dir_path)
+                    remove_directory_or_move_to_temp(dir_path, message_callback=message_callback)
                     
         # Handle additions
         add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
@@ -201,7 +201,7 @@ class SnapshotManager:
 
         for dir_assoc in self.snapshot.directories:
             if dir_assoc.original_path in added_paths:
-                dir_assoc.copy_install_to(self.path_snapshot)
+                dir_assoc.copy_install_to(self.path_snapshot, message_callback=message_callback)
 
         # 4. Validate that every directory_name described by JSON actually exists on disk before commit
         for dir_assoc in self.snapshot.directories:
@@ -212,7 +212,7 @@ class SnapshotManager:
         # After all filesystem changes and validation, save the final state of the new snapshot.
         self.__save_json()
 
-    def duplicate(self):
+    def duplicate(self, message_callback=None):
         """
         Creates a duplicate of the current snapshot with a new ID and name.
         The entire snapshot directory is copied, and a new JSON file is created for the copy.
@@ -228,10 +228,10 @@ class SnapshotManager:
         new_snap.date_created = datetime.now()
         new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
         new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.settings.json_filename)
-        duplicate_directory(self.path_snapshot, new_snap_path, "")
+        duplicate_directory(self.path_snapshot, new_snap_path, "", message_callback=message_callback)
         SnapshotSerializer.to_json(new_snap, new_snap_json_path)
 
-    def update_associated_dirs_from_system(self):
+    def update_associated_dirs_from_system(self, message_callback=None):
         """
         Updates the snapshot's internal copy of each associated directory
         with the current version from the original system path.
@@ -254,8 +254,13 @@ class SnapshotManager:
                 
                 logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
                 
+                def copy_with_cb(src, dst, *, follow_symlinks=True):
+                    if message_callback:
+                        message_callback(f"Copia in corso: {Path(src).name}")
+                    shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+                
                 try:
-                    shutil.copytree(system_path, staging_dir)
+                    shutil.copytree(system_path, staging_dir, copy_function=copy_with_cb)
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
@@ -308,7 +313,7 @@ class SnapshotManager:
         self.snapshot.date_last_modified = datetime.now()
         self.__save_json()
 
-    def remove_installed_copies(self):
+    def remove_installed_copies(self, message_callback=None):
         """
         Removes all directories on the system that this snapshot is managing.
         This is effectively an 'uninstall' operation for the snapshot's associated directories.
@@ -324,13 +329,13 @@ class SnapshotManager:
             if install_path.exists() and install_path.is_dir():
                 logger.info(f"Removing installed copy at '{install_path}'")
                 try:
-                    shutil.rmtree(install_path)
+                    remove_directory_or_move_to_temp(install_path, message_callback=message_callback)
                 except Exception as e:
                     logger.error(f"Failed to remove directory '{install_path}': {e}")
             else:
                 logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
 
-    def install(self, enable_everyone_full_control: bool = True, clear_destination: bool = True, progress_callback=None):
+    def install(self, enable_everyone_full_control: bool = True, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """
         Installs the snapshot's contents to their original locations on the filesystem.
         This will clear the destination directories before copying the snapshot's contents.
@@ -385,6 +390,8 @@ class SnapshotManager:
                 copied_bytes = [0]
                 
                 def copy_with_prog(src, dst, *, follow_symlinks=True):
+                    if message_callback:
+                        message_callback(f"Copia in corso: {Path(src).name}")
                     shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
                     if progress_callback:
                         copied_bytes[0] += os.path.getsize(src)
@@ -489,6 +496,7 @@ class SnapshotManager:
         prefix: str,
         backup_type: "BackupType",
         is_export: bool = False,
+        message_callback=None
     ):
         """
         Creates a zip archive of the snapshot's data.
@@ -523,6 +531,8 @@ class SnapshotManager:
                         if folder.is_dir():
                             for file_path in folder.rglob("*"):
                                 if file_path.is_file():
+                                    if message_callback:
+                                        message_callback(f"Archiviazione: {file_path.name}")
                                     archive.write(
                                         file_path,
                                         arcname=os.path.join(d.directory_name, file_path.relative_to(folder)),
@@ -531,6 +541,8 @@ class SnapshotManager:
                     source_dir = self.path_snapshot
                     for file_path in source_dir.rglob("*"):
                         if file_path.is_file():
+                            if message_callback:
+                                message_callback(f"Archiviazione: {file_path.name}")
                             archive.write(file_path, arcname=file_path.relative_to(source_dir))
         except Exception as e:
             logger.error(e)
