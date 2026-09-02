@@ -120,8 +120,13 @@ class OperationRunner(QObject):
 
     def stop(self):
         self.runner_stop.emit()
+        # Cancel all known operations so running ones can gracefully exit
+        for op in self._all_operations:
+            op.stop()
         self.thread_pool.clear()
-        self.thread_pool.waitForDone()
+        # We don't want to block the UI waiting for threads to finish if they take a while.
+        # But we do want to reset state. The threads will finish shortly since they were cancelled.
+        # Removing waitForDone prevents UI freeze on stop click.
         self.active_operations = 0
         self.operation_pool.clear()
 

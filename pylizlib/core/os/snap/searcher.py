@@ -24,8 +24,8 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import Snapshot
 
-# Type alias for a progress callback: (filename, total_files, processed_files) -> None
-SnapshotProgressCallback = Callable[[str, int, int], None]
+# Type alias for a progress callback: (filename, total_files, processed_files) -> Optional[bool]
+SnapshotProgressCallback = Callable[[str, int, int], Optional[bool]]
 
 
 class QueryType(Enum):
@@ -174,7 +174,8 @@ class SnapshotSearcher:
         total_files = len(files_to_search)
         for i, file_path in enumerate(files_to_search):
             if on_progress:
-                on_progress(file_path.name, total_files, i + 1)
+                if on_progress(file_path.name, total_files, i + 1) is False:
+                    break
 
             if params.search_target == SearchTarget.FILE_NAME:
                 found = False

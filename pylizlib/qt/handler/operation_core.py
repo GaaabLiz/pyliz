@@ -29,6 +29,10 @@ class Task(QObject):
         self.on_progress_changed = None
         self.result: Any = None
         self.progress = 0
+        self.is_cancelled = False
+        
+    def cancel(self):
+        self.is_cancelled = True
 
     def execute(self):
         return None
@@ -156,9 +160,9 @@ class Operation(QRunnable):
     def run(self, /):
         self.execute()
 
-    @abstractmethod
     def stop(self):
-        pass
+        for task in self.tasks:
+            task.cancel()
 
     def get_tasks_ids(self) -> list[str]:
         return [task.name for task in self.tasks]
