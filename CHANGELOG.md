@@ -4,6 +4,19 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.11] - 2026-09-02
+
+### Bump
+
+- V0.6.11
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+
+### 🚀 Features
+
+- Enhance progress callback to support cancellation and improve task management
 ## [0.6.10] - 2026-09-01
 
 ### Bump
