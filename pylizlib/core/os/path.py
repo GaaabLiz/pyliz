@@ -311,24 +311,18 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
     :param path: Path to the directory to remove or move.
     :param temp_path: Optional path to the temporary directory used if move_to_temp is True.
     :param move_to_temp: Whether to move the directory to a temporary location instead of permanently deleting it.
+    :param message_callback: Reports the requested directory operation, without changing how it is performed.
     :return: None
     """
     if not move_to_temp:
+        if not path.is_symlink() and not path.exists():
+            return
         if message_callback:
-
-            def remove_with_cb(p: Path):
-                if not p.exists():
-                    return
-                for item in p.iterdir():
-                    if item.is_dir():
-                        remove_with_cb(item)
-                    else:
-                        message_callback(f"Eliminazione: {item.name}")
-                        item.unlink()
-                message_callback(f"Eliminazione: {p.name}")
-                p.rmdir()
-
-            remove_with_cb(path)
+            message_callback(f"Eliminazione: {path.name}")
+        # Unlink a root symlink itself, including a dangling link. For real
+        # directories, always use rmtree's symlink-safe traversal.
+        if path.is_symlink():
+            path.unlink(missing_ok=True)
         else:
             shutil.rmtree(path.__str__(), ignore_errors=True)
     else:
