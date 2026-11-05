@@ -157,19 +157,24 @@ class SnapshotCatalogue:
                 destination_path = SnapshotUtils.get_snapshot_path(restored_snapshot.id, self.path_catalogue)
 
                 backup_dest = destination_path.with_name(f"{destination_path.name}_bck_{gen_random_string(6)}")
+                original_moved = False
+                destination_created = False
                 try:
                     if destination_path.exists():
                         destination_path.rename(backup_dest)
-                    shutil.copytree(temp_dir_path, destination_path)
+                        original_moved = True
+                    destination_path.mkdir()
+                    destination_created = True
+                    shutil.copytree(temp_dir_path, destination_path, dirs_exist_ok=True)
                 except Exception as e:
                     logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
-                    if destination_path.exists():
+                    if destination_created and destination_path.exists():
                         shutil.rmtree(destination_path)
-                    if backup_dest.exists():
+                    if original_moved:
                         backup_dest.rename(destination_path)
                     raise IOError(f"Failed to restore snapshot directory: {e}") from e
                 else:
-                    if backup_dest.exists():
+                    if original_moved:
                         shutil.rmtree(backup_dest)
                 return
 
