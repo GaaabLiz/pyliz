@@ -135,7 +135,7 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
         # Create a subdirectory inside srch1 and rebuild the snap
         sub_dir = SOURCE_DATA_PATH / "srch1" / "subdir"
         sub_dir.mkdir(exist_ok=True)
-        self.catalogue, self.snap = _build_catalogue()
+        self.catalogue.update_assoc_with_installed(self.snap.id)
 
         # rglob("*") will yield the subdirectory, which is not a file
         params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)
@@ -153,8 +153,8 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
 
         unreadable_file = SOURCE_DATA_PATH / "srch1" / "unreadable.txt"
         unreadable_file.write_text("test")
-        # We need to recreate the snap to include this file
-        self.catalogue, self.snap = _build_catalogue()
+        # Refresh the snapshot's stored copy to include this file.
+        self.catalogue.update_assoc_with_installed(self.snap.id)
 
         with patch.object(Path, "open", autospec=True, side_effect=mocked_open):
             params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)

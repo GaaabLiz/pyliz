@@ -61,15 +61,27 @@ class SnapshotManager:
         """Saves the current snapshot object state to its JSON file."""
         SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
 
-    def create(self, progress_callback=None, message_callback=None):
+    def create(self, progress_callback=None, message_callback=None, *, replace_existing: bool = False):
         """
-        Creates the snapshot on the filesystem. This involves creating the main snapshot
-        directory and copying all associated directories into it. If the directory
-        already exists, its contents are cleared first.
+        Creates the snapshot by preparing its contents and metadata in staging.
+
+        Existing IDs are rejected unless replace_existing=True. An explicit
+        replacement retains the old directory until publication succeeds and
+        restores it if publication fails. Cleanup runs after commit.
+
+        Raises:
+            FileExistsError: If the destination exists and replacement is disabled.
         """
-        staging_path = self.path_catalogue / f"_staging_create_{self.snapshot.id}_{gen_random_string(4)}"
+        if not replace_existing and (self.path_snapshot.exists() or self.path_snapshot.is_symlink()):
+            raise FileExistsError(f"Snapshot destination '{self.path_snapshot}' already exists.")
+
+        self.path_catalogue.mkdir(parents=True, exist_ok=True)
+        transaction_path = Path(tempfile.mkdtemp(prefix=f"_staging_create_{self.snapshot.id}_", dir=self.path_catalogue))
+        staging_path = transaction_path / "new"
+        backup_path = transaction_path / "original"
+        original_moved = False
         try:
-            staging_path.mkdir(parents=True, exist_ok=False)
+            staging_path.mkdir()
 
             # We need to distribute the progress among directories if there are multiple.
             total_dirs = len(self.snapshot.directories)
@@ -87,13 +99,21 @@ class SnapshotManager:
             # Write json to staging BEFORE making it the final destination
             SnapshotSerializer.to_json(self.snapshot, staging_path / self.settings.json_filename)
 
-            if self.path_snapshot.exists():
-                remove_directory_or_move_to_temp(self.path_snapshot)
+            if self.path_snapshot.exists() or self.path_snapshot.is_symlink():
+                if not replace_existing:
+                    raise FileExistsError(f"Snapshot destination '{self.path_snapshot}' already exists.")
+                self.path_snapshot.rename(backup_path)
+                original_moved = True
             staging_path.rename(self.path_snapshot)
-        except Exception as e:
-            if staging_path.exists():
-                shutil.rmtree(staging_path, ignore_errors=True)
-            raise e
+        except Exception:
+            if original_moved:
+                # If rollback itself fails, preserve both copies in the
+                # transaction directory instead of deleting recoverable data.
+                backup_path.rename(self.path_snapshot)
+            shutil.rmtree(transaction_path, ignore_errors=True)
+            raise
+
+        SnapshotUtils.cleanup_after_commit([transaction_path], "Snapshot creation")
 
     def delete(self, message_callback=None):
         """
