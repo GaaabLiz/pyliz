@@ -13,10 +13,9 @@ Classes:
     SnapshotManager – Manages all filesystem operations for one Snapshot.
 """
 
-import os
 import shutil
+import stat
 import tempfile
-import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -567,7 +566,6 @@ class SnapshotManager:
         Returns:
             The path of the verified, published archive.
         """
-        temporary_path = None
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
                 raise ValueError(f"Unsupported backup type: {backup_type}")
@@ -589,46 +587,24 @@ class SnapshotManager:
             backup_path.mkdir(parents=True, exist_ok=True)
             zip_path = backup_path.joinpath(zip_name)
 
-            # Keep unfinished archives out of the normal backup listing. The
-            # temporary file is on the same filesystem as its final destination.
-            with tempfile.NamedTemporaryFile(dir=backup_path, prefix=".backup_", suffix=".partial", delete=False) as temporary_file:
-                temporary_path = Path(temporary_file.name)
-
-            with zipfile.ZipFile(temporary_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            def files_to_archive():
                 if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
                     for d in self.snapshot.directories:
                         folder = Path(d.original_path)
-                        if folder.is_dir():
-                            for file_path in folder.rglob("*"):
-                                if file_path.is_file():
-                                    if message_callback:
-                                        message_callback(f"Archiviazione: {file_path.name}")
-                                    archive.write(
-                                        file_path,
-                                        arcname=os.path.join(d.directory_name, file_path.relative_to(folder)),
-                                    )
-                elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
-                    source_dir = self.path_snapshot
-                    for file_path in source_dir.rglob("*"):
-                        if file_path.is_file():
-                            if message_callback:
-                                message_callback(f"Archiviazione: {file_path.name}")
-                            archive.write(file_path, arcname=file_path.relative_to(source_dir))
+                        try:
+                            mode = folder.stat().st_mode
+                        except FileNotFoundError:
+                            # A missing installation target has no data to protect.
+                            continue
+                        if not stat.S_ISDIR(mode):
+                            raise NotADirectoryError(f"Backup source '{folder}' is not a directory.")
+                        for file_path in SnapshotUtils.iter_files_strict(folder):
+                            yield file_path, Path(d.directory_name) / file_path.relative_to(folder)
+                else:
+                    for file_path in SnapshotUtils.iter_files_strict(self.path_snapshot):
+                        yield file_path, file_path.relative_to(self.path_snapshot)
 
-            # Reopen after close: disk-full errors can also happen while writing
-            # the central directory, and every member must pass its CRC check.
-            with zipfile.ZipFile(temporary_path, "r") as archive:
-                corrupted_member = archive.testzip()
-                if corrupted_member is not None:
-                    raise zipfile.BadZipFile(f"Backup validation failed for '{corrupted_member}'.")
-            temporary_path.replace(zip_path)
-            return zip_path
+            return SnapshotUtils.write_verified_zip(zip_path, files_to_archive(), message_callback)
         except Exception as e:
             logger.error(f"Failed to create backup for snapshot '{self.snapshot.id}': {e}")
             raise
-        finally:
-            if temporary_path is not None:
-                try:
-                    temporary_path.unlink(missing_ok=True)
-                except OSError as e:
-                    logger.warning(f"Could not remove unfinished backup '{temporary_path}': {e}")

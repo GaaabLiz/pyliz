@@ -12,8 +12,12 @@ Classes:
     SnapshotUtils – Static helper methods for Snapshot operations.
 """
 
+import os
 import shutil
-from collections.abc import Iterable
+import stat
+import tempfile
+import zipfile
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
@@ -29,6 +33,58 @@ from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
 
 class SnapshotUtils:
+    @staticmethod
+    def iter_files_strict(root: Path) -> Iterator[Path]:
+        """Enumerate files without suppressing scan or metadata errors.
+
+        Directory symlinks are not traversed, matching the previous rglob
+        policy. File symlinks are read; failures resolving them propagate.
+        """
+        if not stat.S_ISDIR(root.stat().st_mode):
+            raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
+        pending = [root]
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    mode = entry.stat(follow_symlinks=False).st_mode
+                    path = Path(entry.path)
+                    if stat.S_ISDIR(mode):
+                        pending.append(path)
+                    elif stat.S_ISREG(mode):
+                        yield path
+                    elif stat.S_ISLNK(mode) and stat.S_ISREG(entry.stat().st_mode):
+                        yield path
+
+    @staticmethod
+    def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback=None) -> Path:
+        """Publish an archive only after complete enumeration and CRC verification."""
+        temporary_path = None
+        try:
+            zip_path.parent.mkdir(parents=True, exist_ok=True)
+            # Complete enumeration before creating any archive in the source tree.
+            entries = list(files)
+            with tempfile.NamedTemporaryFile(dir=zip_path.parent, prefix=".backup_", suffix=".partial", delete=False) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+            with zipfile.ZipFile(temporary_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for source, archive_name in entries:
+                    if message_callback:
+                        message_callback(f"Archiviazione: {source.name}")
+                    archive.write(source, arcname=archive_name)
+            # Reopen after close: finalization can fail, and each member must
+            # pass its CRC check before the normal filename becomes visible.
+            with zipfile.ZipFile(temporary_path, "r") as archive:
+                corrupted_member = archive.testzip()
+                if corrupted_member is not None:
+                    raise zipfile.BadZipFile(f"Backup validation failed for '{corrupted_member}'.")
+            temporary_path.replace(zip_path)
+            return zip_path
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError as e:
+                    logger.warning(f"Could not remove unfinished backup '{temporary_path}': {e}")
+
     @staticmethod
     def cleanup_after_commit(paths: Iterable[Path], operation: str) -> None:
         """Remove transaction leftovers without rolling back committed data.
