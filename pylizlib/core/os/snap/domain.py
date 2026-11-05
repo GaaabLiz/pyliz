@@ -227,7 +227,7 @@ class SnapshotSettings:
         backup_pre_modify: Whether to create a backup before modifying a snapshot.
         backup_pre_delete: Whether to create a backup before deleting a snapshot.
         install_with_everyone_full_control: If on Windows, whether to grant 'Everyone'
-                                            full control over installed directories.
+                                            full control over installed directories (default False).
         snap_id_length: The character length for new snapshot IDs.
         folder_id_length: The character length for new folder association IDs.
     """
@@ -237,7 +237,7 @@ class SnapshotSettings:
     backup_pre_install: bool = False
     backup_pre_modify: bool = False
     backup_pre_delete: bool = False
-    install_with_everyone_full_control: bool = True
+    install_with_everyone_full_control: bool = False
     snap_id_length: int = 20
     folder_id_length: int = 6
 

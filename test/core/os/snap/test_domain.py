@@ -200,7 +200,7 @@ class TestSnapshotSettings(unittest.TestCase):
         self.assertFalse(s.backup_pre_install)
         self.assertFalse(s.backup_pre_modify)
         self.assertFalse(s.backup_pre_delete)
-        self.assertTrue(s.install_with_everyone_full_control)
+        self.assertFalse(s.install_with_everyone_full_control)
         self.assertEqual(s.snap_id_length, 20)
         self.assertEqual(s.folder_id_length, 6)
 

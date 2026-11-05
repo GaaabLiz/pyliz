@@ -18,6 +18,7 @@ Covers every public method of SnapshotManager:
 import errno
 import os
 import shutil
+import types
 import unittest
 import zipfile
 from pathlib import Path
@@ -25,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -803,6 +805,71 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         self.assertTrue(zips[0].name.startswith("backup_prefix2"))
 
 
+class TestSnapshotManagerWindowsPermissions(unittest.TestCase):
+    def setUp(self):
+        setup_test_dirs()
+        self.sources = create_source_dirs(SOURCE_DATA_PATH, ["permissions"])
+        self.snap = make_snapshot("WindowsPermissions", self.sources, n=1)
+        self.mgr = SnapshotManager(self.snap, CATALOGUE_PATH)
+        self.mgr.create()
+
+    def tearDown(self):
+        teardown_test_dirs()
+
+    def _windows_modules(self):
+        security = types.ModuleType("win32security")
+        constants = types.ModuleType("ntsecuritycon")
+        security.LookupAccountName = MagicMock(return_value=("everyone_sid", "domain", 1))
+        security.GetFileSecurity = MagicMock()
+        security.SetFileSecurity = MagicMock()
+        security.DACL_SECURITY_INFORMATION = 1
+        security.ACL_REVISION = 2
+        constants.OBJECT_INHERIT_ACE = 1
+        constants.CONTAINER_INHERIT_ACE = 2
+        constants.GENERIC_ALL = 3
+        return {"win32security": security, "ntsecuritycon": constants}
+
+    @patch("sys.platform", "win32")
+    def test_disabled_or_default_permissions_skip_the_entire_windows_branch(self):
+        for mode in ("direct_default", "direct_false", "catalogue_default", "catalogue_false"):
+            with self.subTest(mode=mode):
+                modules = self._windows_modules()
+                imported = []
+                real_import = __import__
+
+                def record_import(name, *args, **kwargs):
+                    if name in modules:
+                        imported.append(name)
+                    return real_import(name, *args, **kwargs)
+
+                with patch.dict("sys.modules", modules), patch("builtins.__import__", side_effect=record_import):
+                    if mode == "direct_default":
+                        self.mgr.install()
+                    elif mode == "direct_false":
+                        self.mgr.install(enable_everyone_full_control=False)
+                    else:
+                        settings = SnapshotSettings() if mode == "catalogue_default" else SnapshotSettings(install_with_everyone_full_control=False)
+                        SnapshotCatalogue(CATALOGUE_PATH, settings).install(self.snap)
+
+                self.assertEqual(imported, [])
+                modules["win32security"].LookupAccountName.assert_not_called()
+                modules["win32security"].GetFileSecurity.assert_not_called()
+                modules["win32security"].SetFileSecurity.assert_not_called()
+                self.assertEqual((self.sources[0] / "permissions_file.txt").read_text(), "content of permissions")
+
+    @patch("sys.platform", "win32")
+    def test_catalogue_can_explicitly_enable_everyone_permissions(self):
+        modules = self._windows_modules()
+        settings = SnapshotSettings(install_with_everyone_full_control=True)
+
+        with patch.dict("sys.modules", modules):
+            SnapshotCatalogue(CATALOGUE_PATH, settings).install(self.snap)
+
+        modules["win32security"].SetFileSecurity.assert_called_once()
+        dacl = modules["win32security"].GetFileSecurity.return_value.GetSecurityDescriptorDacl.return_value
+        dacl.AddAccessAllowedAceEx.assert_called_once_with(2, 3, 3, "everyone_sid")
+
+
 class TestSnapshotManagerCoverage(unittest.TestCase):
     def setUp(self):
         setup_test_dirs()
@@ -841,7 +908,7 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         mgr.create()
         with patch.dict("sys.modules", {"ntsecuritycon": None, "win32security": None}):
             with self.assertLogs(level="ERROR") as cm:
-                mgr.install()
+                mgr.install(enable_everyone_full_control=True)
             self.assertTrue(any("pywin32 not installed" in out for out in cm.output))
 
     @patch("sys.platform", "win32")
@@ -870,7 +937,7 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         mock_ntsecuritycon.GENERIC_ALL = 3
 
         with patch.dict("sys.modules", {"ntsecuritycon": mock_ntsecuritycon, "win32security": mock_win32security}):
-            mgr.install()
+            mgr.install(enable_everyone_full_control=True)
             mock_win32security.LookupAccountName.assert_called()
             mock_win32security.GetFileSecurity.assert_called()
             mock_dacl.AddAccessAllowedAceEx.assert_called()
@@ -892,7 +959,7 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
 
         with patch.dict("sys.modules", {"ntsecuritycon": mock_ntsecuritycon, "win32security": mock_win32security}):
             with self.assertLogs(level="ERROR") as cm:
-                mgr.install()
+                mgr.install(enable_everyone_full_control=True)
             self.assertTrue(any("Failed to set permissions" in out for out in cm.output))
 
     def test_install_remove_and_copy_exceptions(self):
