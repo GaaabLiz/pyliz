@@ -9,7 +9,8 @@ from pylizlib.ai import AiMediaScanner
 from pylizlib.core.network.req import is_internet_available
 from pylizlib.media.lizmedia import LizMedia
 
-TEST_LOCAL_DIR = Path("/Users/gabliz/Developer/pyliz/test_local")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TEST_LOCAL_DIR = PROJECT_ROOT / "test_local"
 INTEGRATION_WORK_DIR = TEST_LOCAL_DIR / "ai_media_scanner_integration"
 
 ASSETS = {
