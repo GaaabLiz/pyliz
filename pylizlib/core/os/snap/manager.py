@@ -21,8 +21,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import clear_folder_contents, remove_directory_or_move_to_temp, duplicate_directory
-from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
+from pylizlib.core.os.path import duplicate_directory, remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -33,6 +32,7 @@ from pylizlib.core.os.snap.domain import (
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
+from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
 
 
 class SnapshotManager:
@@ -69,22 +69,23 @@ class SnapshotManager:
         staging_path = self.path_catalogue / f"_staging_create_{self.snapshot.id}_{gen_random_string(4)}"
         try:
             staging_path.mkdir(parents=True, exist_ok=False)
-            
+
             # We need to distribute the progress among directories if there are multiple.
             total_dirs = len(self.snapshot.directories)
             for i, snap_dir in enumerate(self.snapshot.directories):
+
                 def dir_progress(copied, total):
                     if progress_callback:
                         # Calculate overall percentage based on dir index and dir progress
                         dir_pct = (copied / total) if total > 0 else 1.0
                         overall_pct = ((i + dir_pct) / total_dirs) * 100
                         progress_callback(int(overall_pct))
-                        
+
                 snap_dir.copy_install_to(staging_path, progress_callback=dir_progress, message_callback=message_callback)
-            
+
             # Write json to staging BEFORE making it the final destination
             SnapshotSerializer.to_json(self.snapshot, staging_path / self.settings.json_filename)
-            
+
             if self.path_snapshot.exists():
                 remove_directory_or_move_to_temp(self.path_snapshot)
             staging_path.rename(self.path_snapshot)
@@ -180,7 +181,7 @@ class SnapshotManager:
                     temp_dir_path = self.path_snapshot.joinpath(temp_name)
                     old_dir_path.rename(temp_dir_path)
                     temp_renames.append((temp_dir_path, self.path_snapshot.joinpath(edit.new_directory_name)))
-                    
+
         # Apply final renames
         for temp_path, final_path in temp_renames:
             if final_path.exists():
@@ -194,7 +195,7 @@ class SnapshotManager:
                 dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
                 if dir_path.exists():
                     remove_directory_or_move_to_temp(dir_path, message_callback=message_callback)
-                    
+
         # Handle additions
         add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
         added_paths = {e.new_path for e in add_actions}
@@ -247,50 +248,52 @@ class SnapshotManager:
             for dir_assoc in self.snapshot.directories:
                 system_path = Path(dir_assoc.original_path)
                 snapshot_copy_path = self.path_snapshot / dir_assoc.directory_name
-                
+
                 # 4. Copy each source to staging
                 staging_dir = self.path_snapshot / f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}"
                 backup_dir = self.path_snapshot / f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}"
-                
+
                 logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
-                
+
                 def copy_with_cb(src, dst, *, follow_symlinks=True):
                     if message_callback:
                         message_callback(f"Copia in corso: {Path(src).name}")
                     shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
-                
+
                 try:
                     shutil.copytree(system_path, staging_dir, copy_function=copy_with_cb)
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
                     raise RuntimeError(f"Failed to copy system path '{system_path}' to staging '{staging_dir}': {e}") from e
-                
-                rollbacks.append({
-                    "snapshot_copy_path": snapshot_copy_path,
-                    "staging_dir": staging_dir,
-                    "backup_dir": backup_dir,
-                    "dir_assoc": dir_assoc,
-                    "system_path": system_path,
-                })
+
+                rollbacks.append(
+                    {
+                        "snapshot_copy_path": snapshot_copy_path,
+                        "staging_dir": staging_dir,
+                        "backup_dir": backup_dir,
+                        "dir_assoc": dir_assoc,
+                        "system_path": system_path,
+                    }
+                )
 
             # Replace internal copy only at the end
             for rb in rollbacks:
                 snap_path = rb["snapshot_copy_path"]
                 staging_dir = rb["staging_dir"]
                 backup_dir = rb["backup_dir"]
-                
+
                 if snap_path.exists():
                     snap_path.rename(backup_dir)
-                
+
                 staging_dir.rename(snap_path)
-                
+
             # Cleanup backups and update metadata
             for rb in rollbacks:
                 backup_dir = rb["backup_dir"]
                 if backup_dir.exists():
                     shutil.rmtree(backup_dir)
-                    
+
                 dir_assoc = rb["dir_assoc"]
                 dir_assoc.mb_size = get_folder_size_mb(rb["system_path"])
 
@@ -300,10 +303,10 @@ class SnapshotManager:
                 snap_path = rb["snapshot_copy_path"]
                 staging_dir = rb["staging_dir"]
                 backup_dir = rb["backup_dir"]
-                
+
                 if staging_dir.exists():
                     shutil.rmtree(staging_dir)
-                    
+
                 if backup_dir.exists():
                     if snap_path.exists():
                         shutil.rmtree(snap_path)
@@ -322,10 +325,10 @@ class SnapshotManager:
         """
         for dir_assoc in self.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
-            
+
             if is_critical_system_path(install_path):
                 raise ValueError(f"Cannot remove installed copy at '{install_path}': it is a critical system path.")
-                
+
             if install_path.exists() and install_path.is_dir():
                 logger.info(f"Removing installed copy at '{install_path}'")
                 try:
@@ -346,9 +349,9 @@ class SnapshotManager:
                 installed directories.
             clear_destination (bool): If True, clears the destination directories before copying.
         """
-        import sys
         import os
         import platform
+        import sys
 
         if self.snapshot.os_created and self.snapshot.os_created != platform.system():
             raise RuntimeError(f"Cannot install snapshot: created on {self.snapshot.os_created}, but current OS is {platform.system()}.")
@@ -379,16 +382,16 @@ class SnapshotManager:
             for i, dir_assoc in enumerate(self.snapshot.directories):
                 source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
                 install_location = Path(dir_assoc.original_path)
-                
+
                 # 2. Copiare in una directory temporanea (Staging)
                 staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
                 backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
-                
+
                 total_bytes = 0
                 if progress_callback:
-                    total_bytes = sum(f.stat().st_size for f in source_dir.rglob('*') if f.is_file())
+                    total_bytes = sum(f.stat().st_size for f in source_dir.rglob("*") if f.is_file())
                 copied_bytes = [0]
-                
+
                 def copy_with_prog(src, dst, *, follow_symlinks=True):
                     if message_callback:
                         message_callback(f"Copia in corso: {Path(src).name}")
@@ -408,21 +411,17 @@ class SnapshotManager:
                     raise RuntimeError(f"Failed to copy to staging '{staging_dir}': {e}") from e
 
                 # 3. Se copytree termina senza eccezioni, l'operazione è integra (non catturiamo errori per singoli file)
-                
-                rollbacks.append({
-                    "install_loc": install_location,
-                    "staging_dir": staging_dir,
-                    "backup_dir": backup_dir
-                })
+
+                rollbacks.append({"install_loc": install_location, "staging_dir": staging_dir, "backup_dir": backup_dir})
 
             # 4. Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
             for rb in rollbacks:
                 install_loc = rb["install_loc"]
                 staging_dir = rb["staging_dir"]
                 backup_dir = rb["backup_dir"]
-                
+
                 install_loc.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 if clear_destination:
                     if install_loc.exists():
                         install_loc.rename(backup_dir)
@@ -446,7 +445,7 @@ class SnapshotManager:
                 backup_dir = rb["backup_dir"]
                 if backup_dir.exists():
                     shutil.rmtree(backup_dir)
-                    
+
             if win32security:
                 for rb in rollbacks:
                     install_loc = rb["install_loc"]
@@ -472,10 +471,10 @@ class SnapshotManager:
                 install_loc = rb["install_loc"]
                 staging_dir = rb["staging_dir"]
                 backup_dir = rb["backup_dir"]
-                
+
                 if staging_dir.exists():
                     shutil.rmtree(staging_dir)
-                    
+
                 if clear_destination and backup_dir.exists():
                     if install_loc.exists():
                         shutil.rmtree(install_loc)
@@ -490,14 +489,7 @@ class SnapshotManager:
             self.snapshot.date_last_used.isoformat(),
         )
 
-    def create_backup(
-        self,
-        backup_path: Path,
-        prefix: str,
-        backup_type: "BackupType",
-        is_export: bool = False,
-        message_callback=None
-    ):
+    def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None):
         """
         Creates a zip archive of the snapshot's data.
 

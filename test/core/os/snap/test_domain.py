@@ -10,25 +10,21 @@ Covers:
     - Snapshot: all properties, data CRUD, clone deep-copy (BUG-1 regression)
 """
 
-import shutil
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
     SnapEditAction,
     SnapEditType,
     Snapshot,
-    SnapshotBackupInfo,
     SnapshotSettings,
     SnapshotSortKey,
 )
 from test.core.os.snap.conftest import (
-    CATALOGUE_PATH,
     SOURCE_DATA_PATH,
     TEST_LOCAL_ROOT,
     create_source_dirs,

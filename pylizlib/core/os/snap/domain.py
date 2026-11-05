@@ -16,13 +16,13 @@ Classes:
     Snapshot            – A named collection of directory associations.
 """
 
+import platform
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
-import platform
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
@@ -124,19 +124,20 @@ class SnapDirAssociation:
             message_callback: A callable taking (message: str) to report the current file.
         """
         import os
+
         source = Path(self.original_path)
         destination = catalogue_target_path.joinpath(self.directory_name)
         destination.mkdir(parents=True, exist_ok=True)
-        
+
         total_bytes = 0
         if progress_callback:
             total_bytes = int((self.mb_size or 0) * 1024 * 1024)
             if total_bytes == 0:
                 # If size wasn't computed properly, try to get it here
-                total_bytes = sum(f.stat().st_size for f in source.rglob('*') if f.is_file())
-                
+                total_bytes = sum(f.stat().st_size for f in source.rglob("*") if f.is_file())
+
         copied_bytes = [0]
-        
+
         def copy_with_prog(src, dst, *, follow_symlinks=True):
             if message_callback:
                 message_callback(f"Elaborazione: {Path(src).name}")
@@ -158,11 +159,10 @@ class SnapEditType(Enum):
     REMOVE_DIR = "Remove"
     RENAME_DIR = "Rename"
 
+
 class BackupType(Enum):
     ASSOCIATED_DIRECTORIES = 1
     SNAPSHOT_DIRECTORY = 2
-
-
 
 
 @dataclass

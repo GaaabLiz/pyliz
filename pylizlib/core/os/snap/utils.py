@@ -13,14 +13,13 @@ Classes:
 """
 
 from pathlib import Path
-from typing import Optional
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.domain import (
-    Snapshot,
     SnapDirAssociation,
     SnapEditAction,
     SnapEditType,
+    Snapshot,
     SnapshotSortKey,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -86,7 +85,7 @@ class SnapshotUtils:
 
         Returns:
             The full path to the snapshot's directory.
-            
+
         Raises:
             ValueError: If the folder_name attempts path traversal or is invalid.
         """
@@ -98,11 +97,11 @@ class SnapshotUtils:
             raise ValueError(f"Snapshot ID cannot contain path separators: '{folder_name}'.")
 
         destination_path = catalogue_path / folder_name
-        
+
         try:
             catalogue_resolved = catalogue_path.resolve(strict=False)
             destination_resolved = destination_path.resolve(strict=False)
-            
+
             # Ensure destination is strictly inside catalogue
             if destination_resolved == catalogue_resolved or not str(destination_resolved).startswith(str(catalogue_resolved)):
                 raise ValueError(f"Snapshot path must be strictly contained within catalogue. Resolved: {destination_resolved}")
@@ -112,7 +111,6 @@ class SnapshotUtils:
             raise ValueError(f"Invalid snapshot path: {e}")
 
         return destination_path
-
 
     @staticmethod
     def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
@@ -166,7 +164,7 @@ class SnapshotUtils:
                     directory_name_to_remove=assoc.directory_name,
                 )
             )
-            
+
         # Find renamed folders (present in both, but directory_name changed because index changed)
         kept_paths = old_paths & new_paths
         for path in kept_paths:

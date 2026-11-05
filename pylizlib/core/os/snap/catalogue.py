@@ -24,7 +24,6 @@ from typing import Optional
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -137,10 +136,7 @@ class SnapshotCatalogue:
 
         info = self._parse_backup_info(backup_zip_path)
         if info.backup_type is None:
-            raise ValueError(
-                "Could not recognize backup type from filename. "
-                "Expected suffix '_ad' or '_sd' before timestamp."
-            )
+            raise ValueError("Could not recognize backup type from filename. Expected suffix '_ad' or '_sd' before timestamp.")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
@@ -155,9 +151,7 @@ class SnapshotCatalogue:
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
                 json_path = temp_dir_path / self.settings.json_filename
                 if not json_path.is_file():
-                    raise ValueError(
-                        f"Snapshot-directory backup does not contain '{self.settings.json_filename}'."
-                    )
+                    raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
 
                 restored_snapshot = SnapshotSerializer.from_json(json_path)
                 destination_path = SnapshotUtils.get_snapshot_path(restored_snapshot.id, self.path_catalogue)
@@ -185,14 +179,9 @@ class SnapshotCatalogue:
 
             snapshot = self.get_by_id(info.snapshot_id)
             if not snapshot:
-                raise ValueError(
-                    f"Snapshot with ID '{info.snapshot_id}' not found. "
-                    "Associated-directories restore requires an existing snapshot metadata entry."
-                )
+                raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Associated-directories restore requires an existing snapshot metadata entry.")
 
-            dir_name_to_assoc: dict[str, SnapDirAssociation] = {
-                assoc.directory_name: assoc for assoc in snapshot.directories
-            }
+            dir_name_to_assoc: dict[str, SnapDirAssociation] = {assoc.directory_name: assoc for assoc in snapshot.directories}
 
             # Preflight: collect all targets and validate unambiguously
             tasks = []
@@ -202,17 +191,11 @@ class SnapshotCatalogue:
 
                 candidate = dir_name_to_assoc.get(extracted_dir.name)
                 if not candidate:
-                    logger.warning(
-                        f"No matching associated directory found for backup folder '{extracted_dir.name}'. Skipping."
-                    )
+                    logger.warning(f"No matching associated directory found for backup folder '{extracted_dir.name}'. Skipping.")
                     continue
 
                 destination = Path(candidate.original_path)
-                tasks.append({
-                    "extracted_dir": extracted_dir,
-                    "destination": destination,
-                    "backup_dest": destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
-                })
+                tasks.append({"extracted_dir": extracted_dir, "destination": destination, "backup_dest": destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")})
 
             if not tasks:
                 raise ValueError("No associated directories were restored from the backup archive.")
@@ -224,13 +207,13 @@ class SnapshotCatalogue:
                     destination = task["destination"]
                     backup_dest = task["backup_dest"]
                     extracted_dir = task["extracted_dir"]
-                    
+
                     if destination.exists():
                         destination.rename(backup_dest)
-                    
+
                     shutil.copytree(extracted_dir, destination)
                     completed_rollbacks.append(task)
-                    
+
                 # Commit successful, delete backups
                 for task in tasks:
                     if task["backup_dest"].exists():
@@ -270,7 +253,6 @@ class SnapshotCatalogue:
         """
         self.path_catalogue = new_path
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
-
 
     def add(self, snap: Snapshot, progress_callback=None, message_callback=None):
         """
@@ -387,13 +369,7 @@ class SnapshotCatalogue:
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         # Use the existing create_backup method with a specific prefix for export
-        snap_manager.create_backup(
-            destination_path,
-            "export",
-            BackupType.ASSOCIATED_DIRECTORIES,
-            is_export=True,
-            message_callback=message_callback
-        )
+        snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES, is_export=True, message_callback=message_callback)
 
     def export_snapshot(self, snap_id: str, destination_path: Path, message_callback=None):
         """
@@ -408,13 +384,7 @@ class SnapshotCatalogue:
             raise ValueError(f"No snapshot found with ID {snap_id}")
 
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
-        snap_manager.create_backup(
-            destination_path,
-            "export_snap",
-            BackupType.SNAPSHOT_DIRECTORY,
-            is_export=True,
-            message_callback=message_callback
-        )
+        snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True, message_callback=message_callback)
 
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
         """

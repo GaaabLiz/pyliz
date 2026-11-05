@@ -19,10 +19,10 @@ import shutil
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -137,19 +137,20 @@ class TestSnapshotManagerJsonUpdates(unittest.TestCase):
         self.assertEqual(loaded.data.get("env"), "prod")
         self.assertIsNotNone(loaded.date_last_modified)
 
-    @patch('pylizlib.core.os.snap.domain.SnapDirAssociation.copy_install_to')
+    @patch("pylizlib.core.os.snap.domain.SnapDirAssociation.copy_install_to")
     def test_create_rollback_on_failure(self, mock_copy):
         snap = make_snapshot("CreateFail", self._src, n=1)
         mgr = self._mgr(snap)
         mock_copy.side_effect = Exception("simulated copy error")
-        
+
         with self.assertRaises(Exception):
             mgr.create()
-            
+
         # Ensure that no partial directory or staging directory is left behind
         staging_dirs = list(mgr.path_catalogue.glob(f"_staging_create_{snap.id}_*"))
         self.assertEqual(len(staging_dirs), 0)
         self.assertFalse(mgr.path_snapshot.exists())
+
 
 class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
     def setUp(self):
@@ -266,11 +267,11 @@ class TestSnapshotManagerUpdateAssocDirs(unittest.TestCase):
         mgr.create()
         original_dir = Path(snap.directories[0].original_path)
         shutil.rmtree(original_dir)
-        
+
         with self.assertRaises(FileNotFoundError) as ctx:
             mgr.update_associated_dirs_from_system()
         self.assertIn("does not exist", str(ctx.exception))
-        
+
         # Verify the original snapshot backup still exists (no data loss)
         snapshot_copy_path = mgr.path_snapshot / snap.directories[0].directory_name
         self.assertTrue(snapshot_copy_path.exists())
@@ -310,19 +311,19 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         # extra.txt should still exist because we didn't clear
         self.assertTrue((original_dir / "extra.txt").exists())
         self.assertTrue((original_dir / "i1_file.txt").exists())
-        
+
     def test_install_rolls_back_if_staging_fails(self):
         snap = make_snapshot("MgrInstallFail", self._src, n=1)
         mgr = self._mgr(snap)
         mgr.create()
         original_dir = Path(snap.directories[0].original_path)
         (original_dir / "important_file.txt").write_text("dont lose me")
-        
+
         # We mock copytree to fail
-        with patch('shutil.copytree', side_effect=Exception("Simulated copy failure")):
+        with patch("shutil.copytree", side_effect=Exception("Simulated copy failure")):
             with self.assertRaises(RuntimeError):
                 mgr.install(clear_destination=True)
-                
+
         # The installation failed, so the original directory must remain untouched
         self.assertTrue((original_dir / "important_file.txt").exists())
         self.assertEqual((original_dir / "important_file.txt").read_text(), "dont lose me")
@@ -336,19 +337,19 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         mgr = self._mgr(snap)
         mgr.create()
         original_dir = Path(snap.directories[0].original_path)
-        shutil.rmtree(original_dir) # Make it disappear before install
-        
+        shutil.rmtree(original_dir)  # Make it disappear before install
+
         mgr.install(clear_destination=True)
         self.assertTrue(original_dir.exists())
         self.assertTrue((original_dir / "i1_file.txt").exists())
-        
+
     def test_install_fails_preflight_if_source_missing(self):
         snap = make_snapshot("InstPreflight", self._src, n=1)
         mgr = self._mgr(snap)
         mgr.create()
         source_dir = mgr.path_snapshot / snap.directories[0].directory_name
-        shutil.rmtree(source_dir) # Make source disappear
-        
+        shutil.rmtree(source_dir)  # Make source disappear
+
         with self.assertRaises(FileNotFoundError) as ctx:
             mgr.install(clear_destination=True)
         self.assertIn("does not exist inside the snapshot", str(ctx.exception))
@@ -380,7 +381,7 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             mgr.remove_installed_copies()
         self.assertIn("critical system path", str(ctx.exception))
-        
+
     def test_install_blocks_critical_paths(self):
         snap = Snapshot(
             id=gen_random_string(8),
@@ -421,17 +422,15 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         old_kept_dir_name = kept_assoc.directory_name
         kept_assoc.index = 0
         new_kept_dir_name = kept_assoc.directory_name
-        
+
         # Add a new one
-        snap_new.directories.append(
-            SnapDirAssociation(index=1, original_path=str(src_sorted[2]), folder_id="added999")
-        )
-        
+        snap_new.directories.append(SnapDirAssociation(index=1, original_path=str(src_sorted[2]), folder_id="added999"))
+
         edits = SnapshotUtils.get_edits_between_snapshots(snap, snap_new)
         # edits should contain a REMOVE, an ADD, and a RENAME (because kept_assoc index changed)
         self.assertEqual(len(edits), 3)
         self.assertTrue(any(e.action_type.name == "RENAME_DIR" for e in edits))
-        
+
         mgr2 = SnapshotManager(snap_new, CATALOGUE_PATH)
         mgr2.update_from_actions_list(edits)
 
@@ -449,7 +448,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         zips = list(BACKUP_PATH.glob("*.zip"))
         self.assertEqual(len(zips), 1)
         self.assertIn("test_prefix", zips[0].name)
-        
+
         with zipfile.ZipFile(zips[0]) as zf:
             names = zf.namelist()
         self.assertTrue(any("snapshot.json" in n for n in names))
@@ -498,57 +497,58 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
         install_path = Path(snap.directories[0].original_path)
-        
+
         # Test 231-232
         shutil.rmtree(install_path)
         with self.assertLogs(level="DEBUG") as cm:
             logger.setLevel("DEBUG")
             mgr.remove_installed_copies()
         self.assertTrue(any("does not exist or is not a directory" in out for out in cm.output))
-        
+
         # Test 229-230
         install_path.mkdir(parents=True, exist_ok=True)
-        with patch('shutil.rmtree', side_effect=Exception("mocked error")):
+        with patch("shutil.rmtree", side_effect=Exception("mocked error")):
             with self.assertLogs(level="ERROR") as cm2:
                 mgr.remove_installed_copies()
             self.assertTrue(any("Failed to remove directory" in out for out in cm2.output))
 
-    @patch('sys.platform', 'win32')
+    @patch("sys.platform", "win32")
     def test_install_win32_no_pywin32(self):
         # coverage 247-252
         snap = make_snapshot("Win32NoPywin32", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
-        with patch.dict('sys.modules', {'ntsecuritycon': None, 'win32security': None}):
+        with patch.dict("sys.modules", {"ntsecuritycon": None, "win32security": None}):
             with self.assertLogs(level="ERROR") as cm:
                 mgr.install()
             self.assertTrue(any("pywin32 not installed" in out for out in cm.output))
 
-    @patch('sys.platform', 'win32')
+    @patch("sys.platform", "win32")
     def test_install_win32_with_pywin32_success(self):
         # coverage 295-306
         snap = make_snapshot("Win32Pywin32Succ", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
         import types
-        mock_win32security = types.ModuleType('win32security')
-        mock_ntsecuritycon = types.ModuleType('ntsecuritycon')
-        
+
+        mock_win32security = types.ModuleType("win32security")
+        mock_ntsecuritycon = types.ModuleType("ntsecuritycon")
+
         mock_win32security.LookupAccountName = MagicMock(return_value=("everyone_sid", "domain", 1))
         mock_win32security.DACL_SECURITY_INFORMATION = 1
         mock_win32security.ACL_REVISION = 2
         mock_win32security.SetFileSecurity = MagicMock()
-        
+
         mock_sd = MagicMock()
         mock_dacl = MagicMock()
         mock_sd.GetSecurityDescriptorDacl.return_value = mock_dacl
         mock_win32security.GetFileSecurity = MagicMock(return_value=mock_sd)
-        
+
         mock_ntsecuritycon.OBJECT_INHERIT_ACE = 1
         mock_ntsecuritycon.CONTAINER_INHERIT_ACE = 2
         mock_ntsecuritycon.GENERIC_ALL = 3
-        
-        with patch.dict('sys.modules', {'ntsecuritycon': mock_ntsecuritycon, 'win32security': mock_win32security}):
+
+        with patch.dict("sys.modules", {"ntsecuritycon": mock_ntsecuritycon, "win32security": mock_win32security}):
             mgr.install()
             mock_win32security.LookupAccountName.assert_called()
             mock_win32security.GetFileSecurity.assert_called()
@@ -556,19 +556,20 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
             mock_sd.SetSecurityDescriptorDacl.assert_called()
             mock_win32security.SetFileSecurity.assert_called()
 
-    @patch('sys.platform', 'win32')
+    @patch("sys.platform", "win32")
     def test_install_win32_with_pywin32_exceptions(self):
         # coverage 290-313
         snap = make_snapshot("Win32Pywin32", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
         import types
-        mock_win32security = types.ModuleType('win32security')
-        mock_ntsecuritycon = types.ModuleType('ntsecuritycon')
-        
+
+        mock_win32security = types.ModuleType("win32security")
+        mock_ntsecuritycon = types.ModuleType("ntsecuritycon")
+
         mock_win32security.LookupAccountName = MagicMock(side_effect=Exception("win32 error"))
-        
-        with patch.dict('sys.modules', {'ntsecuritycon': mock_ntsecuritycon, 'win32security': mock_win32security}):
+
+        with patch.dict("sys.modules", {"ntsecuritycon": mock_ntsecuritycon, "win32security": mock_win32security}):
             with self.assertLogs(level="ERROR") as cm:
                 mgr.install()
             self.assertTrue(any("Failed to set permissions" in out for out in cm.output))
@@ -578,17 +579,17 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         snap = make_snapshot("InstallExceptions", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
-        
+
         install_location = Path(snap.directories[0].original_path)
         install_location.mkdir(parents=True, exist_ok=True)
         (install_location / "some_dir").mkdir()
         (install_location / "some_file.txt").write_text("x")
-        
+
         source_dir = mgr.path_snapshot / snap.directories[0].directory_name
         (source_dir / "src_dir").mkdir()
         (source_dir / "src_file.txt").write_text("x")
-        
-        with patch('shutil.copytree', side_effect=Exception("copytree err")):
+
+        with patch("shutil.copytree", side_effect=Exception("copytree err")):
             with self.assertRaises(RuntimeError) as cm:
                 mgr.install()
             self.assertIn("Failed to copy", str(cm.exception))
@@ -598,7 +599,7 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         snap = make_snapshot("BackupExceptions", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
-        with patch('zipfile.ZipFile', side_effect=Exception("zip error")):
+        with patch("zipfile.ZipFile", side_effect=Exception("zip error")):
             with self.assertLogs(level="ERROR") as cm:
                 mgr.create_backup(BACKUP_PATH, "pref", BackupType.SNAPSHOT_DIRECTORY)
             self.assertIn("zip error", " ".join(cm.output))

@@ -20,7 +20,6 @@ Scenarios:
 import shutil
 import unittest
 from datetime import datetime
-from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
@@ -29,6 +28,7 @@ from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     Snapshot,
     SnapshotSettings,
+    SnapshotSortKey,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.searcher import (
@@ -38,14 +38,12 @@ from pylizlib.core.os.snap.searcher import (
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
-from pylizlib.core.os.snap.domain import SnapshotSortKey
 from test.core.os.snap.conftest import (
     BACKUP_PATH,
     CATALOGUE_PATH,
     SOURCE_DATA_PATH,
     TEST_LOCAL_ROOT,
     downloader,
-    make_snapshot,
     reset_index,
     setup_test_dirs,
     teardown_test_dirs,
@@ -397,6 +395,7 @@ class TestBugFixesRegression(unittest.TestCase):
     def test_bug1_snapshot_date_created_unique_per_instance(self):
         """BUG-1: date_created must not be a shared default."""
         import time
+
         first = Snapshot(id="x", name="x", desc="")
         time.sleep(0.02)
         second = Snapshot(id="y", name="y", desc="")

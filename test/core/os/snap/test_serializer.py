@@ -169,6 +169,7 @@ class TestSnapshotSerializerConverter(unittest.TestCase):
     def test_converter_handles_enum(self):
         class DummyEnum(Enum):
             FOO = "bar"
+
         result = SnapshotSerializer._converter(DummyEnum.FOO)
         self.assertEqual(result, "bar")
 

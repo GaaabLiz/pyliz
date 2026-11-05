@@ -23,6 +23,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -30,8 +31,6 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
-from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
-from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from test.core.os.snap.conftest import (
     BACKUP_PATH,
     CATALOGUE_PATH,
@@ -110,12 +109,12 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
         # Create a valid snapshot
         snap = make_snapshot("ValidSnap", self._src, n=1)
         self.cat.add(snap)
-        
+
         # Create a corrupted entry (directory without json)
         corrupted_dir = CATALOGUE_PATH / "corrupted_id"
         corrupted_dir.mkdir()
         (corrupted_dir / "some_file.txt").write_text("x")
-        
+
         # get_all should skip the corrupted entry and return only the valid one
         all_snaps = self.cat.get_all()
         self.assertEqual(len(all_snaps), 1)
@@ -158,16 +157,16 @@ class TestSnapshotCatalogueBackupTriggers(unittest.TestCase):
     def test_install_creates_backup_when_enabled(self):
         snap = make_snapshot("InstBck", self._src, n=1)
         self.cat.add(snap)
-        
+
         # Populate the original directory with some content so the backup has something to save
         original_dir = Path(snap.directories[0].original_path)
         original_dir.mkdir(parents=True, exist_ok=True)
         (original_dir / "pre_install_file.txt").write_text("content to backup")
-        
+
         self.cat.install(snap)
         backups = list(BACKUP_PATH.glob("backup_preinstall_*.zip"))
         self.assertEqual(len(backups), 1)
-        
+
         # Verify the content of the ZIP, not just its existence (P0-02)
         with zipfile.ZipFile(backups[0]) as zf:
             names = zf.namelist()
@@ -224,9 +223,7 @@ class TestSnapshotCatalogueUpdate(unittest.TestCase):
         new = old.clone()
         new.name = "UpdateNew"
         new.directories.pop(0)
-        new.directories.append(
-            SnapDirAssociation(index=99, original_path=str(src_sorted[2]), folder_id=gen_random_string(6))
-        )
+        new.directories.append(SnapDirAssociation(index=99, original_path=str(src_sorted[2]), folder_id=gen_random_string(6)))
         self.cat.update_snapshot_by_objs(old, new)
         updated = self.cat.get_by_id(new.id)
         self.assertEqual(updated.name, "UpdateNew")
@@ -517,13 +514,13 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         # coverage for line 135
         with self.assertRaises(ValueError):
             self.cat.restore_backup(BACKUP_PATH / "nonexistent.zip")
-            
+
         with self.assertRaises(ValueError):
             notzip = BACKUP_PATH / "notzip.txt"
             notzip.write_text("")
             self.cat.restore_backup(notzip)
 
-    @patch('zipfile.ZipFile')
+    @patch("zipfile.ZipFile")
     def test_restore_backup_zip_exceptions(self, mock_zip):
         # coverage for 149-152
         mock_zip.side_effect = zipfile.BadZipFile("bad zip")
@@ -531,7 +528,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         zip_path.touch()
         with self.assertRaises(ValueError):
             self.cat.restore_backup(zip_path)
-        
+
         mock_zip.side_effect = Exception("other error")
         with self.assertRaises(IOError):
             self.cat.restore_backup(zip_path)
@@ -551,29 +548,29 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
         mgr.create_backup(BACKUP_PATH, "bck", BackupType.SNAPSHOT_DIRECTORY)
         backup_zip = sorted(BACKUP_PATH.glob("*_*_sd_*.zip"))[-1]
-        
+
         # Keep directory so destination_path.exists() is true
         self.cat.restore_backup(backup_zip)
         self.assertTrue((CATALOGUE_PATH / snap.id).exists())
 
-    @patch('shutil.copytree')
+    @patch("shutil.copytree")
     def test_restore_backup_sd_rolls_back_on_error(self, mock_copytree):
         snap = make_snapshot("RestoreSDFail", self._src, n=1)
         self.cat.add(snap)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
         mgr.create_backup(BACKUP_PATH, "bck", BackupType.SNAPSHOT_DIRECTORY)
         backup_zip = sorted(BACKUP_PATH.glob("*_*_sd_*.zip"))[-1]
-        
+
         # Put something in the snapshot directory to verify rollback
         dest = CATALOGUE_PATH / snap.id
         (dest / "old_file.txt").write_text("should_stay")
-        
+
         mock_copytree.side_effect = Exception("simulated copy failure")
-        
+
         with self.assertRaises(IOError) as ctx:
             self.cat.restore_backup(backup_zip)
         self.assertIn("Failed to restore snapshot directory", str(ctx.exception))
-        
+
         self.assertTrue((dest / "old_file.txt").exists())
         self.assertEqual((dest / "old_file.txt").read_text(), "should_stay")
 
@@ -599,11 +596,11 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         # coverage for 191-194
         snap = make_snapshot("RestoreADUnmatch", self._src, n=1)
         self.cat.add(snap)
-        
+
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("unmatched_dir/file.txt", "x")
-            
+
         with self.assertRaises(ValueError) as ctx:
             self.cat.restore_backup(zip_path)
         self.assertIn("No associated directories were restored", str(ctx.exception))
@@ -613,42 +610,42 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         snap = make_snapshot("RestoreADItems", self._src, n=1)
         self.cat.add(snap)
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
-        
+
         dir_name = snap.directories[0].directory_name
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(f"{dir_name}/subdir/file.txt", "x")
             zf.writestr(f"{dir_name}/file.txt", "x")
-            
+
         # Put a subdir and file in destination to trigger removal
         dest = Path(snap.directories[0].original_path)
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "old_subdir").mkdir()
         (dest / "old_file.txt").write_text("x")
-        
+
         self.cat.restore_backup(zip_path)
         self.assertTrue((dest / "subdir" / "file.txt").exists())
         self.assertFalse((dest / "old_file.txt").exists())
 
-    @patch('shutil.copytree')
+    @patch("shutil.copytree")
     def test_restore_backup_ad_rolls_back_on_error(self, mock_copytree):
         snap = make_snapshot("RestoreADFail", self._src, n=1)
         self.cat.add(snap)
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
-        
+
         dir_name = snap.directories[0].directory_name
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(f"{dir_name}/file.txt", "x")
-            
+
         dest = Path(snap.directories[0].original_path)
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "old_file.txt").write_text("should_stay")
-        
+
         mock_copytree.side_effect = Exception("simulated failure")
-        
+
         with self.assertRaises(IOError) as ctx:
             self.cat.restore_backup(zip_path)
         self.assertIn("Failed to restore associated directories", str(ctx.exception))
-        
+
         # The rollback should have restored old_file.txt
         self.assertTrue((dest / "old_file.txt").exists())
         self.assertEqual((dest / "old_file.txt").read_text(), "should_stay")
@@ -658,7 +655,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cat.import_catalogue(BACKUP_PATH / "nonexistent.zip")
 
-    @patch('zipfile.ZipFile')
+    @patch("zipfile.ZipFile")
     def test_import_catalogue_exceptions(self, mock_zip):
         # coverage for 425-426
         mock_zip.side_effect = zipfile.BadZipFile("bad zip")
@@ -666,7 +663,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         zip_path.touch()
         with self.assertRaises(ValueError):
             self.cat.import_catalogue(zip_path)
-        
+
         mock_zip.side_effect = Exception("error")
         with self.assertRaises(IOError):
             self.cat.import_catalogue(zip_path)
@@ -678,8 +675,8 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
             zf.writestr("file_not_dir.txt", "x")
             zf.writestr("no_json_dir/file.txt", "x")
             zf.writestr("no_id_dir/" + self.settings.json_filename, '{"no_id": 1}')
-            zf.writestr("bad_json_dir/" + self.settings.json_filename, 'invalid json')
-            
+            zf.writestr("bad_json_dir/" + self.settings.json_filename, "invalid json")
+
         with self.assertLogs(level="WARNING") as cm:
             self.cat.import_catalogue(zip_path)
         log_out = " ".join(cm.output)
@@ -687,7 +684,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.assertIn("snapshot ID is missing from json", log_out)
         self.assertIn("Failed to import snapshot", log_out)
 
-    @patch('zipfile.ZipFile')
+    @patch("zipfile.ZipFile")
     def test_import_snapshot_exceptions(self, mock_zip):
         # coverage for 484-485
         mock_zip.side_effect = zipfile.BadZipFile("bad zip")
@@ -695,7 +692,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         zip_path.touch()
         with self.assertRaises(ValueError):
             self.cat.import_snapshot(zip_path)
-        
+
         mock_zip.side_effect = Exception("error")
         with self.assertRaises(IOError):
             self.cat.import_snapshot(zip_path)
@@ -704,8 +701,8 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         # coverage for 494-495
         zip_path = BACKUP_PATH / "snap.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr(self.settings.json_filename, 'invalid json')
-            
+            zf.writestr(self.settings.json_filename, "invalid json")
+
         with self.assertRaises(ValueError):
             self.cat.import_snapshot(zip_path)
 

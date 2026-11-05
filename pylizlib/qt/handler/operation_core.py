@@ -1,5 +1,4 @@
 import time
-from abc import abstractmethod
 from time import sleep
 from typing import Any, Callable
 
@@ -30,7 +29,7 @@ class Task(QObject):
         self.result: Any = None
         self.progress = 0
         self.is_cancelled = False
-        
+
     def cancel(self):
         self.is_cancelled = True
 
@@ -55,12 +54,14 @@ class Task(QObject):
     def gen_update_task_progress(self, current: int, total: int):
         self.update_task_progress(get_step_progress_percentage(current, total))
 
+
 class GenericTask(Task):
     def __init__(self, name: str, func: Callable):
         super().__init__(name)
         self.func = func
-        
+
         import inspect
+
         sig = inspect.signature(self.func)
         self.supports_progress = len(sig.parameters) == 1
 

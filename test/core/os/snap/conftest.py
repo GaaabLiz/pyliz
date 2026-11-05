@@ -12,14 +12,13 @@ from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap import (
     SnapDirAssociation,
     Snapshot,
-    SnapshotSettings,
 )
 from pylizlib.core.testing.sample_downloader import SampleImageDownloader
 
 # ---------------------------------------------------------------------------
 # Root paths
 # ---------------------------------------------------------------------------
-TEST_ROOT = Path(__file__).parent.parent.parent.parent          # test/
+TEST_ROOT = Path(__file__).parent.parent.parent.parent  # test/
 TEST_LOCAL_ROOT = TEST_ROOT.parent / "test_local" / "snap_tests"
 CATALOGUE_PATH = TEST_LOCAL_ROOT / "catalogue"
 SOURCE_DATA_PATH = TEST_LOCAL_ROOT / "source_data"
@@ -34,6 +33,7 @@ downloader = SampleImageDownloader(cache_dir=_IMAGE_CACHE)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def reset_index() -> None:
     """Resets the SnapDirAssociation class-level index counter to 0."""

@@ -16,7 +16,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-from pylizlib.core.os.snap.domain import Snapshot, SnapDirAssociation
+from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
 
 
 class SnapshotSerializer:
@@ -74,6 +74,7 @@ class SnapshotSerializer:
 
         if "os_created" not in data:
             import platform
+
             data["os_created"] = platform.system()
 
         return Snapshot(**data)

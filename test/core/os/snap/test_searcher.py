@@ -13,12 +13,10 @@ Covers every public and private method of SnapshotSearcher:
     - SnapshotSearchResult field population for content vs. filename matches
 """
 
-import shutil
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
 from pylizlib.core.os.snap.searcher import (
@@ -26,12 +24,10 @@ from pylizlib.core.os.snap.searcher import (
     SearchTarget,
     SnapshotSearcher,
     SnapshotSearchParams,
-    SnapshotSearchResult,
 )
 from test.core.os.snap.conftest import (
     CATALOGUE_PATH,
     SOURCE_DATA_PATH,
-    TEST_LOCAL_ROOT,
     reset_index,
     setup_test_dirs,
     teardown_test_dirs,
@@ -144,11 +140,12 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
         # rglob("*") will yield the subdirectory, which is not a file
         params = SnapshotSearchParams(query="test", query_type=QueryType.TEXT, search_target=SearchTarget.FILE_CONTENT)
         results = self.searcher.search(self.snap, params)
-        # Should not throw exception, handles dir gracefully
-        self.assertTrue(True)
+        # Directories yielded by rglob should not appear as search results.
+        self.assertNotIn("subdir", {result.file_path.name for result in results})
 
     def test_search_in_file_exception(self):
         original_open = Path.open
+
         def mocked_open(self_path, *args, **kwargs):
             if "unreadable" in self_path.name:
                 raise Exception("Read error")
@@ -164,7 +161,6 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
             results = self.searcher.search(self.snap, params)
             # Make sure it didn't crash and we got some results but skipped the exception one
             self.assertTrue(len(results) > 0)
-
 
 
 class TestSnapshotSearcherFilenameSearch(unittest.TestCase):

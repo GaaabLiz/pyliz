@@ -16,6 +16,7 @@ Sub-modules:
     searcher    – Full-text / filename search across snapshots.
 """
 
+from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -26,10 +27,7 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     SnapshotSortKey,
 )
-from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.utils import SnapshotUtils
 from pylizlib.core.os.snap.manager import SnapshotManager
-from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.searcher import (
     QueryType,
     SearchTarget,
@@ -38,6 +36,8 @@ from pylizlib.core.os.snap.searcher import (
     SnapshotSearchParams,
     SnapshotSearchResult,
 )
+from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.utils import SnapshotUtils
 
 __all__ = [
     # domain

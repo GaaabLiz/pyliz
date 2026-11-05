@@ -59,11 +59,7 @@ def generate_project_module(pyproject_path: Path, py_file: Path) -> int:
             "authors": authors,
         }
 
-        authors_repr = (
-            "["
-            + ", ".join(f"({repr(name)}, {repr(email)})" for name, email in info["authors"])
-            + "]"
-        )
+        authors_repr = "[" + ", ".join(f"({repr(name)}, {repr(email)})" for name, email in info["authors"]) + "]"
 
         lines = [
             "# fmt: off",
@@ -149,26 +145,17 @@ def generate_inno_iss(
                 'Name: "english"; MessagesFile: "compiler:Default.isl"',
                 "",
                 "[Tasks]",
-                (
-                    'Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; '
-                    'GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked'
-                ),
+                ('Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked'),
                 "",
                 "[Files]",
                 'Source: "{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion',
                 "",
                 "[Icons]",
                 'Name: "{group}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"',
-                (
-                    'Name: "{autodesktop}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; '
-                    "Tasks: desktopicon"
-                ),
+                ('Name: "{autodesktop}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; Tasks: desktopicon'),
                 "",
                 "[Run]",
-                (
-                    'Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; '
-                    "Flags: nowait postinstall skipifsilent"
-                ),
+                ('Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent'),
                 "",
             ]
         )
@@ -365,13 +352,9 @@ def validate_ci_config(
         if len(set(apps)) != len(apps):
             raise ValueError("APPS_LIST contains duplicate application identifiers.")
         if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", app) for app in apps):
-            raise ValueError(
-                "APPS_LIST identifiers must contain only letters, numbers, and underscores."
-            )
+            raise ValueError("APPS_LIST identifiers must contain only letters, numbers, and underscores.")
 
-        native_build_enabled = any(
-            value == "1" for value in (build_linux, build_macos, build_windows)
-        )
+        native_build_enabled = any(value == "1" for value in (build_linux, build_macos, build_windows))
         if native_build_enabled and not apps:
             raise ValueError("CI_BUILD_* requires at least one app in APPS_LIST.")
 
@@ -383,34 +366,19 @@ def validate_ci_config(
 
         if enable_windows_installer == "1":
             artifact_patterns = shlex.split(release_artifacts)
-            if not any(
-                fnmatch.fnmatchcase(installer_path, pattern) for pattern in artifact_patterns
-            ):
-                raise ValueError(
-                    "RELEASE_ARTIFACTS must include the configured Inno Setup installer "
-                    f"({installer_path}) when ENABLE_WINDOWS_INSTALLER=1."
-                )
+            if not any(fnmatch.fnmatchcase(installer_path, pattern) for pattern in artifact_patterns):
+                raise ValueError(f"RELEASE_ARTIFACTS must include the configured Inno Setup installer ({installer_path}) when ENABLE_WINDOWS_INSTALLER=1.")
 
         installer_publishers = enable_chocolatey_publish == "1" or enable_winget_publish == "1"
         if installer_publishers:
             if build_windows != "1" or enable_windows_installer != "1":
-                raise ValueError(
-                    "Chocolatey and WinGet publication require CI_BUILD_WINDOWS=1 and "
-                    "ENABLE_WINDOWS_INSTALLER=1."
-                )
+                raise ValueError("Chocolatey and WinGet publication require CI_BUILD_WINDOWS=1 and ENABLE_WINDOWS_INSTALLER=1.")
         if enable_homebrew_publish == "1" and not homebrew_license.strip():
-            raise ValueError(
-                "CI_HOMEBREW_LICENSE must be configured before enabling Homebrew publication."
-            )
+            raise ValueError("CI_HOMEBREW_LICENSE must be configured before enabling Homebrew publication.")
         if enable_homebrew_publish == "1":
             lower_homepage = homebrew_homepage.lower()
-            if not homebrew_homepage.startswith("https://") or any(
-                placeholder in lower_homepage
-                for placeholder in ("your-org", "your-repo", "example.com")
-            ):
-                raise ValueError(
-                    "CI_HOMEBREW_HOMEPAGE must be set to the project's real HTTPS homepage."
-                )
+            if not homebrew_homepage.startswith("https://") or any(placeholder in lower_homepage for placeholder in ("your-org", "your-repo", "example.com")):
+                raise ValueError("CI_HOMEBREW_HOMEPAGE must be set to the project's real HTTPS homepage.")
             if not re.fullmatch(r"[A-Za-z0-9_.-]+/homebrew-[A-Za-z0-9_.-]+", homebrew_tap_repo):
                 raise ValueError("CI_HOMEBREW_TAP_REPO must use the owner/homebrew-<tap> format.")
             if "your-org" in homebrew_tap_repo.lower():
@@ -418,9 +386,7 @@ def validate_ci_config(
             with Path(pyproject_path).open("rb") as file_handle:
                 project_metadata = tomllib.load(file_handle).get("project", {})
             resource_path = Path(homebrew_resources_file)
-            resource_text = (
-                resource_path.read_text(encoding="utf-8") if resource_path.is_file() else ""
-            )
+            resource_text = resource_path.read_text(encoding="utf-8") if resource_path.is_file() else ""
             if project_metadata.get("dependencies") and 'resource "' not in resource_text:
                 raise ValueError(
                     "Homebrew publication needs a resource file for the project's runtime "
@@ -431,10 +397,7 @@ def validate_ci_config(
 
         def require_project_url(label: str, value: str) -> None:
             lower_value = value.lower()
-            if not value.startswith("https://") or any(
-                placeholder in lower_value
-                for placeholder in ("your-org", "your-repo", "example.com")
-            ):
+            if not value.startswith("https://") or any(placeholder in lower_value for placeholder in ("your-org", "your-repo", "example.com")):
                 raise ValueError(f"{label} must be set to the project's real HTTPS URL.")
 
         if enable_chocolatey_publish == "1":
@@ -442,43 +405,28 @@ def validate_ci_config(
             require_project_url("CI_CHOCOLATEY_LICENSE_URL", chocolatey_license_url)
             require_project_url("CI_CHOCOLATEY_INSTALLER_URL", chocolatey_installer_url)
             if "{version}" not in chocolatey_installer_url:
-                raise ValueError(
-                    "CI_CHOCOLATEY_INSTALLER_URL must contain the {version} placeholder."
-                )
+                raise ValueError("CI_CHOCOLATEY_INSTALLER_URL must contain the {version} placeholder.")
 
         if enable_winget_publish == "1":
             if not winget_license.strip():
-                raise ValueError(
-                    "CI_WINGET_LICENSE must be configured before enabling WinGet publication."
-                )
+                raise ValueError("CI_WINGET_LICENSE must be configured before enabling WinGet publication.")
             if not winget_license_url.startswith("https://"):
-                raise ValueError(
-                    "CI_WINGET_LICENSE_URL must be an HTTPS URL before enabling WinGet."
-                )
+                raise ValueError("CI_WINGET_LICENSE_URL must be an HTTPS URL before enabling WinGet.")
             require_project_url("CI_WINGET_LICENSE_URL", winget_license_url)
             require_project_url("CI_WINGET_HOMEPAGE", winget_homepage)
             require_project_url("CI_WINGET_INSTALLER_URL", winget_installer_url)
             if "{version}" not in winget_installer_url:
                 raise ValueError("CI_WINGET_INSTALLER_URL must contain the {version} placeholder.")
             if winget_installer_file != installer_path:
-                raise ValueError(
-                    "CI_WINGET_INSTALLER_FILE must match the Inno Setup output path "
-                    f"({installer_path}) so its checksum matches the published installer."
-                )
+                raise ValueError(f"CI_WINGET_INSTALLER_FILE must match the Inno Setup output path ({installer_path}) so its checksum matches the published installer.")
             if "your-github-user" in winget_fork_repo or len(winget_fork_repo.split("/")) != 2:
                 raise ValueError("CI_WINGET_FORK_REPO must point to your GitHub winget-pkgs fork.")
             publisher, separator, package = winget_package_identifier.partition(".")
             if not separator or not publisher or not package or publisher == "YourCompany":
-                raise ValueError(
-                    "CI_WINGET_PACKAGE_IDENTIFIER must be your unique Publisher.Package identifier."
-                )
+                raise ValueError("CI_WINGET_PACKAGE_IDENTIFIER must be your unique Publisher.Package identifier.")
 
-        if enable_dockerhub_publish == "1" and (
-            "/" not in dockerhub_image or "your-dockerhub-user" in dockerhub_image
-        ):
-            raise ValueError(
-                "CI_DOCKERHUB_IMAGE must be configured before enabling Docker Hub publication."
-            )
+        if enable_dockerhub_publish == "1" and ("/" not in dockerhub_image or "your-dockerhub-user" in dockerhub_image):
+            raise ValueError("CI_DOCKERHUB_IMAGE must be configured before enabling Docker Hub publication.")
 
         return 0
     except (json.JSONDecodeError, OSError, ValueError) as error:
@@ -521,16 +469,9 @@ def generate_homebrew_formula(
         with urllib.request.urlopen(request, timeout=30) as response:
             release = json.load(response)
 
-        source_distributions = [
-            item
-            for item in release.get("urls", [])
-            if item.get("packagetype") == "sdist" and item.get("filename", "").endswith(".tar.gz")
-        ]
+        source_distributions = [item for item in release.get("urls", []) if item.get("packagetype") == "sdist" and item.get("filename", "").endswith(".tar.gz")]
         if len(source_distributions) != 1:
-            raise ValueError(
-                f"Expected one published .tar.gz sdist for {package_name} {version}; "
-                f"found {len(source_distributions)}."
-            )
+            raise ValueError(f"Expected one published .tar.gz sdist for {package_name} {version}; found {len(source_distributions)}.")
         source = source_distributions[0]
         checksum = source.get("digests", {}).get("sha256")
         if not checksum:
@@ -552,10 +493,7 @@ def generate_homebrew_formula(
                 "  end",
             ]
         else:
-            python_test = (
-                "import importlib.metadata; "
-                f"assert importlib.metadata.version({package_name!r}) == {version!r}"
-            )
+            python_test = f"import importlib.metadata; assert importlib.metadata.version({package_name!r}) == {version!r}"
             test_lines = [
                 "  test do",
                 f'    system libexec/"bin/python", "-c", {ruby_string(python_test)}',
@@ -640,9 +578,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen_project_py_parser.add_argument("pyproject_toml", type=Path)
     gen_project_py_parser.add_argument("output_py", type=Path)
-    gen_project_py_parser.set_defaults(
-        handler=lambda args: generate_project_module(args.pyproject_toml, args.output_py)
-    )
+    gen_project_py_parser.set_defaults(handler=lambda args: generate_project_module(args.pyproject_toml, args.output_py))
 
     gen_inno_iss_parser = subparsers.add_parser(
         "gen-inno-iss",
@@ -796,9 +732,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     smoke_parser.add_argument("dist_dir", type=Path)
     smoke_parser.add_argument("import_name")
-    smoke_parser.set_defaults(
-        handler=lambda args: smoke_install_artifacts(args.dist_dir, args.import_name)
-    )
+    smoke_parser.set_defaults(handler=lambda args: smoke_install_artifacts(args.dist_dir, args.import_name))
 
     return parser
 

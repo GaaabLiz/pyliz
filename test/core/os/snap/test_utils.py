@@ -11,9 +11,7 @@ Covers:
 
 import unittest
 from datetime import datetime, timedelta
-from pathlib import Path
 
-from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     SnapEditType,
@@ -28,7 +26,6 @@ from test.core.os.snap.conftest import (
     TEST_LOCAL_ROOT,
     create_source_dirs,
     make_snapshot,
-    reset_index,
     setup_test_dirs,
     teardown_test_dirs,
 )
@@ -50,17 +47,17 @@ class TestSnapshotUtilsPaths(unittest.TestCase):
     def test_get_snapshot_json_path(self):
         p = SnapshotUtils.get_snapshot_json_path("myid", CATALOGUE_PATH, "snap.json")
         self.assertEqual(p, CATALOGUE_PATH / "myid" / "snap.json")
-        
+
     def test_get_snapshot_path_traversal_blocked(self):
         with self.assertRaises(ValueError):
             SnapshotUtils.get_snapshot_path("../outside", CATALOGUE_PATH)
-        
+
         with self.assertRaises(ValueError):
             SnapshotUtils.get_snapshot_path("foo/bar", CATALOGUE_PATH)
-            
+
         with self.assertRaises(ValueError):
             SnapshotUtils.get_snapshot_path("..", CATALOGUE_PATH)
-            
+
         with self.assertRaises(ValueError):
             SnapshotUtils.get_snapshot_path("", CATALOGUE_PATH)
 

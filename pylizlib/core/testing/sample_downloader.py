@@ -195,4 +195,3 @@ class SampleImageDownloader:
                 (target_dir / filename).write_text(content, encoding="utf-8")
 
         return target_dir
-

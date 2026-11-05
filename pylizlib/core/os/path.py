@@ -304,10 +304,10 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
 def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, move_to_temp: bool = False, message_callback=None):
     """
     Remove a directory (default) or move it to a temporary location.
-    
+
     WARNING: By default, this permanently deletes the directory using shutil.rmtree.
     If you need to preserve data temporarily for rollback, set move_to_temp=True.
-    
+
     :param path: Path to the directory to remove or move.
     :param temp_path: Optional path to the temporary directory used if move_to_temp is True.
     :param move_to_temp: Whether to move the directory to a temporary location instead of permanently deleting it.
@@ -315,8 +315,10 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
     """
     if not move_to_temp:
         if message_callback:
+
             def remove_with_cb(p: Path):
-                if not p.exists(): return
+                if not p.exists():
+                    return
                 for item in p.iterdir():
                     if item.is_dir():
                         remove_with_cb(item)
@@ -325,6 +327,7 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
                         item.unlink()
                 message_callback(f"Eliminazione: {p.name}")
                 p.rmdir()
+
             remove_with_cb(path)
         else:
             shutil.rmtree(path.__str__(), ignore_errors=True)
@@ -376,12 +379,7 @@ def count_items(dir_path: Path) -> int:
     return sum(1 for _ in dir_path.iterdir())
 
 
-def duplicate_directory(
-    src_dir: Path,
-    dest_dir: Path | None = None,
-    copy_suffix: str = "_copy",
-    message_callback=None
-) -> Path:
+def duplicate_directory(src_dir: Path, dest_dir: Path | None = None, copy_suffix: str = "_copy", message_callback=None) -> Path:
     """
     Duplica la directory src_dir in dest_dir e ritorna il Path della copia.
 
