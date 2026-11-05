@@ -307,6 +307,43 @@ class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
         mgr.uninstall_directory_by_folder_id("nonexistent_id")
         self.assertEqual(len(snap.directories), initial_count)
 
+    def test_failed_directory_removal_keeps_association_and_metadata(self):
+        snap = make_snapshot("LockedAssociation", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        assoc = snap.directories[0]
+        before = mgr.path_snapshot_json.read_bytes()
+
+        with patch("os.unlink", side_effect=PermissionError("association is locked")):
+            with self.assertRaisesRegex(PermissionError, "association is locked"):
+                mgr.uninstall_directory_by_folder_id(assoc.folder_id)
+
+        self.assertEqual(snap.directories, [assoc])
+        self.assertEqual(mgr.path_snapshot_json.read_bytes(), before)
+        self.assertTrue((mgr.path_snapshot / assoc.directory_name / "dm1_file.txt").is_file())
+
+    def test_remove_installed_copies_reports_failures_after_attempting_other_targets(self):
+        snap = make_snapshot("BulkRemovalFailure", self._src, n=2)
+        mgr = self._mgr(snap)
+        mgr.create()
+        before = mgr.path_snapshot_json.read_bytes()
+        real_unlink = os.unlink
+
+        def fail_first_target(path, *args, **kwargs):
+            if Path(path).name == "dm1_file.txt":
+                raise PermissionError("first target is locked")
+            return real_unlink(path, *args, **kwargs)
+
+        with patch("os.unlink", side_effect=fail_first_target):
+            with self.assertRaises(ExceptionGroup) as ctx:
+                mgr.remove_installed_copies()
+
+        self.assertEqual(len(ctx.exception.exceptions), 1)
+        self.assertIsInstance(ctx.exception.exceptions[0], PermissionError)
+        self.assertTrue((self._src[0] / "dm1_file.txt").is_file())
+        self.assertFalse(self._src[1].exists())
+        self.assertEqual(mgr.path_snapshot_json.read_bytes(), before)
+
 
 class TestSnapshotManagerDuplicate(unittest.TestCase):
     def setUp(self):
@@ -786,13 +823,14 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         with self.assertLogs(level="DEBUG") as cm:
             logger.setLevel("DEBUG")
             mgr.remove_installed_copies()
-        self.assertTrue(any("does not exist or is not a directory" in out for out in cm.output))
+        self.assertTrue(any("does not exist" in out for out in cm.output))
 
         # Test 229-230
         install_path.mkdir(parents=True, exist_ok=True)
         with patch("shutil.rmtree", side_effect=Exception("mocked error")):
             with self.assertLogs(level="ERROR") as cm2:
-                mgr.remove_installed_copies()
+                with self.assertRaises(ExceptionGroup):
+                    mgr.remove_installed_copies()
             self.assertTrue(any("Failed to remove directory" in out for out in cm2.output))
 
     @patch("sys.platform", "win32")

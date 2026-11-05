@@ -116,11 +116,9 @@ class SnapshotManager:
 
     def delete(self, message_callback=None):
         """
-        Deletes the snapshot's directory from the filesystem.
-        The directory is moved to a temporary location before being permanently deleted.
+        Deletes the snapshot's directory, propagating filesystem failures.
         """
-        if self.path_snapshot.exists():
-            remove_directory_or_move_to_temp(self.path_snapshot, message_callback=message_callback)
+        remove_directory_or_move_to_temp(self.path_snapshot, message_callback=message_callback)
 
     def update_json_data_fields(self):
         """
@@ -176,8 +174,7 @@ class SnapshotManager:
         dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
             dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
-            if dir_path.exists():
-                remove_directory_or_move_to_temp(dir_path)
+            remove_directory_or_move_to_temp(dir_path)
             self.snapshot.directories.remove(dir_to_remove)
             self.__save_json()
 
@@ -391,21 +388,34 @@ class SnapshotManager:
         This is effectively an 'uninstall' operation for the snapshot's associated directories.
         It only removes the copies at the 'original_path' locations, not the snapshot's
         internal backup.
+
+        Raises:
+            ExceptionGroup: If any target could not be removed. Other targets
+                            are still attempted, and metadata is left unchanged.
         """
+        failures = []
         for dir_assoc in self.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
 
             if is_critical_system_path(install_path):
                 raise ValueError(f"Cannot remove installed copy at '{install_path}': it is a critical system path.")
 
-            if install_path.exists() and install_path.is_dir():
-                logger.info(f"Removing installed copy at '{install_path}'")
+            try:
                 try:
-                    remove_directory_or_move_to_temp(install_path, message_callback=message_callback)
-                except Exception as e:
-                    logger.error(f"Failed to remove directory '{install_path}': {e}")
-            else:
-                logger.debug(f"Install path '{install_path}' does not exist or is not a directory. Skipping.")
+                    mode = install_path.lstat().st_mode
+                except FileNotFoundError:
+                    logger.debug(f"Install path '{install_path}' does not exist. Skipping.")
+                    continue
+                if not (stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
+                    raise NotADirectoryError(f"Install path '{install_path}' is not a directory.")
+                logger.info(f"Removing installed copy at '{install_path}'")
+                remove_directory_or_move_to_temp(install_path, message_callback=message_callback)
+            except Exception as e:
+                logger.error(f"Failed to remove directory '{install_path}': {e}")
+                e.add_note(f"Installed copy: {install_path}")
+                failures.append(e)
+        if failures:
+            raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
 
     def install(self, enable_everyone_full_control: bool = True, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """
