@@ -483,6 +483,56 @@ class RandomSubfolderTestCase(unittest.TestCase):
 
 
 class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
+    def _symlink(self, link, target, target_is_directory=False):
+        try:
+            link.symlink_to(target, target_is_directory=target_is_directory)
+        except (OSError, NotImplementedError) as e:
+            self.skipTest(f"Symbolic links are unavailable: {e}")
+
+    def test_removal_preserves_external_symlink_targets_with_and_without_callback(self):
+        for with_callback in (False, True):
+            with self.subTest(with_callback=with_callback), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                outside = root / "outside"
+                outside.mkdir()
+                important = outside / "important.txt"
+                important.write_text("must survive")
+                target = root / "to_delete"
+                nested = target / "nested"
+                nested.mkdir(parents=True)
+                (nested / "local.txt").write_text("delete me")
+                self._symlink(nested / "linked", outside, target_is_directory=True)
+                self._symlink(nested / "file_link", important)
+                self._symlink(nested / "broken", root / "missing", target_is_directory=True)
+                messages = []
+
+                remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
+
+                self.assertFalse(target.exists())
+                self.assertEqual(important.read_text(), "must survive")
+                self.assertEqual(list(outside.iterdir()), [important])
+                if with_callback:
+                    self.assertTrue(messages)
+
+    def test_removing_root_symlink_only_unlinks_it(self):
+        for with_callback in (False, True):
+            for broken in (False, True):
+                with self.subTest(with_callback=with_callback, broken=broken), tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    outside = root / "outside"
+                    if not broken:
+                        outside.mkdir()
+                        (outside / "important.txt").write_text("must survive")
+                    link = root / "linked"
+                    self._symlink(link, outside, target_is_directory=True)
+                    messages = []
+
+                    remove_directory_or_move_to_temp(link, message_callback=messages.append if with_callback else None)
+
+                    self.assertFalse(link.is_symlink())
+                    if not broken:
+                        self.assertEqual((outside / "important.txt").read_text(), "must survive")
+
     def test_clear_deletes_directory(self):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "to_delete"
