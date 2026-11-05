@@ -67,14 +67,122 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         for assoc in snap.directories:
             self.assertTrue((mgr.path_snapshot / assoc.directory_name).exists())
 
-    def test_create_clears_existing_contents(self):
+    def test_create_explicitly_replaces_existing_contents(self):
         snap = make_snapshot("MgrRecreate", self._src, n=1)
         mgr = self._mgr(snap)
         mgr.create()
         leftover = mgr.path_snapshot / "leftover.txt"
         leftover.write_text("stale")
-        mgr.create()
+        (self._src[0] / "new.txt").write_text("new version")
+        snap.name = "Explicit replacement"
+        mgr.create(replace_existing=True)
         self.assertFalse(leftover.exists())
+        self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
+        self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).name, "Explicit replacement")
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+
+    def test_create_rejects_existing_snapshot_by_default(self):
+        snap = make_snapshot("CreateConflict", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+        (self._src[0] / "new.txt").write_text("new version")
+
+        with self.assertRaises(FileExistsError):
+            mgr.create()
+
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+
+    def test_create_preserves_existing_snapshot_when_publication_fails(self):
+        snap = make_snapshot("RecreatePublishFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        (mgr.path_snapshot / "original_only.txt").write_text("must survive")
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+        (self._src[0] / "new.txt").write_text("new version")
+        real_rename = Path.rename
+        failed = False
+
+        def fail_publication(source, target):
+            nonlocal failed
+            if not failed and Path(target) == mgr.path_snapshot:
+                failed = True
+                raise PermissionError("final rename denied")
+            return real_rename(source, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_publication):
+            with self.assertRaisesRegex(PermissionError, "final rename denied"):
+                mgr.create(replace_existing=True)
+
+        self.assertTrue(failed)
+        self.assertTrue(mgr.path_snapshot.is_dir())
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+
+    def test_create_preserves_existing_snapshot_when_backup_rename_fails(self):
+        snap = make_snapshot("RecreateBackupFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+
+        with patch.object(Path, "rename", side_effect=PermissionError("backup rename denied")):
+            with self.assertRaisesRegex(PermissionError, "backup rename denied"):
+                mgr.create(replace_existing=True)
+
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+
+    def test_create_preserves_recovery_copies_when_rollback_also_fails(self):
+        snap = make_snapshot("RecreateRollbackFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        (mgr.path_snapshot / "original_only.txt").write_text("must survive")
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+        (self._src[0] / "new.txt").write_text("new version")
+        real_rename = Path.rename
+
+        def fail_publication_and_rollback(source, target):
+            if Path(target) == mgr.path_snapshot:
+                raise PermissionError("destination unavailable")
+            return real_rename(source, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_publication_and_rollback):
+            with self.assertRaises(PermissionError):
+                mgr.create(replace_existing=True)
+
+        transaction = next(CATALOGUE_PATH.glob(f"_staging_create_{snap.id}_*"))
+        original = transaction / "original"
+        prepared = transaction / "new"
+        self.assertEqual({p.relative_to(original): p.read_bytes() for p in original.rglob("*") if p.is_file()}, before)
+        self.assertEqual((prepared / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
+        self.assertEqual(SnapshotSerializer.from_json(prepared / "snapshot.json").id, snap.id)
+
+    def test_create_keeps_replacement_when_backup_cleanup_partially_fails(self):
+        snap = make_snapshot("RecreateCleanupFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        (self._src[0] / "new.txt").write_text("new version")
+        real_rmtree = shutil.rmtree
+        damaged_backups = []
+
+        def fail_cleanup(path, *args, **kwargs):
+            backup = Path(path) / "original"
+            if backup.is_dir():
+                next(p for p in backup.rglob("*") if p.is_file()).unlink()
+                damaged_backups.append(backup)
+                raise PermissionError("cleanup interrupted")
+            return real_rmtree(path, *args, **kwargs)
+
+        with patch("shutil.rmtree", side_effect=fail_cleanup):
+            with self.assertLogs("PylizLib", level="WARNING") as logs:
+                mgr.create(replace_existing=True)
+
+        self.assertEqual(len(damaged_backups), 1)
+        self.assertIn(str(damaged_backups[0].parent), " ".join(logs.output))
+        self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
+        self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "m1_file.txt").read_text(), "content of m1")
+        self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).id, snap.id)
 
 
 class TestSnapshotManagerDelete(unittest.TestCase):

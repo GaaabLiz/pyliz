@@ -261,6 +261,9 @@ class SnapshotCatalogue:
     def add(self, snap: Snapshot, progress_callback=None, message_callback=None):
         """
         Adds a new snapshot to the catalogue.
+
+        Raises:
+            FileExistsError: If the snapshot's ID is already present.
         """
         snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
         snap_manager.create(progress_callback=progress_callback, message_callback=message_callback)

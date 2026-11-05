@@ -105,6 +105,21 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
             self.cat.add(make_snapshot(f"Multi{i}", self._src, n=1))
         self.assertEqual(len(self.cat.get_all()), 3)
 
+    def test_add_rejects_duplicate_id_without_changing_stored_snapshot(self):
+        snap = make_snapshot("ExistingSnapshot", self._src, n=1)
+        self.cat.add(snap)
+        dest = CATALOGUE_PATH / snap.id
+        before = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+        replacement = snap.clone()
+        replacement.name = "Must not replace"
+        (self._src[0] / "new.txt").write_text("new source content")
+
+        with self.assertRaises(FileExistsError):
+            self.cat.add(replacement)
+
+        self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, before)
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+
     def test_get_all_skips_corrupted_entries(self):
         # Create a valid snapshot
         snap = make_snapshot("ValidSnap", self._src, n=1)
