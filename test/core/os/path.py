@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pylizlib.core.os.path import (
     PathMatcher,
@@ -335,6 +336,21 @@ class RandomSubfolderTestCase(unittest.TestCase):
 
 
 class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
+    def test_removal_errors_propagate_with_and_without_callback(self):
+        for with_callback in (False, True):
+            with self.subTest(with_callback=with_callback), tempfile.TemporaryDirectory() as td:
+                target = Path(td) / "locked"
+                target.mkdir()
+                important = target / "important.txt"
+                important.write_text("must remain visible")
+                messages = []
+
+                with patch("os.unlink", side_effect=PermissionError("directory is locked")):
+                    with self.assertRaisesRegex(PermissionError, "directory is locked"):
+                        remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
+
+                self.assertEqual(important.read_text(), "must remain visible")
+
     def _symlink(self, link, target, target_is_directory=False):
         try:
             link.symlink_to(target, target_is_directory=target_is_directory)
