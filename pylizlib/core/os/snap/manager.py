@@ -264,10 +264,7 @@ class SnapshotManager:
             raise
 
         # Deletions only affect staged originals after the new state is committed.
-        try:
-            shutil.rmtree(staging_path)
-        except OSError as e:
-            logger.warning(f"Snapshot update completed, but could not remove staging directory '{staging_path}': {e}")
+        SnapshotUtils.cleanup_after_commit([staging_path], "Snapshot update")
 
     def duplicate(self, message_callback=None):
         """
@@ -344,12 +341,8 @@ class SnapshotManager:
 
                 staging_dir.rename(snap_path)
 
-            # Cleanup backups and update metadata
+            # Update metadata while backups are still intact.
             for rb in rollbacks:
-                backup_dir = rb["backup_dir"]
-                if backup_dir.exists():
-                    shutil.rmtree(backup_dir)
-
                 dir_assoc = rb["dir_assoc"]
                 dir_assoc.mb_size = get_folder_size_mb(rb["system_path"])
 
@@ -371,6 +364,7 @@ class SnapshotManager:
 
         self.snapshot.date_last_modified = datetime.now()
         self.__save_json()
+        SnapshotUtils.cleanup_after_commit((rb["backup_dir"] for rb in rollbacks), "Update from system")
 
     def remove_installed_copies(self, message_callback=None):
         """
@@ -494,13 +488,6 @@ class SnapshotManager:
                             else:
                                 dst.unlink()
                         shutil.move(str(item), str(dst))
-                    shutil.rmtree(staging_dir)
-
-            # Cleanup: delete backups on success
-            for rb in rollbacks:
-                backup_dir = rb["backup_dir"]
-                if backup_dir.exists():
-                    shutil.rmtree(backup_dir)
 
             if win32security:
                 for rb in rollbacks:
@@ -544,6 +531,7 @@ class SnapshotManager:
             "date_last_used",
             self.snapshot.date_last_used.isoformat(),
         )
+        SnapshotUtils.cleanup_after_commit((path for rb in rollbacks for path in (rb["backup_dir"], rb["staging_dir"])), "Installation")
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None):
         """
