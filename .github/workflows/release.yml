@@ -3,158 +3,372 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch:
+      - "v[0-9]*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   ci-config:
-    name: Read CI Config
+    name: Read release configuration
     runs-on: ubuntu-latest
     outputs:
+      python_version: ${{ steps.config.outputs.python_version }}
+      uv_version: ${{ steps.config.outputs.uv_version }}
       release_branch: ${{ steps.config.outputs.release_branch }}
-      windows_installer_enabled: ${{ steps.config.outputs.windows_installer_enabled }}
       build_linux: ${{ steps.config.outputs.build_linux }}
       build_macos: ${{ steps.config.outputs.build_macos }}
       build_windows: ${{ steps.config.outputs.build_windows }}
+      enable_release_docs: ${{ steps.config.outputs.enable_release_docs }}
       release_artifacts: ${{ steps.config.outputs.release_artifacts }}
       changelog_file: ${{ steps.config.outputs.changelog_file }}
       release_notes_file: ${{ steps.config.outputs.release_notes_file }}
-
+      enable_pypi_publish: ${{ steps.config.outputs.enable_pypi_publish }}
+      pypi_environment: ${{ steps.config.outputs.pypi_environment }}
+      enable_dockerhub_publish: ${{ steps.config.outputs.enable_dockerhub_publish }}
+      dockerhub_environment: ${{ steps.config.outputs.dockerhub_environment }}
+      enable_chocolatey_publish: ${{ steps.config.outputs.enable_chocolatey_publish }}
+      chocolatey_environment: ${{ steps.config.outputs.chocolatey_environment }}
+      enable_homebrew_publish: ${{ steps.config.outputs.enable_homebrew_publish }}
+      homebrew_environment: ${{ steps.config.outputs.homebrew_environment }}
+      enable_winget_publish: ${{ steps.config.outputs.enable_winget_publish }}
+      winget_environment: ${{ steps.config.outputs.winget_environment }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Export Config To GitHub Output
+      - name: Print CI configuration
+        run: make ci-log-config
+
+      - name: Export and validate release configuration
         id: config
         run: make ci-export-config
 
-  changelog-and-release:
-    name: Generate Changelog And Create Release
+  ci-gate:
+    name: Validate release commit
     needs: ci-config
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
 
+  changelog-and-release:
+    name: Generate changelog and create draft release
+    needs:
+      - ci-config
+      - ci-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_AUTOMATION_TOKEN || github.token }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          python-version: ${{ needs.ci-config.outputs.python_version }}
           enable-cache: true
 
-      - name: Setup CI Environment
+      - name: Setup CI environment
         run: make ci-setup
+
+      - name: Prepare release automation branch
+        run: make ci-prepare-release-update-branch
 
       - name: Install git-cliff
         run: make ci-install-git-cliff
 
-      - name: Generate Changelog
+      - name: Generate changelog
         run: make ci-generate-changelog
 
-      - name: Commit Changelog
-        run: make ci-commit-changelog
+      - name: Generate docs
+        if: needs.ci-config.outputs.enable_release_docs == '1'
+        run: make ci-generate-docs
 
-      - name: Generate Release Notes
+      - name: Generate release notes
         run: make ci-generate-release-notes
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Open or update generated files pull request
+        run: make ci-open-release-updates-pr
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN || github.token }}
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           body_path: ${{ needs.ci-config.outputs.release_notes_file }}
+          draft: true
 
   build-linux:
-    name: Build Assets (Linux)
+    name: Build Linux application assets
     needs:
       - ci-config
-      - changelog-and-release
+      - ci-gate
     if: needs.ci-config.outputs.build_linux == '1'
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
+    env:
+      CI_PYTHON_VERSION: ${{ needs.ci-config.outputs.python_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          python-version: ${{ needs.ci-config.outputs.python_version }}
           enable-cache: true
 
-      - name: Setup CI Environment
-        run: make ci-setup
+      - name: Setup CI environment
+        run: make ci-setup-build
 
-      - name: Build Release Assets
-        run: make ci-build-release-assets
+      - name: Build and verify application assets
+        run: |
+          make ci-build-release-assets
+          make ci-verify-release-artifacts
 
-      - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
+      - name: Upload Linux assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: ${{ needs.ci-config.outputs.release_artifacts }}
+          name: release-assets-linux
+          path: ${{ needs.ci-config.outputs.release_artifacts }}
+          if-no-files-found: error
 
   build-macos:
-    name: Build Assets (macOS)
+    name: Build macOS application assets
     needs:
       - ci-config
-      - changelog-and-release
+      - ci-gate
     if: needs.ci-config.outputs.build_macos == '1'
     runs-on: macos-latest
-
+    timeout-minutes: 45
+    env:
+      CI_PYTHON_VERSION: ${{ needs.ci-config.outputs.python_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          python-version: ${{ needs.ci-config.outputs.python_version }}
           enable-cache: true
 
-      - name: Setup CI Environment
-        run: make ci-setup
+      - name: Setup CI environment
+        run: make ci-setup-build
 
-      - name: Build Release Assets
-        run: make ci-build-release-assets
+      - name: Build and verify application assets
+        run: |
+          make ci-build-release-assets
+          make ci-verify-release-artifacts
 
-      - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
+      - name: Upload macOS assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: ${{ needs.ci-config.outputs.release_artifacts }}
+          name: release-assets-macos
+          path: ${{ needs.ci-config.outputs.release_artifacts }}
+          if-no-files-found: error
 
   build-windows:
-    name: Build Assets (Windows)
+    name: Build Windows application assets
     needs:
       - ci-config
-      - changelog-and-release
+      - ci-gate
     if: needs.ci-config.outputs.build_windows == '1'
     runs-on: windows-latest
-
+    timeout-minutes: 45
+    env:
+      CI_PYTHON_VERSION: ${{ needs.ci-config.outputs.python_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Make
-        run: choco install make
+        run: choco install make --yes
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          python-version: ${{ needs.ci-config.outputs.python_version }}
           enable-cache: true
 
-      - name: Setup CI Environment
-        run: make ci-setup
+      - name: Setup CI environment
+        run: make ci-setup-build
 
-      - name: Build Release Assets
-        run: make ci-build-release-assets
+      - name: Build and verify application assets
+        run: |
+          make ci-build-release-assets
+          make ci-verify-release-artifacts
 
-      - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: ${{ needs.ci-config.outputs.release_artifacts }}
+          name: release-assets-windows
+          path: ${{ needs.ci-config.outputs.release_artifacts }}
+          if-no-files-found: error
 
+  release-ready:
+    name: Confirm release build completion
+    needs:
+      - ci-config
+      - ci-gate
+      - changelog-and-release
+      - build-linux
+      - build-macos
+      - build-windows
+    if: >-
+      always() &&
+      needs.ci-config.result == 'success' &&
+      needs.ci-gate.result == 'success' &&
+      needs.changelog-and-release.result == 'success' &&
+      (needs.build-linux.result == 'success' ||
+       (needs.ci-config.outputs.build_linux == '0' && needs.build-linux.result == 'skipped')) &&
+      (needs.build-macos.result == 'success' ||
+       (needs.ci-config.outputs.build_macos == '0' && needs.build-macos.result == 'skipped')) &&
+      (needs.build-windows.result == 'success' ||
+       (needs.ci-config.outputs.build_windows == '0' && needs.build-windows.result == 'skipped'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm validation and asset builds passed
+        run: echo "Release validation and configured asset builds passed."
+
+  publish-pypi:
+    name: Publish verified package to PyPI
+    needs:
+      - ci-config
+      - release-ready
+    if: needs.ci-config.outputs.enable_pypi_publish == '1'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.ci-config.outputs.pypi_environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Download CI-verified package distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-dist
+          path: dist
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          enable-cache: false
+
+      - name: Publish to PyPI with the existing API token
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  publish-release:
+    name: Publish release after all builds
+    needs:
+      - ci-config
+      - release-ready
+      - publish-pypi
+    if: >-
+      always() &&
+      needs.ci-config.result == 'success' &&
+      needs.release-ready.result == 'success' &&
+      (needs.publish-pypi.result == 'success' ||
+       (needs.ci-config.outputs.enable_pypi_publish == '0' && needs.publish-pypi.result == 'skipped'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download package distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-dist
+          path: release-artifacts
+
+      - name: Download Linux assets
+        if: needs.ci-config.outputs.build_linux == '1'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-linux
+          path: release-artifacts
+
+      - name: Download macOS assets
+        if: needs.ci-config.outputs.build_macos == '1'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-macos
+          path: release-artifacts
+
+      - name: Download Windows assets
+        if: needs.ci-config.outputs.build_windows == '1'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-windows
+          path: release-artifacts
+
+      - name: Publish draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: release-artifacts/**
+          draft: false
+
+  publish-dockerhub:
+    name: Publish Docker image
+    needs:
+      - ci-config
+      - ci-gate
+      - publish-release
+    if: needs.ci-config.outputs.enable_dockerhub_publish == '1'
+    uses: ./.github/workflows/publish-dockerhub.yml
+    with:
+      environment: ${{ needs.ci-config.outputs.dockerhub_environment }}
+
+  publish-chocolatey:
+    name: Publish Chocolatey package
+    needs:
+      - ci-config
+      - ci-gate
+      - publish-release
+    if: needs.ci-config.outputs.enable_chocolatey_publish == '1'
+    uses: ./.github/workflows/publish-chocolatey.yml
+    with:
+      environment: ${{ needs.ci-config.outputs.chocolatey_environment }}
+      uv_version: ${{ needs.ci-config.outputs.uv_version }}
+
+  publish-homebrew:
+    name: Publish Homebrew formula
+    needs:
+      - ci-config
+      - ci-gate
+      - publish-release
+      - publish-pypi
+    if: needs.ci-config.outputs.enable_homebrew_publish == '1'
+    uses: ./.github/workflows/publish-homebrew.yml
+    with:
+      environment: ${{ needs.ci-config.outputs.homebrew_environment }}
+      uv_version: ${{ needs.ci-config.outputs.uv_version }}
+
+  publish-winget:
+    name: Publish WinGet manifests
+    needs:
+      - ci-config
+      - ci-gate
+      - publish-release
+    if: needs.ci-config.outputs.enable_winget_publish == '1'
+    uses: ./.github/workflows/publish-winget.yml
+    with:
+      environment: ${{ needs.ci-config.outputs.winget_environment }}
+      uv_version: ${{ needs.ci-config.outputs.uv_version }}

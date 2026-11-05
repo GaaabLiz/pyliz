@@ -1,0 +1,51 @@
+name: Publish Chocolatey
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment containing the Chocolatey API key
+        required: true
+        type: string
+      uv_version:
+        description: Exact uv release used by the project workflows
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Chocolatey package
+    runs-on: windows-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Make
+        run: choco install make --yes
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ inputs.uv_version }}
+          enable-cache: true
+
+      - name: Setup CI environment
+        run: make ci-setup-build
+
+      - name: Build Windows assets
+        run: make ci-build-chocolatey-assets
+
+      - name: Pack Chocolatey package
+        run: make ci-pack-chocolatey
+
+      - name: Publish Chocolatey package
+        run: make ci-publish-chocolatey
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
