@@ -417,7 +417,7 @@ class SnapshotManager:
         if failures:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
 
-    def install(self, enable_everyone_full_control: bool = True, clear_destination: bool = True, progress_callback=None, message_callback=None):
+    def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """
         Installs the snapshot's contents to their original locations on the filesystem.
         This will clear the destination directories before copying the snapshot's contents.
@@ -425,7 +425,7 @@ class SnapshotManager:
         Args:
             enable_everyone_full_control (bool): If True and on Windows, it will attempt
                 to set full control permissions for the 'Everyone' group on the
-                installed directories.
+                installed directories. Defaults to False; ACL changes require explicit opt-in.
             clear_destination (bool): If True, clears the destination directories before copying.
         """
         import os
@@ -435,7 +435,7 @@ class SnapshotManager:
         if self.snapshot.os_created and self.snapshot.os_created != platform.system():
             raise RuntimeError(f"Cannot install snapshot: created on {self.snapshot.os_created}, but current OS is {platform.system()}.")
 
-        if sys.platform == "win32":
+        if enable_everyone_full_control and sys.platform == "win32":
             try:
                 import ntsecuritycon as con
                 import win32security
@@ -518,7 +518,7 @@ class SnapshotManager:
                                 dst.unlink()
                         shutil.move(str(item), str(dst))
 
-            if win32security:
+            if enable_everyone_full_control and win32security:
                 for rb in rollbacks:
                     install_loc = rb["install_loc"]
                     try:
