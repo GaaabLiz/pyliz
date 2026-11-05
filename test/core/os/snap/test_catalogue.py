@@ -162,6 +162,33 @@ class TestSnapshotCatalogueBackupTriggers(unittest.TestCase):
     def tearDown(self):
         teardown_test_dirs()
 
+    def test_failed_backup_blocks_every_protected_operation(self):
+        for operation in ("delete", "install", "modify"):
+            with self.subTest(operation=operation):
+                snap = make_snapshot(f"Protected{operation}", self._src, n=1)
+                self.cat.add(snap)
+                dest = CATALOGUE_PATH / snap.id
+                (self._src[0] / "live_only.txt").write_text("must survive installation")
+                before_snapshot = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+                before_source = {p.relative_to(SOURCE_DATA_PATH): p.read_bytes() for p in SOURCE_DATA_PATH.rglob("*") if p.is_file()}
+
+                with patch.object(zipfile.ZipFile, "write", side_effect=OSError("backup disk full")):
+                    with self.assertRaisesRegex(OSError, "backup disk full"):
+                        if operation == "delete":
+                            self.cat.delete(snap)
+                        elif operation == "install":
+                            self.cat.install(snap)
+                        else:
+                            changed = snap.clone()
+                            changed.name = "Must not be saved"
+                            changed.directories.clear()
+                            self.cat.update_snapshot_by_objs(snap, changed)
+
+                self.assertTrue(dest.is_dir())
+                self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, before_snapshot)
+                self.assertEqual({p.relative_to(SOURCE_DATA_PATH): p.read_bytes() for p in SOURCE_DATA_PATH.rglob("*") if p.is_file()}, before_source)
+                self.assertEqual(list(BACKUP_PATH.iterdir()), [])
+
     def test_delete_creates_backup_when_enabled(self):
         snap = make_snapshot("DelBck", self._src, n=1)
         self.cat.add(snap)
