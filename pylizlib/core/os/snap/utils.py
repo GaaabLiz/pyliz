@@ -12,9 +12,12 @@ Classes:
     SnapshotUtils – Static helper methods for Snapshot operations.
 """
 
+import shutil
+from collections.abc import Iterable
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     SnapEditAction,
@@ -26,6 +29,21 @@ from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
 
 class SnapshotUtils:
+    @staticmethod
+    def cleanup_after_commit(paths: Iterable[Path], operation: str) -> None:
+        """Remove transaction leftovers without rolling back committed data.
+
+        Cleanup may have already deleted part of a backup when it fails, so
+        that backup must never be used for rollback. Log each failure and
+        continue cleaning the remaining paths.
+        """
+        for path in paths:
+            try:
+                if path.exists():
+                    shutil.rmtree(path)
+            except OSError as e:
+                logger.warning(f"{operation} completed, but could not remove temporary directory '{path}': {e}")
+
     @staticmethod
     def gen_random_snap(source_folder_for_choices: Path, id_length: int = 10) -> Snapshot:
         """

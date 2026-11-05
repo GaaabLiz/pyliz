@@ -175,7 +175,7 @@ class SnapshotCatalogue:
                     raise IOError(f"Failed to restore snapshot directory: {e}") from e
                 else:
                     if original_moved:
-                        shutil.rmtree(backup_dest)
+                        SnapshotUtils.cleanup_after_commit([backup_dest], "Snapshot-directory restore")
                 return
 
             # ASSOCIATED_DIRECTORIES restore
@@ -219,10 +219,6 @@ class SnapshotCatalogue:
                     shutil.copytree(extracted_dir, destination)
                     completed_rollbacks.append(task)
 
-                # Commit successful, delete backups
-                for task in tasks:
-                    if task["backup_dest"].exists():
-                        shutil.rmtree(task["backup_dest"])
             except Exception as e:
                 logger.error(f"Failed to restore associated directories: {e}. Rolling back.")
                 for task in tasks:
@@ -233,6 +229,9 @@ class SnapshotCatalogue:
                             shutil.rmtree(destination)
                         backup_dest.rename(destination)
                 raise IOError(f"Failed to restore associated directories: {e}") from e
+
+            # All replacements succeeded; backups may now be partially deleted.
+            SnapshotUtils.cleanup_after_commit((task["backup_dest"] for task in tasks), "Associated-directories restore")
 
     def delete_backup(self, backup_zip_path: Path):
         """

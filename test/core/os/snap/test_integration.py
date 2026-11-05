@@ -20,6 +20,8 @@ Scenarios:
 import shutil
 import unittest
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
@@ -43,11 +45,93 @@ from test.core.os.snap.conftest import (
     CATALOGUE_PATH,
     SOURCE_DATA_PATH,
     TEST_LOCAL_ROOT,
+    create_source_dirs,
     downloader,
+    make_snapshot,
     reset_index,
     setup_test_dirs,
     teardown_test_dirs,
 )
+
+
+class TestIntegrationCleanupFailures(unittest.TestCase):
+    def setUp(self):
+        setup_test_dirs()
+        sources = create_source_dirs(SOURCE_DATA_PATH, ["cleanup1", "cleanup2"])
+        self.snap = make_snapshot("CleanupFailure", sources, n=2)
+        self.cat = SnapshotCatalogue(CATALOGUE_PATH)
+        self.cat.add(self.snap)
+        self.mgr = SnapshotManager(self.snap, CATALOGUE_PATH)
+
+    def tearDown(self):
+        teardown_test_dirs()
+
+    def _check_partial_cleanup_failure(self, operation):
+        backup_zip = None
+        if operation.startswith("restore"):
+            backup_type = BackupType.SNAPSHOT_DIRECTORY if operation == "restore_sd" else BackupType.ASSOCIATED_DIRECTORIES
+            self.mgr.create_backup(BACKUP_PATH, "cleanup", backup_type)
+            backup_zip = next(BACKUP_PATH.glob("*.zip"))
+
+        expected = {}
+        for assoc in self.snap.directories:
+            stored = self.mgr.path_snapshot / assoc.directory_name
+            original = Path(assoc.original_path)
+            target = stored if operation in ("update", "restore_sd") else original
+            source = original if operation == "update" else stored
+            if operation == "restore_sd":
+                expected[target] = {p.name: p.read_bytes() for p in stored.iterdir()}
+            for file_path in (original if operation != "restore_sd" else stored).iterdir():
+                file_path.write_text("changed live content")
+            if operation != "restore_sd":
+                expected[target] = {p.name: p.read_bytes() for p in source.iterdir()}
+            (target / "old_only.txt").write_text("old backup content")
+
+        real_rmtree = shutil.rmtree
+        damaged_backups = []
+
+        def fail_after_deleting_one_file(path, *args, **kwargs):
+            backup = Path(path)
+            if "_bck_" in backup.name and not damaged_backups:
+                next(p for p in backup.rglob("*") if p.is_file()).unlink()
+                damaged_backups.append(backup)
+                raise PermissionError("backup cleanup interrupted after deleting a file")
+            return real_rmtree(path, *args, **kwargs)
+
+        with patch("shutil.rmtree", side_effect=fail_after_deleting_one_file):
+            with self.assertLogs("PylizLib", level="WARNING") as logs:
+                if operation == "install":
+                    self.mgr.install()
+                elif operation == "update":
+                    self.mgr.update_associated_dirs_from_system()
+                else:
+                    self.cat.restore_backup(backup_zip)
+
+        self.assertEqual(len(damaged_backups), 1)
+        self.assertTrue(damaged_backups[0].is_dir())
+        self.assertIn(str(damaged_backups[0]), " ".join(logs.output))
+        for target, files in expected.items():
+            self.assertEqual({p.name: p.read_bytes() for p in target.iterdir()}, files)
+        # Other backups are still cleaned even when the first cleanup fails.
+        backup_parent = CATALOGUE_PATH if operation == "restore_sd" else damaged_backups[0].parent
+        self.assertEqual(list(backup_parent.glob("*_bck_*")), damaged_backups)
+        loaded = SnapshotSerializer.from_json(self.mgr.path_snapshot_json)
+        if operation == "install":
+            self.assertIsNotNone(loaded.date_last_used)
+        elif operation == "update":
+            self.assertIsNotNone(loaded.date_last_modified)
+
+    def test_install_keeps_new_copies_when_backup_cleanup_fails(self):
+        self._check_partial_cleanup_failure("install")
+
+    def test_update_keeps_new_copies_when_backup_cleanup_fails(self):
+        self._check_partial_cleanup_failure("update")
+
+    def test_restore_ad_keeps_new_copies_when_backup_cleanup_fails(self):
+        self._check_partial_cleanup_failure("restore_ad")
+
+    def test_restore_sd_keeps_new_copy_when_backup_cleanup_fails(self):
+        self._check_partial_cleanup_failure("restore_sd")
 
 
 class TestIntegrationScenarioA(unittest.TestCase):
