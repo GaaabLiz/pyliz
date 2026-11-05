@@ -553,6 +553,57 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.cat.restore_backup(backup_zip)
         self.assertTrue((CATALOGUE_PATH / snap.id).exists())
 
+    def test_restore_backup_sd_preserves_original_when_rename_fails(self):
+        snap = make_snapshot("RestoreSDRenameFail", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "bck", BackupType.SNAPSHOT_DIRECTORY)
+        backup_zip = next(BACKUP_PATH.glob("*_*_sd_*.zip"))
+        dest = CATALOGUE_PATH / snap.id
+        (dest / "original_only.txt").write_text("must survive")
+        original_files = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+        rename_error = PermissionError("snapshot directory is busy")
+
+        with patch.object(Path, "rename", side_effect=rename_error) as mock_rename:
+            with self.assertRaisesRegex(IOError, "Failed to restore snapshot directory") as ctx:
+                self.cat.restore_backup(backup_zip)
+
+        self.assertIs(ctx.exception.__cause__, rename_error)
+        mock_rename.assert_called_once()
+        self.assertTrue(dest.is_dir())
+        self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, original_files)
+        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+
+    def test_restore_backup_sd_cleans_partial_copy_on_error(self):
+        snap = make_snapshot("RestoreSDPartialFail", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        mgr.create_backup(BACKUP_PATH, "bck", BackupType.SNAPSHOT_DIRECTORY)
+        backup_zip = next(BACKUP_PATH.glob("*_*_sd_*.zip"))
+        dest = CATALOGUE_PATH / snap.id
+        (dest / "original_only.txt").write_text("must survive")
+        original_files = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+
+        def fail_partial_copy(source, destination, **kwargs):
+            destination.mkdir(exist_ok=True)
+            (destination / "partial.txt").write_text("incomplete copy")
+            raise OSError("copy interrupted")
+
+        for destination_exists in (True, False):
+            with self.subTest(destination_exists=destination_exists):
+                if not destination_exists:
+                    shutil.rmtree(dest)
+                with patch("shutil.copytree", side_effect=fail_partial_copy):
+                    with self.assertRaisesRegex(IOError, "Failed to restore snapshot directory"):
+                        self.cat.restore_backup(backup_zip)
+
+                if destination_exists:
+                    self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, original_files)
+                    self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+                else:
+                    self.assertFalse(dest.exists())
+                    self.assertEqual(list(CATALOGUE_PATH.iterdir()), [])
+
     @patch("shutil.copytree")
     def test_restore_backup_sd_rolls_back_on_error(self, mock_copytree):
         snap = make_snapshot("RestoreSDFail", self._src, n=1)
