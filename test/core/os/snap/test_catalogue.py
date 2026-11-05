@@ -143,6 +143,19 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
         self.cat.delete(snap)
         self.assertFalse(self.cat.exists(snap.id))
 
+    def test_delete_reports_filesystem_failure(self):
+        snap = make_snapshot("LockedDelete", self._src, n=1)
+        self.cat.add(snap)
+        dest = CATALOGUE_PATH / snap.id
+        before = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
+
+        with patch("os.unlink", side_effect=PermissionError("snapshot is locked")):
+            with self.assertRaisesRegex(PermissionError, "snapshot is locked"):
+                self.cat.delete(snap)
+
+        self.assertTrue(dest.is_dir())
+        self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, before)
+
     def test_get_snap_directory_path_returns_existing_path(self):
         snap = make_snapshot("DirPath", self._src, n=1)
         self.cat.add(snap)

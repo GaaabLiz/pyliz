@@ -312,10 +312,13 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
     :param temp_path: Optional path to the temporary directory used if move_to_temp is True.
     :param move_to_temp: Whether to move the directory to a temporary location instead of permanently deleting it.
     :param message_callback: Reports the requested directory operation, without changing how it is performed.
+    :raises OSError: If the requested removal or move fails.
     :return: None
     """
     if not move_to_temp:
-        if not path.is_symlink() and not path.exists():
+        try:
+            path.lstat()
+        except FileNotFoundError:
             return
         if message_callback:
             # Report progress without traversing a root symlink or directory links.
@@ -330,7 +333,7 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
         if path.is_symlink():
             path.unlink(missing_ok=True)
         else:
-            shutil.rmtree(path.__str__(), ignore_errors=True)
+            shutil.rmtree(path.__str__())
     else:
         if temp_path is None:
             logger.error("Temp path cannot be None")
