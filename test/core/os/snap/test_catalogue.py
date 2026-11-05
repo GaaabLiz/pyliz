@@ -16,6 +16,8 @@ Covers every public method of SnapshotCatalogue:
     - list_backups / restore_backup (_sd, _ad, and error branches)
 """
 
+import errno
+import os
 import shutil
 import unittest
 import zipfile
@@ -364,6 +366,42 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
         self.assertEqual(len(self.cat.get_all()), 0)
         self.cat.import_catalogue(self._export_dir / "cat.zip")
         self.assertEqual(len(self.cat.get_all()), 3)
+
+    def test_export_catalogue_scan_failure_does_not_publish_incomplete_zip(self):
+        nested = self._src[0] / "nested"
+        nested.mkdir()
+        (nested / "important.txt").write_text("must be exported")
+        snap = make_snapshot("ExportScanFailure", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.export_catalogue(self._export_dir, "existing.zip")
+        existing = self._export_dir / "existing.zip"
+        before = existing.read_bytes()
+        blocked = CATALOGUE_PATH / snap.id / snap.directories[0].directory_name / "nested"
+        real_scandir = os.scandir
+
+        def fail_scan(path):
+            if Path(path) == blocked:
+                raise PermissionError(errno.EACCES, "scan denied", str(blocked))
+            return real_scandir(path)
+
+        for file_name in ("existing.zip", "new.zip"):
+            with self.subTest(file_name=file_name):
+                with patch("os.scandir", side_effect=fail_scan):
+                    with self.assertRaises(PermissionError):
+                        self.cat.export_catalogue(self._export_dir, file_name)
+
+                self.assertEqual(existing.read_bytes(), before)
+                self.assertEqual(list(self._export_dir.iterdir()), [existing])
+
+    def test_export_catalogue_propagates_metadata_read_errors(self):
+        snap = make_snapshot("UnreadableExportMetadata", self._src, n=1)
+        self.cat.add(snap)
+
+        with patch("pylizlib.core.os.snap.serializer.SnapshotSerializer.from_json", side_effect=OSError(errno.EIO, "metadata read failed")):
+            with self.assertRaisesRegex(OSError, "metadata read failed"):
+                self.cat.export_catalogue(self._export_dir)
+
+        self.assertEqual(list(self._export_dir.iterdir()), [])
 
     def test_export_catalogue_empty_logs_warning(self):
         with self.assertLogs(level="WARNING"):
