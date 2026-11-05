@@ -9,7 +9,6 @@ from pylizlib.core.os.path import (
     check_path_dir,
     check_path_file,
     clear_folder_contents,
-    clear_or_move_to_temp,
     count_items,
     count_pathsub_dirs,
     count_pathsub_elements,
@@ -26,6 +25,7 @@ from pylizlib.core.os.path import (
     get_path_items,
     get_second_to_last_directory,
     random_subfolder,
+    remove_directory_or_move_to_temp,
     scan_directory_match_bool,
 )
 
@@ -334,13 +334,13 @@ class RandomSubfolderTestCase(unittest.TestCase):
             self.assertIsNone(result)
 
 
-class ClearOrMoveToTempTestCase(unittest.TestCase):
+class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
     def test_clear_deletes_directory(self):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "to_delete"
             target.mkdir()
             (target / "x.txt").write_text("bye")
-            clear_or_move_to_temp(target)
+            remove_directory_or_move_to_temp(target)
             self.assertFalse(target.exists())
 
     def test_move_to_temp(self):
@@ -348,7 +348,7 @@ class ClearOrMoveToTempTestCase(unittest.TestCase):
             target = Path(td) / "to_move"
             target.mkdir()
             (target / "x.txt").write_text("data")
-            clear_or_move_to_temp(target, temp_path=Path("pyliz_test_tmp"), move_to_temp=True)
+            remove_directory_or_move_to_temp(target, temp_path=Path("pyliz_test_tmp"), move_to_temp=True)
             self.assertFalse(target.exists())
 
 
