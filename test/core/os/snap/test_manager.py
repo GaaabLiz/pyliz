@@ -653,14 +653,60 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         snap = make_snapshot("BckSnap", self._src, n=1)
         mgr = self._mgr(snap)
         mgr.create()
-        mgr.create_backup(BACKUP_PATH, "test_prefix", BackupType.SNAPSHOT_DIRECTORY)
+        result = mgr.create_backup(BACKUP_PATH, "test_prefix", BackupType.SNAPSHOT_DIRECTORY)
         zips = list(BACKUP_PATH.glob("*.zip"))
         self.assertEqual(len(zips), 1)
+        self.assertEqual(result, zips[0])
         self.assertIn("test_prefix", zips[0].name)
 
         with zipfile.ZipFile(zips[0]) as zf:
             names = zf.namelist()
         self.assertTrue(any("snapshot.json" in n for n in names))
+
+    def test_failed_backup_preserves_existing_archive_and_removes_partial_file(self):
+        snap = make_snapshot("AtomicBackup", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        real_write = zipfile.ZipFile.write
+
+        def fail_after_write(archive, *args, **kwargs):
+            real_write(archive, *args, **kwargs)
+            raise OSError("backup write interrupted")
+
+        with patch("pylizlib.core.os.snap.manager.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "20261105_120000"
+            mgr.create_backup(BACKUP_PATH, "atomic", BackupType.SNAPSHOT_DIRECTORY)
+            published = next(BACKUP_PATH.glob("*.zip"))
+            original_bytes = published.read_bytes()
+
+            with patch.object(zipfile.ZipFile, "write", autospec=True, side_effect=fail_after_write):
+                with self.assertRaisesRegex(OSError, "backup write interrupted"):
+                    mgr.create_backup(BACKUP_PATH, "atomic", BackupType.SNAPSHOT_DIRECTORY)
+
+        self.assertEqual(published.read_bytes(), original_bytes)
+        self.assertEqual(list(BACKUP_PATH.iterdir()), [published])
+
+    def test_backup_validation_failure_prevents_publication(self):
+        snap = make_snapshot("InvalidBackup", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        with patch.object(zipfile.ZipFile, "testzip", return_value="corrupted.txt"):
+            with self.assertRaises(zipfile.BadZipFile):
+                mgr.create_backup(BACKUP_PATH, "invalid", BackupType.SNAPSHOT_DIRECTORY)
+
+        self.assertEqual(list(BACKUP_PATH.iterdir()), [])
+
+    def test_backup_publication_failure_removes_partial_file(self):
+        snap = make_snapshot("BackupPublishFail", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        with patch.object(Path, "replace", side_effect=PermissionError("backup publication denied")):
+            with self.assertRaisesRegex(PermissionError, "backup publication denied"):
+                mgr.create_backup(BACKUP_PATH, "unpublished", BackupType.SNAPSHOT_DIRECTORY)
+
+        self.assertEqual(list(BACKUP_PATH.iterdir()), [])
 
     def test_create_backup_associated_directories_contains_source_files(self):
         snap = make_snapshot("BckAssoc", self._src, n=1)
@@ -808,9 +854,10 @@ class TestSnapshotManagerCoverage(unittest.TestCase):
         snap = make_snapshot("BackupExceptions", self._src, n=1)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
         mgr.create()
-        with patch("zipfile.ZipFile", side_effect=Exception("zip error")):
+        with patch("zipfile.ZipFile", side_effect=RuntimeError("zip error")):
             with self.assertLogs(level="ERROR") as cm:
-                mgr.create_backup(BACKUP_PATH, "pref", BackupType.SNAPSHOT_DIRECTORY)
+                with self.assertRaisesRegex(RuntimeError, "zip error"):
+                    mgr.create_backup(BACKUP_PATH, "pref", BackupType.SNAPSHOT_DIRECTORY)
             self.assertIn("zip error", " ".join(cm.output))
 
 
