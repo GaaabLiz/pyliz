@@ -15,6 +15,8 @@ Covers every public method of SnapshotManager:
     - create_backup     (snapshot directory, associated directories, export naming)
 """
 
+import errno
+import os
 import shutil
 import unittest
 import zipfile
@@ -707,6 +709,32 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
                 mgr.create_backup(BACKUP_PATH, "unpublished", BackupType.SNAPSHOT_DIRECTORY)
 
         self.assertEqual(list(BACKUP_PATH.iterdir()), [])
+
+    def test_backup_scan_errors_prevent_publication(self):
+        nested = self._src[0] / "nested"
+        nested.mkdir()
+        (nested / "important.txt").write_text("must be backed up")
+        snap = make_snapshot("ScanFailure", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        real_scandir = os.scandir
+
+        for backup_type in BackupType:
+            root = self._src[0] if backup_type == BackupType.ASSOCIATED_DIRECTORIES else mgr.path_snapshot
+            for blocked in (root, root / "nested" if root == self._src[0] else root / snap.directories[0].directory_name / "nested"):
+                for error in (PermissionError(errno.EACCES, "scan denied", str(blocked)), OSError(errno.EIO, "scan failed", str(blocked))):
+                    with self.subTest(backup_type=backup_type, blocked=blocked, error=error):
+                        def fail_scan(path):
+                            if Path(path) == blocked:
+                                raise error
+                            return real_scandir(path)
+
+                        with patch("os.scandir", side_effect=fail_scan):
+                            with self.assertRaises(OSError) as ctx:
+                                mgr.create_backup(BACKUP_PATH, "scan", backup_type)
+
+                        self.assertIs(ctx.exception, error)
+                        self.assertEqual(list(BACKUP_PATH.iterdir()), [])
 
     def test_create_backup_associated_directories_contains_source_files(self):
         snap = make_snapshot("BckAssoc", self._src, n=1)

@@ -16,6 +16,7 @@ Classes:
 import json
 import re
 import shutil
+import stat
 import tempfile
 import zipfile
 from datetime import datetime
@@ -282,9 +283,12 @@ class SnapshotCatalogue:
             snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.delete(message_callback=message_callback)
 
-    def get_all(self) -> list[Snapshot]:
+    def get_all(self, *, strict: bool = False) -> list[Snapshot]:
         """
         Retrieves all snapshots from the catalogue.
+
+        Args:
+            strict: Propagate filesystem errors instead of skipping unreadable entries.
 
         Returns:
             A list of Snapshot objects found in the catalogue.
@@ -292,12 +296,15 @@ class SnapshotCatalogue:
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
         snapshots: list[Snapshot] = []
         for current_dir in self.path_catalogue.iterdir():
-            if current_dir.is_dir():
+            is_directory = stat.S_ISDIR(current_dir.stat().st_mode) if strict else current_dir.is_dir()
+            if is_directory:
                 try:
                     snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
                     if snap is not None:
                         snapshots.append(snap)
                 except Exception as e:
+                    if strict and isinstance(e, OSError):
+                        raise
                     logger.error(f"Failed to load snapshot from {current_dir}: {e}. Skipping corrupted entry.")
         return snapshots
 
@@ -404,21 +411,18 @@ class SnapshotCatalogue:
         destination_path.mkdir(parents=True, exist_ok=True)
         zip_path = destination_path.joinpath(file_name)
 
-        snapshots = self.get_all()
+        snapshots = self.get_all(strict=True)
         if not snapshots:
             logger.warning("Catalogue is empty. Nothing to export.")
             return
 
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        def files_to_archive():
             for snap in snapshots:
-                snap_dir = self.get_snap_directory_path(snap)
-                if snap_dir and snap_dir.is_dir():
-                    for file_path in snap_dir.rglob("*"):
-                        if file_path.is_file():
-                            archive.write(
-                                file_path,
-                                arcname=file_path.relative_to(self.path_catalogue),
-                            )
+                snap_dir = SnapshotUtils.get_snapshot_path(snap.id, self.path_catalogue)
+                for file_path in SnapshotUtils.iter_files_strict(snap_dir):
+                    yield file_path, file_path.relative_to(self.path_catalogue)
+
+        return SnapshotUtils.write_verified_zip(zip_path, files_to_archive())
 
     def import_catalogue(self, zip_path: Path):
         """
