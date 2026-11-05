@@ -15,6 +15,7 @@ Classes:
 
 import os
 import shutil
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -163,55 +164,110 @@ class SnapshotManager:
 
     def update_from_actions_list(self, edits: list[SnapEditAction], message_callback=None):
         """
-        Applies a list of edit actions (add/remove directories) to the snapshot.
-        This updates the snapshot's contents on the filesystem based on the provided actions.
+        Plans edits by association ID against the stored metadata, then stages all
+        affected copies before assigning final names. Originals remain available
+        for rollback until the updated metadata has been saved.
 
         Args:
             edits: A list of SnapEditAction objects.
         """
-        # Handle renames (first, to free up any conflicting names if reordering)
-        # We rename to temporary names first to avoid collisions during a complex reorder
-        rename_actions = [e for e in edits if e.action_type == SnapEditType.RENAME_DIR]
-        temp_renames = []
-        for edit in rename_actions:
-            if edit.old_directory_name and edit.new_directory_name:
-                old_dir_path = self.path_snapshot.joinpath(edit.old_directory_name)
-                if old_dir_path.exists():
-                    temp_name = f"{edit.new_directory_name}_staging_{gen_random_string(6)}"
-                    temp_dir_path = self.path_snapshot.joinpath(temp_name)
-                    old_dir_path.rename(temp_dir_path)
-                    temp_renames.append((temp_dir_path, self.path_snapshot.joinpath(edit.new_directory_name)))
+        old_json = self.path_snapshot_json.read_bytes()
+        old = SnapshotSerializer.from_json(self.path_snapshot_json)
+        expected_edits = SnapshotUtils.get_edits_between_snapshots(old, self.snapshot)
+        old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
+        new_by_id = {assoc.folder_id: assoc for assoc in self.snapshot.directories}
+        for snapshot in (old, self.snapshot):
+            names = [assoc.directory_name for assoc in snapshot.directories]
+            if len(set(names)) != len(names):
+                raise ValueError("Snapshot associations must have unique directory names.")
 
-        # Apply final renames
-        for temp_path, final_path in temp_renames:
-            if final_path.exists():
-                remove_directory_or_move_to_temp(final_path, message_callback=message_callback)
-            temp_path.rename(final_path)
+        # Resolve legacy name/path-based actions against the original metadata,
+        # before any name is reused by another association.
+        actions_by_id = {}
+        for edit in edits:
+            folder_id = edit.folder_id or edit.folder_id_to_remove
+            if not folder_id:
+                if edit.action_type == SnapEditType.ADD_DIR:
+                    matches = [assoc for assoc in self.snapshot.directories if assoc.original_path == edit.new_path]
+                else:
+                    name = edit.old_directory_name or edit.directory_name_to_remove
+                    matches = [assoc for assoc in old.directories if assoc.directory_name == name]
+                if len(matches) != 1:
+                    raise ValueError("Edit action does not identify a unique association.")
+                folder_id = matches[0].folder_id
+            if folder_id in actions_by_id:
+                raise ValueError(f"Multiple edit actions for association '{folder_id}'.")
+            actions_by_id[folder_id] = edit.action_type
+        if actions_by_id != {edit.folder_id: edit.action_type for edit in expected_edits}:
+            raise ValueError("Edit actions do not match the stored and requested snapshot associations.")
 
-        # Handle removals
-        remove_actions = [e for e in edits if e.action_type == SnapEditType.REMOVE_DIR]
-        for edit in remove_actions:
-            if edit.directory_name_to_remove:
-                dir_path = self.path_snapshot.joinpath(edit.directory_name_to_remove)
-                if dir_path.exists():
-                    remove_directory_or_move_to_temp(dir_path, message_callback=message_callback)
+        moves = []
+        additions = []
+        for edit in expected_edits:
+            if edit.action_type == SnapEditType.ADD_DIR:
+                additions.append(new_by_id[edit.folder_id])
+            else:
+                source = self.path_snapshot / old_by_id[edit.folder_id].directory_name
+                target = self.path_snapshot / new_by_id[edit.folder_id].directory_name if edit.action_type == SnapEditType.RENAME_DIR else None
+                moves.append((source, target))
 
-        # Handle additions
-        add_actions = [e for e in edits if e.action_type == SnapEditType.ADD_DIR]
-        added_paths = {e.new_path for e in add_actions}
+        # Validate the complete plan before touching any stored copy.
+        sources = {source for source, _ in moves}
+        targets = [target for _, target in moves if target is not None] + [self.path_snapshot / assoc.directory_name for assoc in additions]
+        for assoc in old.directories:
+            source = self.path_snapshot / assoc.directory_name
+            if not source.is_dir():
+                raise FileNotFoundError(f"Snapshot directory '{source}' is missing.")
+        for target in targets:
+            if target.exists() and target not in sources:
+                raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
+        for assoc in additions:
+            if not Path(assoc.original_path).is_dir():
+                raise FileNotFoundError(f"Source directory '{assoc.original_path}' is missing.")
 
-        for dir_assoc in self.snapshot.directories:
-            if dir_assoc.original_path in added_paths:
-                dir_assoc.copy_install_to(self.path_snapshot, message_callback=message_callback)
+        staging_path = Path(tempfile.mkdtemp(prefix="_staging_update_", dir=self.path_snapshot))
+        staged_originals = []
+        publications = []
+        published = []
+        saving_json = False
+        try:
+            for i, (source, target) in enumerate(moves):
+                staged = staging_path / f"original_{i}"
+                source.rename(staged)
+                staged_originals.append((staged, source))
+                if target is not None:
+                    publications.append((staged, target))
+            for assoc in additions:
+                assoc.copy_install_to(staging_path / "additions", message_callback=message_callback)
+                publications.append((staging_path / "additions" / assoc.directory_name, self.path_snapshot / assoc.directory_name))
 
-        # 4. Validate that every directory_name described by JSON actually exists on disk before commit
-        for dir_assoc in self.snapshot.directories:
-            expected_path = self.path_snapshot / dir_assoc.directory_name
-            if not expected_path.exists() or not expected_path.is_dir():
-                raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
+            for staged, target in publications:
+                if target.exists():
+                    raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
+                staged.rename(target)
+                published.append((staged, target))
 
-        # After all filesystem changes and validation, save the final state of the new snapshot.
-        self.__save_json()
+            for assoc in self.snapshot.directories:
+                expected_path = self.path_snapshot / assoc.directory_name
+                if not expected_path.is_dir():
+                    raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
+            saving_json = True
+            self.__save_json()
+        except Exception:
+            for staged, target in reversed(published):
+                target.rename(staged)
+            for staged, source in reversed(staged_originals):
+                staged.rename(source)
+            if saving_json:
+                self.path_snapshot_json.write_bytes(old_json)
+            shutil.rmtree(staging_path)
+            raise
+
+        # Deletions only affect staged originals after the new state is committed.
+        try:
+            shutil.rmtree(staging_path)
+        except OSError as e:
+            logger.warning(f"Snapshot update completed, but could not remove staging directory '{staging_path}': {e}")
 
     def duplicate(self, message_callback=None):
         """

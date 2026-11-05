@@ -193,15 +193,16 @@ class SnapshotSortKey(Enum):
 @dataclass
 class SnapEditAction:
     """
-    Represents a single atomic change (an addition or removal of a directory)
+    Represents a single atomic change (addition, removal or rename of a directory)
     to a snapshot's structure.
 
     Attributes:
-        action_type: The type of edit (ADD_DIR or REMOVE_DIR).
+        action_type: The type of edit (ADD_DIR, REMOVE_DIR or RENAME_DIR).
         timestamp: The time the action was created.
         new_path: The path of the directory being added (for ADD_DIR actions).
         folder_id_to_remove: The ID of the folder to remove (for REMOVE_DIR actions).
         directory_name_to_remove: The name of the directory to remove (for REMOVE_DIR actions).
+        folder_id: The stable association ID, independent of directory names and indices.
     """
 
     action_type: SnapEditType
@@ -211,6 +212,7 @@ class SnapEditAction:
     directory_name_to_remove: str = ""
     old_directory_name: str = ""
     new_directory_name: str = ""
+    folder_id: str = ""
 
 
 @dataclass

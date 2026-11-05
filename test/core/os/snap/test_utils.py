@@ -164,6 +164,32 @@ class TestSnapshotUtilsEdits(unittest.TestCase):
         self.assertIn(SnapEditType.ADD_DIR, types)
         self.assertIn(SnapEditType.REMOVE_DIR, types)
 
+    def test_renames_follow_stable_ids_when_original_paths_are_shared(self):
+        source = SOURCE_DATA_PATH / "e1"
+        old = make_snapshot("SharedSource", [source, source], n=2)
+        new = old.clone()
+        new.directories.pop(0)
+        new.directories[0].index = 1
+
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+
+        self.assertEqual({edit.folder_id: edit.action_type for edit in edits}, {
+            old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
+            old.directories[1].folder_id: SnapEditType.RENAME_DIR,
+        })
+
+    def test_replacing_association_at_same_path_is_remove_and_add(self):
+        old = make_snapshot("ReplaceIdentity", [SOURCE_DATA_PATH / "e1"], n=1)
+        new = old.clone()
+        new.directories[0].folder_id = "replacement"
+
+        edits = SnapshotUtils.get_edits_between_snapshots(old, new)
+
+        self.assertEqual({edit.folder_id: edit.action_type for edit in edits}, {
+            old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
+            "replacement": SnapEditType.ADD_DIR,
+        })
+
 
 class TestSnapshotUtilsSort(unittest.TestCase):
     """sort_snapshots covers all sort keys and edge cases."""

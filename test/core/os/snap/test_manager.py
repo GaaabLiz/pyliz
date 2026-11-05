@@ -26,6 +26,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
+    SnapEditType,
     Snapshot,
     SnapshotSettings,
 )
@@ -408,6 +409,106 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
     def _mgr(self, snap, settings=None):
         return SnapshotManager(snap, CATALOGUE_PATH, settings or SnapshotSettings())
 
+    def _create_same_name_snapshot(self, count=2):
+        sources = [SOURCE_DATA_PATH / f"source_{i}" / "foo" for i in range(count)]
+        for i, source in enumerate(sources):
+            source.mkdir(parents=True)
+            (source / "foo_file.txt").write_text(f"saved copy {i}")
+        snap = make_snapshot("SameNames", sources, n=count)
+        self._mgr(snap).create()
+        # Updates must preserve the stored copies even if the live sources change.
+        for source in sources:
+            (source / "foo_file.txt").write_text("changed live source")
+        return snap
+
+    def test_remove_and_renumber_same_name_preserves_kept_copy(self):
+        snap = self._create_same_name_snapshot()
+        new = snap.clone()
+        new.directories.pop(0)
+        new.directories[0].index = 1
+        mgr = self._mgr(new)
+
+        edits = SnapshotUtils.get_edits_between_snapshots(snap, new)
+        mgr.update_from_actions_list(edits)
+
+        self.assertEqual((mgr.path_snapshot / "1-foo" / "foo_file.txt").read_text(), "saved copy 1")
+        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "snapshot.json"})
+        self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).directories, new.directories)
+
+    def test_reordering_same_name_directories_preserves_each_copy(self):
+        snap = self._create_same_name_snapshot(count=3)
+        new = snap.clone()
+        for assoc, index in zip(new.directories, (2, 3, 1)):
+            assoc.index = index
+        mgr = self._mgr(new)
+
+        # A plan must work independently of the ordering of its actions.
+        edits = SnapshotUtils.get_edits_between_snapshots(snap, new)
+        mgr.update_from_actions_list(list(reversed(edits)))
+
+        for i, assoc in enumerate(new.directories):
+            self.assertEqual((mgr.path_snapshot / assoc.directory_name / "foo_file.txt").read_text(), f"saved copy {i}")
+        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "2-foo", "3-foo", "snapshot.json"})
+
+    def test_duplicate_final_names_rejected_before_modifying_snapshot(self):
+        snap = self._create_same_name_snapshot()
+        new = snap.clone()
+        new.directories[1].index = 1
+        mgr = self._mgr(new)
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+
+        with self.assertRaises(ValueError):
+            mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
+
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+
+    def test_remove_and_renumber_rolls_back_when_final_rename_fails(self):
+        snap = self._create_same_name_snapshot()
+        new = snap.clone()
+        new.directories.pop(0)
+        new.directories[0].index = 1
+        mgr = self._mgr(new)
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+        real_rename = Path.rename
+        failed = False
+
+        def fail_final_rename(source, target):
+            nonlocal failed
+            if not failed and Path(target) == mgr.path_snapshot / "1-foo" and source.parent != mgr.path_snapshot:
+                failed = True
+                raise PermissionError("final rename failed")
+            return real_rename(source, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_final_rename):
+            with self.assertRaises(PermissionError):
+                mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
+
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+
+    def test_reorder_rolls_back_after_one_final_rename_succeeds(self):
+        snap = self._create_same_name_snapshot(count=3)
+        new = snap.clone()
+        for assoc, index in zip(new.directories, (2, 3, 1)):
+            assoc.index = index
+        mgr = self._mgr(new)
+        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
+        real_rename = Path.rename
+        failed = False
+
+        def fail_second_publication(source, target):
+            nonlocal failed
+            if not failed and Path(target) == mgr.path_snapshot / "3-foo" and source.parent != mgr.path_snapshot:
+                failed = True
+                raise PermissionError("second final rename failed")
+            return real_rename(source, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_second_publication):
+            with self.assertRaises(PermissionError):
+                mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
+
+        self.assertTrue(failed)
+        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+
     def test_update_from_actions_list_applies_add_and_remove(self):
         src_sorted = sorted(self._src)
         snap = make_snapshot("ActionsSnap", src_sorted, n=2)
@@ -429,7 +530,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         edits = SnapshotUtils.get_edits_between_snapshots(snap, snap_new)
         # edits should contain a REMOVE, an ADD, and a RENAME (because kept_assoc index changed)
         self.assertEqual(len(edits), 3)
-        self.assertTrue(any(e.action_type.name == "RENAME_DIR" for e in edits))
+        self.assertTrue(any(e.action_type == SnapEditType.RENAME_DIR for e in edits))
 
         mgr2 = SnapshotManager(snap_new, CATALOGUE_PATH)
         mgr2.update_from_actions_list(edits)

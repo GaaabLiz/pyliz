@@ -130,7 +130,7 @@ class SnapshotUtils:
     @staticmethod
     def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
         """
-        Compares two Snapshot objects and generates a list of actions (add/remove)
+        Compares associations by stable folder_id and generates add/remove/rename actions
         required to transform the old snapshot into the new one.
 
         Args:
@@ -142,40 +142,38 @@ class SnapshotUtils:
         """
         edits: list[SnapEditAction] = []
 
-        old_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in old.directories}
-        new_path_to_assoc = {dir_assoc.original_path: dir_assoc for dir_assoc in new.directories}
+        old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
+        new_by_id = {assoc.folder_id: assoc for assoc in new.directories}
+        if len(old_by_id) != len(old.directories) or len(new_by_id) != len(new.directories):
+            raise ValueError("Snapshot associations must have unique folder IDs.")
 
-        old_paths = set(old_path_to_assoc.keys())
-        new_paths = set(new_path_to_assoc.keys())
+        for assoc in new.directories:
+            if assoc.folder_id not in old_by_id:
+                edits.append(SnapEditAction(action_type=SnapEditType.ADD_DIR, new_path=assoc.original_path, folder_id=assoc.folder_id))
 
-        # Find added folders (present in new but not in old)
-        added_paths = new_paths - old_paths
-        for path in added_paths:
-            edits.append(SnapEditAction(action_type=SnapEditType.ADD_DIR, new_path=path))
-
-        # Find removed folders (present in old but not in new)
-        removed_paths = old_paths - new_paths
-        for path in removed_paths:
-            assoc = old_path_to_assoc[path]
+        for assoc in old.directories:
+            if assoc.folder_id in new_by_id:
+                continue
             edits.append(
                 SnapEditAction(
                     action_type=SnapEditType.REMOVE_DIR,
                     folder_id_to_remove=assoc.folder_id,
                     directory_name_to_remove=assoc.directory_name,
+                    folder_id=assoc.folder_id,
                 )
             )
 
-        # Find renamed folders (present in both, but directory_name changed because index changed)
-        kept_paths = old_paths & new_paths
-        for path in kept_paths:
-            old_assoc = old_path_to_assoc[path]
-            new_assoc = new_path_to_assoc[path]
+        for old_assoc in old.directories:
+            new_assoc = new_by_id.get(old_assoc.folder_id)
+            if new_assoc is None:
+                continue
             if old_assoc.directory_name != new_assoc.directory_name:
                 edits.append(
                     SnapEditAction(
                         action_type=SnapEditType.RENAME_DIR,
                         old_directory_name=old_assoc.directory_name,
                         new_directory_name=new_assoc.directory_name,
+                        folder_id=old_assoc.folder_id,
                     )
                 )
 
