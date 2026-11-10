@@ -96,6 +96,45 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         loaded = SnapshotSerializer.from_json(json_path)
         self.assertTrue(all(isinstance(d, SnapDirAssociation) for d in loaded.directories))
 
+    def test_json_rejects_string_index_that_could_traverse_outside_snapshot(self):
+        json_path = TEST_LOCAL_ROOT / "bad_index.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "id": "invalid-index",
+                    "name": "Invalid",
+                    "desc": "",
+                    "directories": [{"index": "../../escape", "original_path": "/source", "folder_id": "assoc"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(TypeError):
+            SnapshotSerializer.from_json(json_path)
+
+
+class TestSnapshotSerializerSymlinkSafety(unittest.TestCase):
+    def setUp(self):
+        setup_test_dirs()
+
+    def tearDown(self):
+        teardown_test_dirs()
+
+    def test_update_field_does_not_follow_a_metadata_symlink(self):
+        external_json = TEST_LOCAL_ROOT / "outside.json"
+        external_json.write_text('{"name": "outside"}', encoding="utf-8")
+        linked_json = TEST_LOCAL_ROOT / "linked.json"
+        try:
+            linked_json.symlink_to(external_json)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"symlink creation is unavailable: {error}")
+
+        with self.assertRaises((OSError, ValueError)):
+            SnapshotSerializer.update_field(linked_json, "name", "changed")
+
+        self.assertEqual(external_json.read_text(encoding="utf-8"), '{"name": "outside"}')
+
 
 class TestSnapshotSerializerUpdateField(unittest.TestCase):
     """Tests for SnapshotSerializer.update_field partial-write API."""

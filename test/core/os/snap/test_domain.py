@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -95,6 +96,19 @@ class TestSnapDirAssociationConstruction(unittest.TestCase):
         i1 = SnapDirAssociation.next_index()
         i2 = SnapDirAssociation.next_index()
         self.assertEqual(i2, i1 + 1)
+
+    def test_index_must_be_an_integer_before_it_can_name_a_directory(self):
+        with self.assertRaises(TypeError):
+            SnapDirAssociation(index="../../escape", original_path="/source", folder_id="bad-index")
+
+        with self.assertRaises(TypeError):
+            SnapDirAssociation(index=True, original_path="/source", folder_id="bool-index")
+
+    def test_mutated_index_is_revalidated_when_directory_name_is_used(self):
+        assoc = SnapDirAssociation(index=1, original_path="/source", folder_id="mutable-index", mb_size=0)
+        assoc.index = "../../escape"
+        with self.assertRaises(TypeError):
+            _ = assoc.directory_name
 
 
 class TestSnapDirAssociationCopyInstallTo(unittest.TestCase):
@@ -189,6 +203,10 @@ class TestSnapEditAction(unittest.TestCase):
         self.assertEqual(e.folder_id_to_remove, "")
         self.assertEqual(e.directory_name_to_remove, "")
 
+    def test_path_traversal_names_are_rejected(self):
+        with self.assertRaises(ValueError):
+            SnapEditAction(action_type=SnapEditType.REMOVE_DIR, directory_name_to_remove="../../outside")
+
 
 class TestSnapshotSettings(unittest.TestCase):
     """Tests for SnapshotSettings defaults and backup-enabled guards."""
@@ -203,6 +221,7 @@ class TestSnapshotSettings(unittest.TestCase):
         self.assertFalse(s.install_with_everyone_full_control)
         self.assertEqual(s.snap_id_length, 20)
         self.assertEqual(s.folder_id_length, 6)
+        self.assertIsInstance(s.copy_strategy, SequentialFileCopyStrategy)
 
     def test_backup_enabled_requires_both_flag_and_path(self):
         self.assertFalse(SnapshotSettings(backup_pre_install=True, backup_path=None).bck_before_install_enabled)
@@ -236,6 +255,10 @@ class TestSnapshotModel(unittest.TestCase):
     def test_folder_name_equals_id(self):
         snap = Snapshot(id="snap_id_123", name="X", desc="")
         self.assertEqual(snap.folder_name, "snap_id_123")
+
+    def test_snapshot_id_must_be_a_single_path_component(self):
+        with self.assertRaises(ValueError):
+            Snapshot(id="../../escape", name="Invalid", desc="")
 
     def test_tags_as_string_sorted(self):
         snap = Snapshot(id="1", name="T", desc="", tags=["gamma", "alpha", "beta"])

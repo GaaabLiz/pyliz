@@ -61,6 +61,53 @@ class TestSnapshotUtilsPaths(unittest.TestCase):
         with self.assertRaises(ValueError):
             SnapshotUtils.get_snapshot_path("", CATALOGUE_PATH)
 
+    def test_get_snapshot_path_rejects_prefix_sibling_symlink(self):
+        catalogue = TEST_LOCAL_ROOT / "cat"
+        outside = TEST_LOCAL_ROOT / "cat_evil"
+        catalogue.mkdir(parents=True, exist_ok=True)
+        outside.mkdir(parents=True, exist_ok=True)
+        important = outside / "important.txt"
+        important.write_text("preserve", encoding="utf-8")
+        link = catalogue / "s"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"symlink creation is unavailable: {error}")
+
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_path("s", catalogue)
+        self.assertEqual(important.read_text(encoding="utf-8"), "preserve")
+
+    def test_snapshot_child_path_rejects_symlink_inside_storage(self):
+        root = CATALOGUE_PATH / "child-link-snapshot"
+        outside = TEST_LOCAL_ROOT / "child-link-outside"
+        root.mkdir()
+        outside.mkdir()
+        try:
+            (root / "association").symlink_to(outside, target_is_directory=True)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"symlink creation is unavailable: {error}")
+
+        with self.assertRaises(ValueError):
+            SnapshotUtils.get_snapshot_child_path("child-link-snapshot", CATALOGUE_PATH, "association")
+
+    def test_snapshot_publication_refuses_a_symlink_destination(self):
+        source = TEST_LOCAL_ROOT / "publish-source"
+        source.mkdir()
+        (source / "new.txt").write_text("snapshot", encoding="utf-8")
+        outside = TEST_LOCAL_ROOT / "publish-outside"
+        outside.mkdir()
+        important = outside / "important.txt"
+        important.write_text("preserve", encoding="utf-8")
+        try:
+            (CATALOGUE_PATH / "publish-link").symlink_to(outside, target_is_directory=True)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"symlink creation is unavailable: {error}")
+
+        with self.assertRaises(ValueError):
+            SnapshotUtils.publish_snapshot_tree(source, "publish-link", CATALOGUE_PATH)
+        self.assertEqual(important.read_text(encoding="utf-8"), "preserve")
+
 
 class TestSnapshotUtilsGetFromPath(unittest.TestCase):
     """get_snapshot_from_path: happy path and all error branches."""

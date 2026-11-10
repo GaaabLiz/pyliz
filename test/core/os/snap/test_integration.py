@@ -92,8 +92,10 @@ class TestIntegrationCleanupFailures(unittest.TestCase):
 
         def fail_after_deleting_one_file(path, *args, **kwargs):
             backup = Path(path)
-            if "_bck_" in backup.name and not damaged_backups:
-                next(p for p in backup.rglob("*") if p.is_file()).unlink()
+            original = backup / "original" if operation == "restore_sd" else backup
+            is_backup = original.is_dir() and (operation == "restore_sd" or "_bck_" in backup.name)
+            if is_backup and not damaged_backups:
+                next(p for p in original.rglob("*") if p.is_file()).unlink()
                 damaged_backups.append(backup)
                 raise PermissionError("backup cleanup interrupted after deleting a file")
             return real_rmtree(path, *args, **kwargs)
@@ -113,8 +115,10 @@ class TestIntegrationCleanupFailures(unittest.TestCase):
         for target, files in expected.items():
             self.assertEqual({p.name: p.read_bytes() for p in target.iterdir()}, files)
         # Other backups are still cleaned even when the first cleanup fails.
-        backup_parent = CATALOGUE_PATH if operation == "restore_sd" else damaged_backups[0].parent
-        self.assertEqual(list(backup_parent.glob("*_bck_*")), damaged_backups)
+        if operation == "restore_sd":
+            self.assertEqual(list(CATALOGUE_PATH.glob("_staging_snapshot_*")), damaged_backups)
+        else:
+            self.assertEqual(list(damaged_backups[0].parent.glob("*_bck_*")), damaged_backups)
         loaded = SnapshotSerializer.from_json(self.mgr.path_snapshot_json)
         if operation == "install":
             self.assertIsNotNone(loaded.date_last_used)

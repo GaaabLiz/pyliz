@@ -117,7 +117,12 @@ class SnapshotManager:
                         overall_pct = ((i + dir_pct) / total_dirs) * 100
                         progress_callback(int(overall_pct))
 
-                snap_dir.copy_install_to(staging_path, progress_callback=dir_progress, message_callback=message_callback)
+                snap_dir.copy_install_to(
+                    staging_path,
+                    progress_callback=dir_progress,
+                    message_callback=message_callback,
+                    copy_strategy=self.settings.copy_strategy,
+                )
 
             # Write json to staging BEFORE making it the final destination
             json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
@@ -188,7 +193,7 @@ class SnapshotManager:
             original_path=destination_path.as_posix(),
             folder_id=gen_random_string(self.settings.folder_id_length),
         )
-        new_dir.copy_install_to(self._snapshot_root_path())
+        new_dir.copy_install_to(self._snapshot_root_path(), copy_strategy=self.settings.copy_strategy)
         self.snapshot.directories.append(new_dir)
         self.__save_json()
 
@@ -288,7 +293,11 @@ class SnapshotManager:
                 if target is not None:
                     publications.append((staged, target))
             for assoc in additions:
-                assoc.copy_install_to(staging_path / "additions", message_callback=message_callback)
+                assoc.copy_install_to(
+                    staging_path / "additions",
+                    message_callback=message_callback,
+                    copy_strategy=self.settings.copy_strategy,
+                )
                 publications.append((staging_path / "additions" / assoc.directory_name, self._snapshot_child_path(assoc.directory_name)))
 
             for staged, target in publications:
@@ -341,6 +350,7 @@ class SnapshotManager:
             new_snap.folder_name,
             self.path_catalogue,
             prepare_staging=prepare_duplicate,
+            copy_strategy=self.settings.copy_strategy,
             message_callback=message_callback,
             operation="Snapshot duplication",
         )
@@ -370,13 +380,8 @@ class SnapshotManager:
 
                 logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
 
-                def copy_with_cb(src, dst, *, follow_symlinks=True):
-                    if message_callback:
-                        message_callback(f"Copia in corso: {Path(src).name}")
-                    shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
-
                 try:
-                    shutil.copytree(system_path, staging_dir, copy_function=copy_with_cb)
+                    self.settings.copy_strategy.copy_directory(system_path, staging_dir, message_callback=message_callback)
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
@@ -476,7 +481,6 @@ class SnapshotManager:
         """
         self.snapshot.validate()
         self._snapshot_root_path()
-        import os
         import platform
         import sys
 
@@ -515,25 +519,21 @@ class SnapshotManager:
                 staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
                 backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
 
-                total_bytes = 0
-                if progress_callback:
-                    total_bytes = sum(f.stat().st_size for f in source_dir.rglob("*") if f.is_file())
-                copied_bytes = [0]
-
-                def copy_with_prog(src, dst, *, follow_symlinks=True):
-                    if message_callback:
-                        message_callback(f"Copia in corso: {Path(src).name}")
-                    shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+                def copy_progress(copied_bytes: int, total_bytes: int) -> None:
                     if progress_callback:
-                        copied_bytes[0] += os.path.getsize(src)
-                        dir_pct = (copied_bytes[0] / total_bytes) if total_bytes > 0 else 1.0
+                        dir_pct = (copied_bytes / total_bytes) if total_bytes > 0 else 1.0
                         overall_pct = ((i + dir_pct) / total_dirs) * 100
                         progress_callback(int(overall_pct))
 
                 logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
                 try:
                     SnapshotUtils.assert_no_symlinks(source_dir)
-                    shutil.copytree(source_dir, staging_dir, copy_function=copy_with_prog, symlinks=True)
+                    self.settings.copy_strategy.copy_directory(
+                        source_dir,
+                        staging_dir,
+                        progress_callback=copy_progress if progress_callback else None,
+                        message_callback=message_callback,
+                    )
                     SnapshotUtils.assert_no_symlinks(staging_dir)
                 except Exception as e:
                     if staging_dir.exists():

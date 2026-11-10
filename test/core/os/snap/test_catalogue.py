@@ -770,8 +770,7 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         self.assertTrue((dest / "subdir" / "file.txt").exists())
         self.assertFalse((dest / "old_file.txt").exists())
 
-    @patch("shutil.copytree")
-    def test_restore_backup_ad_rolls_back_on_error(self, mock_copytree):
+    def test_restore_backup_ad_rolls_back_on_error(self):
         snap = make_snapshot("RestoreADFail", self._src, n=1)
         self.cat.add(snap)
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
@@ -784,10 +783,9 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "old_file.txt").write_text("should_stay")
 
-        mock_copytree.side_effect = Exception("simulated failure")
-
-        with self.assertRaises(IOError) as ctx:
-            self.cat.restore_backup(zip_path)
+        with patch.object(self.settings.copy_strategy, "copy_directory", side_effect=Exception("simulated failure")):
+            with self.assertRaises(IOError) as ctx:
+                self.cat.restore_backup(zip_path)
         self.assertIn("Failed to restore associated directories", str(ctx.exception))
 
         # The rollback should have restored old_file.txt
