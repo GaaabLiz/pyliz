@@ -343,6 +343,22 @@ class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
             remove_directory_or_move_to_temp(target)
             self.assertFalse(target.exists())
 
+    def test_callback_deletion_does_not_follow_directory_symlinks(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            target = root / "target"
+            outside = root / "outside"
+            target.mkdir()
+            outside.mkdir()
+            protected_file = outside / "keep.txt"
+            protected_file.write_text("keep", encoding="utf-8")
+            (target / "external").symlink_to(outside, target_is_directory=True)
+
+            remove_directory_or_move_to_temp(target, message_callback=lambda _: None)
+
+            self.assertFalse(target.exists())
+            self.assertEqual(protected_file.read_text(encoding="utf-8"), "keep")
+
     def test_move_to_temp(self):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "to_move"

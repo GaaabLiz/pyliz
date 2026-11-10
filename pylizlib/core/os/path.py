@@ -315,20 +315,16 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
     """
     if not move_to_temp:
         if message_callback:
-
-            def remove_with_cb(p: Path):
-                if not p.exists():
-                    return
-                for item in p.iterdir():
-                    if item.is_dir():
-                        remove_with_cb(item)
-                    else:
-                        message_callback(f"Eliminazione: {item.name}")
-                        item.unlink()
-                message_callback(f"Eliminazione: {p.name}")
-                p.rmdir()
-
-            remove_with_cb(path)
+            # ``shutil.rmtree`` uses a symlink-attack-resistant implementation
+            # where the platform supports it. Walk separately only to report
+            # progress; os.walk does not descend into directory symlinks.
+            for root, dirs, files in os.walk(path, topdown=False, followlinks=False):
+                for name in files:
+                    message_callback(f"Eliminazione: {name}")
+                for name in dirs:
+                    message_callback(f"Eliminazione: {name}")
+            message_callback(f"Eliminazione: {path.name}")
+            shutil.rmtree(path)
         else:
             shutil.rmtree(path.__str__(), ignore_errors=True)
     else:
