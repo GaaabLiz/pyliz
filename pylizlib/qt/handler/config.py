@@ -11,8 +11,13 @@ class ConfigQtHandler:
         if item.type is list:
             assert item.max_list_size is not None, "max_list_size must be set for list type"
             ConfigQtHandler.__qt_write_list(item, value, setting)
-        if item.type is str:
+        elif item.type is str:
             ConfigQtHandler.__qt_write_str(item, value, setting)
+        elif item.type in (bool, int, float):
+            setting.setValue(item.id, value)
+        else:
+            raise TypeError(f"Unsupported Qt setting type: {item.type!r}")
+        setting.sync()
 
     @staticmethod
     def qt_read(
