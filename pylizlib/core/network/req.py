@@ -150,13 +150,21 @@ def exec_post(
     url: str,
     payload,
     headers: Mapping[str, str | bytes | None] | None = None,
-    verify_bool: bool = False,
+    verify_bool: bool = True,
+    sec_timeout: int | None = 10,
 ) -> NetResponse:
     """Execute an HTTP POST request and return a standardized ``NetResponse``."""
 
     try:
         getattr(logger, "trace", logger.debug)("Executing POST request on URL: " + url)
-        response = requests.post(url, json=payload, verify=verify_bool, allow_redirects=True, headers=headers)
+        response = requests.post(
+            url,
+            json=payload,
+            verify=verify_bool,
+            allow_redirects=True,
+            headers=headers,
+            timeout=sec_timeout,
+        )
         if response.status_code == 200:
             return NetResponse(response, NetResponseType.OK200)
         else:

@@ -101,6 +101,26 @@ class RequestHelpersTestCase(unittest.TestCase):
         result = exec_post("https://example.com", payload={"x": 1})
         self.assertEqual(result.type, NetResponseType.ERROR)
 
+    @patch("pylizlib.core.network.req.requests.post")
+    def test_exec_post_verifies_tls_and_passes_configured_timeout(self, mock_post):
+        response = MagicMock()
+        response.status_code = 200
+        response.text = "ok"
+        response.headers = {}
+        mock_post.return_value = response
+
+        result = exec_post("https://example.com", payload={"x": 1}, sec_timeout=23)
+
+        self.assertEqual(result.type, NetResponseType.OK200)
+        mock_post.assert_called_once_with(
+            "https://example.com",
+            json={"x": 1},
+            verify=True,
+            allow_redirects=True,
+            headers=None,
+            timeout=23,
+        )
+
     @patch("pylizlib.core.network.req.requests.post", side_effect=requests.Timeout("timeout"))
     def test_exec_post_timeout(self, _):
         result = exec_post("https://example.com", payload={})
