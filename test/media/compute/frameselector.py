@@ -4,7 +4,11 @@ from unittest.mock import MagicMock, patch
 import cv2
 import numpy as np
 
-from pylizlib.media.compute.frameselector import UniformFrameSelector
+from pylizlib.media.compute.frameselector import (
+    AllFrameSelector,
+    DynamicFrameSelector,
+    UniformFrameSelector,
+)
 from pylizlib.media.domain.video import FrameOptions
 
 
@@ -98,6 +102,79 @@ class FrameSelectorValidationTestCase(unittest.TestCase):
                     FrameOptions(frames_per_minute=1, min_frames=1, max_frames=1),
                 )
 
+        capture.release.assert_called_once()
+
+
+class DynamicFrameSelectorTestCase(unittest.TestCase):
+    @patch("pylizlib.media.compute.frameselector.cv2.VideoCapture")
+    def test_select_frames_full_pipeline(self, mock_cap_cls):
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        capture.get.side_effect = lambda prop: {
+            cv2.CAP_PROP_FPS: 10,
+            cv2.CAP_PROP_FRAME_COUNT: 4,
+            cv2.CAP_PROP_POS_MSEC: 100,
+        }.get(prop, 0)
+
+        # 4 frames for _detect_scene_changes, then 2 frames for _extract_frames
+        f1 = np.zeros((10, 10, 3), dtype=np.uint8)
+        f2 = np.ones((10, 10, 3), dtype=np.uint8) * 200  # large diff -> scene change
+        f3 = np.ones((10, 10, 3), dtype=np.uint8) * 200
+        f4 = np.zeros((10, 10, 3), dtype=np.uint8)        # large diff -> scene change
+
+        capture.read.side_effect = [
+            (True, f1),
+            (True, f2),
+            (True, f3),
+            (True, f4),
+            (False, None),  # end of scene detection
+            (True, f1),     # extract frame 1
+            (True, f2),     # extract frame 2
+        ]
+        mock_cap_cls.return_value = capture
+
+        selector = DynamicFrameSelector()
+        options = FrameOptions(min_frames=2, max_frames=2)
+        frames = selector.select_frames("test.mp4", options)
+
+        self.assertEqual(len(frames), 2)
+        capture.release.assert_called_once()
+
+    def test_calculate_frame_difference(self):
+        selector = DynamicFrameSelector()
+        img1 = np.zeros((5, 5, 3), dtype=np.uint8)
+        img2 = np.ones((5, 5, 3), dtype=np.uint8) * 100
+        diff = selector._calculate_frame_difference(img1, img2)
+        self.assertAlmostEqual(diff, 100.0, places=1)
+
+
+class AllFrameSelectorTestCase(unittest.TestCase):
+    @patch("pylizlib.media.compute.frameselector.cv2.VideoCapture")
+    def test_select_all_frames(self, mock_cap_cls):
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        capture.get.side_effect = lambda prop: {
+            cv2.CAP_PROP_FPS: 25,
+            cv2.CAP_PROP_FRAME_COUNT: 2,
+            cv2.CAP_PROP_POS_MSEC: 40.0,
+        }.get(prop, 0)
+
+        f1 = np.zeros((4, 4, 3), dtype=np.uint8)
+        f2 = np.ones((4, 4, 3), dtype=np.uint8) * 50
+
+        capture.read.side_effect = [
+            (True, f1),
+            (True, f2),
+            (False, None),
+        ]
+        mock_cap_cls.return_value = capture
+
+        selector = AllFrameSelector()
+        options = FrameOptions()
+        frames = selector.select_frames("short.mp4", options)
+
+        self.assertEqual(len(frames), 2)
+        self.assertEqual(frames[0].timestamp, 0.04)
         capture.release.assert_called_once()
 
 
