@@ -157,28 +157,17 @@ class SnapshotCatalogue:
                     raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
 
                 restored_snapshot = SnapshotSerializer.from_json(json_path)
-                destination_path = SnapshotUtils.get_snapshot_path(restored_snapshot.id, self.path_catalogue)
-
-                backup_dest = destination_path.with_name(f"{destination_path.name}_bck_{gen_random_string(6)}")
-                original_moved = False
-                destination_created = False
                 try:
-                    if destination_path.exists():
-                        destination_path.rename(backup_dest)
-                        original_moved = True
-                    destination_path.mkdir()
-                    destination_created = True
-                    shutil.copytree(temp_dir_path, destination_path, dirs_exist_ok=True)
+                    SnapshotUtils.publish_snapshot_tree(
+                        temp_dir_path,
+                        restored_snapshot.id,
+                        self.path_catalogue,
+                        replace_existing=True,
+                        operation="Snapshot-directory restore",
+                    )
                 except Exception as e:
                     logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
-                    if destination_created and destination_path.exists():
-                        shutil.rmtree(destination_path)
-                    if original_moved:
-                        backup_dest.rename(destination_path)
                     raise IOError(f"Failed to restore snapshot directory: {e}") from e
-                else:
-                    if original_moved:
-                        SnapshotUtils.cleanup_after_commit([backup_dest], "Snapshot-directory restore")
                 return
 
             # ASSOCIATED_DIRECTORIES restore
@@ -464,7 +453,7 @@ class SnapshotCatalogue:
 
                 try:
                     # Read just the ID to avoid loading the whole object unnecessarily
-                    data = json.loads(json_path.read_text(encoding="utf-8"))
+                    data = json.loads(SnapshotSerializer.read_text(json_path))
                     snap_id = data.get("id")
                     if not snap_id:
                         logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
@@ -476,8 +465,7 @@ class SnapshotCatalogue:
                         continue
 
                     # 4. Copy the extracted folder to the catalogue
-                    destination_path = SnapshotUtils.get_snapshot_path(snap_id, self.path_catalogue)
-                    shutil.copytree(potential_snap_dir, destination_path)
+                    SnapshotUtils.publish_snapshot_tree(potential_snap_dir, snap_id, self.path_catalogue, operation="Catalogue import")
                     logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
 
                 except Exception as e:
@@ -526,8 +514,7 @@ class SnapshotCatalogue:
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
             # 4. Copy the extracted folder to the catalogue
-            destination_path = SnapshotUtils.get_snapshot_path(snapshot_to_import.id, self.path_catalogue)
-            shutil.copytree(temp_dir_path, destination_path)
+            SnapshotUtils.publish_snapshot_tree(temp_dir_path, snapshot_to_import.id, self.path_catalogue, operation="Snapshot import")
 
     def update_assoc_with_installed(self, snap_id: str, message_callback=None):
         """

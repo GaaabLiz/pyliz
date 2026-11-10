@@ -35,6 +35,11 @@ from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
 class SnapshotUtils:
     @staticmethod
+    def _is_link_or_junction(path: Path) -> bool:
+        is_junction = getattr(path, "is_junction", None)
+        return path.is_symlink() or (is_junction is not None and is_junction())
+
+    @staticmethod
     def iter_files_strict(root: Path) -> Iterator[Path]:
         """Enumerate files without suppressing scan or metadata errors.
 
@@ -100,6 +105,107 @@ class SnapshotUtils:
                     shutil.rmtree(path)
             except OSError as e:
                 logger.warning(f"{operation} completed, but could not remove temporary directory '{path}': {e}")
+
+    @staticmethod
+    def assert_no_symlinks(root: Path) -> None:
+        """Reject symlinks anywhere in snapshot storage before traversing it."""
+        try:
+            root_mode = root.lstat().st_mode
+        except FileNotFoundError:
+            raise
+        if not stat.S_ISDIR(root_mode) or SnapshotUtils._is_link_or_junction(root):
+            raise NotADirectoryError(f"Snapshot storage '{root}' is not a real directory.")
+
+        pending = [root]
+        while pending:
+            current = pending.pop()
+            if SnapshotUtils._is_link_or_junction(current):
+                raise ValueError(f"Snapshot storage contains symbolic link '{current}'.")
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    mode = entry.stat(follow_symlinks=False).st_mode
+                    entry_path = Path(entry.path)
+                    if stat.S_ISLNK(mode) or SnapshotUtils._is_link_or_junction(entry_path):
+                        raise ValueError(f"Snapshot storage contains symbolic link '{entry.path}'.")
+                    if stat.S_ISDIR(mode):
+                        pending.append(Path(entry.path))
+
+    @staticmethod
+    def publish_snapshot_tree(
+        source: Path,
+        snapshot_id: str,
+        catalogue_path: Path,
+        *,
+        replace_existing: bool = False,
+        prepare_staging=None,
+        message_callback=None,
+        operation: str = "Snapshot copy",
+    ) -> Path:
+        """Copy to private staging, validate it, then publish with directory renames."""
+        destination_path = SnapshotUtils.get_snapshot_path(snapshot_id, catalogue_path)
+        catalogue_path.mkdir(parents=True, exist_ok=True)
+        catalogue_root = catalogue_path.resolve(strict=False)
+        transaction_path = Path(tempfile.mkdtemp(prefix="_staging_snapshot_", dir=catalogue_root))
+        staged_path = transaction_path / "snapshot"
+        backup_path = transaction_path / "original"
+        original_moved = False
+        published = False
+        preserve_transaction = False
+        try:
+            # Copy symlink objects into staging instead of following them. The
+            # scan rejects them before any copy can become visible in storage.
+            SnapshotUtils.assert_no_symlinks(source)
+
+            def copy_with_message(src, dst):
+                if message_callback:
+                    message_callback(f"Copia in corso: {Path(src).name}")
+                return shutil.copy2(src, dst, follow_symlinks=True)
+
+            shutil.copytree(source, staged_path, symlinks=True, copy_function=copy_with_message)
+            SnapshotUtils.assert_no_symlinks(staged_path)
+            if prepare_staging is not None:
+                prepare_staging(staged_path)
+
+            destination_path = SnapshotUtils.validate_snapshot_root(snapshot_id, catalogue_path)
+            if destination_path.exists() or destination_path.is_symlink():
+                if not replace_existing:
+                    raise FileExistsError(f"Snapshot destination '{destination_path}' already exists.")
+                destination_path.rename(backup_path)
+                original_moved = True
+
+            # Revalidate after the old entry has moved. rename() publishes the
+            # staged directory itself and never writes through a destination link.
+            destination_path = SnapshotUtils.validate_snapshot_root(snapshot_id, catalogue_path)
+            if destination_path.exists() or destination_path.is_symlink():
+                raise FileExistsError(f"Snapshot destination '{destination_path}' was recreated during publication.")
+            staged_path.rename(destination_path)
+            published = True
+        except Exception:
+            if published:
+                if destination_path.is_symlink():
+                    destination_path.unlink()
+                elif destination_path.exists():
+                    shutil.rmtree(destination_path)
+            if original_moved and backup_path.exists():
+                current_destination = catalogue_root / snapshot_id
+                try:
+                    if current_destination.is_symlink():
+                        current_destination.unlink()
+                    if not current_destination.exists():
+                        backup_path.rename(current_destination)
+                    else:
+                        preserve_transaction = True
+                except OSError:
+                    preserve_transaction = True
+                if preserve_transaction:
+                    logger.error(f"{operation} rollback could not restore '{backup_path}' to '{current_destination}'.")
+            raise
+        finally:
+            if published:
+                SnapshotUtils.cleanup_after_commit([transaction_path], operation)
+            elif transaction_path.exists() and not preserve_transaction:
+                shutil.rmtree(transaction_path)
+        return destination_path
 
     @staticmethod
     def gen_random_snap(source_folder_for_choices: Path, id_length: int = 10) -> Snapshot:
@@ -169,32 +275,36 @@ class SnapshotUtils:
         if not folder_name.strip():
             raise ValueError("Snapshot ID cannot be empty.")
 
-        destination_path = catalogue_path / folder_name
-
         try:
             catalogue_resolved = catalogue_path.resolve(strict=False)
+            candidate_path = catalogue_path / folder_name
+            if SnapshotUtils._is_link_or_junction(candidate_path):
+                raise ValueError(f"Snapshot root '{candidate_path}' cannot be a symbolic link.")
+            destination_path = catalogue_resolved / folder_name
+            if SnapshotUtils._is_link_or_junction(destination_path):
+                raise ValueError(f"Snapshot root '{destination_path}' cannot be a symbolic link.")
             destination_resolved = destination_path.resolve(strict=False)
 
-            # Resolve to exactly this catalogue entry. This rejects traversal
-            # and snapshot roots replaced by symlinks, including links that
-            # point elsewhere inside the catalogue.
+            # Use structural containment to distinguish the catalogue from
+            # similarly prefixed sibling paths (for example, cat_evil).
             expected_path = catalogue_resolved / folder_name
+            if destination_resolved == catalogue_resolved or not destination_resolved.is_relative_to(catalogue_resolved):
+                raise ValueError(f"Snapshot path must be strictly contained in its catalogue. Resolved: {destination_resolved}")
             if destination_resolved != expected_path:
-                raise ValueError(f"Snapshot path must resolve to its catalogue entry. Resolved: {destination_resolved}")
+                raise ValueError(f"Snapshot path does not resolve to its catalogue entry: {destination_resolved}")
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
             raise ValueError(f"Invalid snapshot path: {e}")
 
-        return destination_path
+        return expected_path
 
     @staticmethod
     def validate_snapshot_root(folder_name: str, catalogue_path: Path) -> Path:
         """Return the snapshot root, rejecting a root replaced by a symlink."""
         root = SnapshotUtils.get_snapshot_path(folder_name, catalogue_path)
-        expected_root = catalogue_path.resolve(strict=False) / folder_name
-        if root.resolve(strict=False) != expected_root:
-            raise ValueError(f"Snapshot root '{root}' resolves outside its catalogue entry.")
+        if SnapshotUtils._is_link_or_junction(root):
+            raise ValueError(f"Snapshot root '{root}' cannot be a symbolic link.")
         return root
 
     @staticmethod
@@ -203,9 +313,11 @@ class SnapshotUtils:
         validate_directory_component(child_name)
         root = SnapshotUtils.validate_snapshot_root(folder_name, catalogue_path)
         destination = root / child_name
-        expected_root = catalogue_path.resolve(strict=False) / folder_name
-        if destination.resolve(strict=False) != expected_root / child_name:
+        if SnapshotUtils._is_link_or_junction(destination):
             raise ValueError(f"Snapshot child '{destination}' resolves through a symbolic link.")
+        resolved = destination.resolve(strict=False)
+        if resolved == root or not resolved.is_relative_to(root) or resolved != destination:
+            raise ValueError(f"Snapshot child '{destination}' resolves outside its direct storage path.")
         return destination
 
     @staticmethod
