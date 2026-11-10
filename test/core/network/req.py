@@ -1,3 +1,4 @@
+import socket
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -61,11 +62,16 @@ class RequestHelpersTestCase(unittest.TestCase):
     def test_is_internet_available_true(self, mock_create_connection):
         mock_context = MagicMock()
         mock_create_connection.return_value.__enter__.return_value = mock_context
+        original_timeout = socket.getdefaulttimeout()
         self.assertTrue(is_internet_available())
+        mock_create_connection.assert_called_once_with(("8.8.8.8", 53), timeout=3)
+        self.assertEqual(socket.getdefaulttimeout(), original_timeout)
 
     @patch("pylizlib.core.network.req.socket.create_connection", side_effect=OSError())
     def test_is_internet_available_false(self, _):
+        original_timeout = socket.getdefaulttimeout()
         self.assertFalse(is_internet_available())
+        self.assertEqual(socket.getdefaulttimeout(), original_timeout)
 
     @patch("pylizlib.core.network.req.requests.get")
     def test_exec_get_ok_and_error(self, mock_get):

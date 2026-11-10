@@ -116,9 +116,8 @@ def is_internet_available() -> bool:
     port = 53
     timeout = 3
     try:
-        socket.setdefaulttimeout(timeout)
         # Utilizza un blocco `with` per gestire automaticamente il socket
-        with socket.create_connection((host, port)):
+        with socket.create_connection((host, port), timeout=timeout):
             return True
     except OSError:
         return False
