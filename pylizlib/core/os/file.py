@@ -30,19 +30,19 @@ text_extensions = [".txt", ".doc", ".docx", ".pdf", ".odt", ".rtf", ".tex"]
 
 
 def is_image_extension(extension: str) -> bool:
-    return extension in image_extensions
+    return extension.lower() in image_extensions
 
 
 def is_video_extension(extension: str) -> bool:
-    return extension in video_extensions
+    return extension.lower() in video_extensions
 
 
 def is_audio_extension(extension: str) -> bool:
-    return extension in audio_extensions
+    return extension.lower() in audio_extensions
 
 
 def is_text_extension(extension: str) -> bool:
-    return extension in text_extensions
+    return extension.lower() in text_extensions
 
 
 def is_image_file(path: str) -> bool:
@@ -71,7 +71,7 @@ def is_media_file(path: str) -> bool:
 
 def is_media_sidecar_file(path: str) -> bool:
     sidecar_extensions = [".xmp", ".xml", ".aae"]
-    return os.path.splitext(path)[1] in sidecar_extensions
+    return os.path.splitext(path)[1].lower() in sidecar_extensions
 
 
 def get_file_type(path: str) -> FileType:

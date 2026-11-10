@@ -40,6 +40,10 @@ class IsExtensionTestCase(unittest.TestCase):
     def test_is_image_extension_false(self):
         self.assertFalse(is_image_extension(".mp4"))
 
+    def test_image_extensions_are_case_insensitive(self):
+        self.assertTrue(is_image_extension(".JPG"))
+        self.assertTrue(is_image_extension(".PnG"))
+
     # ── video ──
     def test_is_video_extension_mp4(self):
         self.assertTrue(is_video_extension(".mp4"))
@@ -49,6 +53,9 @@ class IsExtensionTestCase(unittest.TestCase):
 
     def test_is_video_extension_false(self):
         self.assertFalse(is_video_extension(".png"))
+
+    def test_video_extension_is_case_insensitive(self):
+        self.assertTrue(is_video_extension(".MP4"))
 
     # ── audio ──
     def test_is_audio_extension_mp3(self):
@@ -60,6 +67,9 @@ class IsExtensionTestCase(unittest.TestCase):
     def test_is_audio_extension_false(self):
         self.assertFalse(is_audio_extension(".jpg"))
 
+    def test_audio_extension_is_case_insensitive(self):
+        self.assertTrue(is_audio_extension(".FlAc"))
+
     # ── text ──
     def test_is_text_extension_txt(self):
         self.assertTrue(is_text_extension(".txt"))
@@ -69,6 +79,9 @@ class IsExtensionTestCase(unittest.TestCase):
 
     def test_is_text_extension_false(self):
         self.assertFalse(is_text_extension(".mp3"))
+
+    def test_text_extension_is_case_insensitive(self):
+        self.assertTrue(is_text_extension(".PDF"))
 
 
 class IsFileTypeTestCase(unittest.TestCase):
@@ -95,6 +108,12 @@ class IsFileTypeTestCase(unittest.TestCase):
 
     def test_is_text_file_false(self):
         self.assertFalse(is_text_file("/docs/readme.mp4"))
+
+    def test_media_path_extensions_are_case_insensitive(self):
+        self.assertTrue(is_image_file("/media/photo.JpG"))
+        self.assertTrue(is_video_file("/media/clip.MP4"))
+        self.assertTrue(is_audio_file("/media/song.FlAc"))
+        self.assertTrue(is_media_sidecar_file("/media/photo.XmP"))
 
     def test_is_image_or_video_file_image(self):
         self.assertTrue(is_image_or_video_file("photo.png"))
@@ -123,6 +142,10 @@ class IsFileTypeTestCase(unittest.TestCase):
     def test_is_media_sidecar_file_aae(self):
         self.assertTrue(is_media_sidecar_file("photo.aae"))
 
+    def test_media_sidecar_extensions_are_case_insensitive(self):
+        self.assertTrue(is_media_sidecar_file("photo.XmP"))
+        self.assertTrue(is_media_sidecar_file("photo.XML"))
+
     def test_is_media_sidecar_file_false(self):
         self.assertFalse(is_media_sidecar_file("photo.jpg"))
 
@@ -133,6 +156,11 @@ class GetFileTypeTestCase(unittest.TestCase):
 
     def test_get_file_type_video(self):
         self.assertEqual(get_file_type("clip.mp4"), FileType.VIDEO)
+
+    def test_get_file_type_accepts_uppercase_extensions(self):
+        self.assertEqual(get_file_type("photo.JpG"), FileType.IMAGE)
+        self.assertEqual(get_file_type("clip.MP4"), FileType.VIDEO)
+        self.assertEqual(get_file_type("photo.XmP"), FileType.MEDIA_SIDECAR)
 
     def test_get_file_type_audio(self):
         self.assertEqual(get_file_type("song.mp3"), FileType.AUDIO)
