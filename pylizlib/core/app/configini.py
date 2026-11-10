@@ -2,12 +2,16 @@
 
 import configparser
 import os
+import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 import rich
 
 from pylizlib.core.log.pylizLogger import logger
+
+_ini_write_lock = threading.RLock()
 
 
 @dataclass(slots=True)
@@ -73,7 +77,11 @@ class IniManager:
             return None
 
         self.config = configparser.ConfigParser()
-        self.config.read(self.path, encoding="utf-8")
+        try:
+            self.config.read(self.path, encoding="utf-8")
+        except (OSError, configparser.Error) as exc:
+            logger.error(f"Error while parsing configuration file '{self.path}': {exc}")
+            return None
         if not self.config.has_section(section):
             logger.warning(f"Section '{section}' does not exist in INI file '{self.path}'.")
             return None
@@ -96,15 +104,38 @@ class IniManager:
     ) -> None:
         """Write or update a value in the INI file."""
 
-        self.config = configparser.ConfigParser()
-        if self.exists():
-            self.config.read(self.path, encoding="utf-8")
-        if not self.config.has_section(section):
-            self.config.add_section(section)
-        self.config.set(section, key, str(value))
-        self._ensure_parent_dir()
-        with open(self.path, "w", encoding="utf-8") as configfile:
-            self.config.write(configfile)
+        with _ini_write_lock:
+            config = configparser.ConfigParser()
+            if self.exists():
+                config.read(self.path, encoding="utf-8")
+            if not config.has_section(section):
+                config.add_section(section)
+            config.set(section, key, str(value))
+            self._ensure_parent_dir()
+
+            temporary_path = None
+            try:
+                parent = os.path.dirname(os.path.abspath(self.path))
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=parent,
+                    prefix=".ini-",
+                    delete=False,
+                ) as configfile:
+                    temporary_path = configfile.name
+                    config.write(configfile)
+                    configfile.flush()
+                    os.fsync(configfile.fileno())
+                os.replace(temporary_path, self.path)
+                temporary_path = None
+            finally:
+                if temporary_path is not None:
+                    try:
+                        os.unlink(temporary_path)
+                    except FileNotFoundError:
+                        pass
+            self.config = config
 
 
 @dataclass

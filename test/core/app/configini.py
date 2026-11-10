@@ -67,6 +67,27 @@ class IniManagerTestCase(unittest.TestCase):
             self.assertTrue(os.path.isfile(ini_path))
             self.assertEqual(manager.read("general", "theme"), "light")
 
+    @patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("replace failed"))
+    def test_failed_atomic_write_preserves_existing_configuration(self, _mock_replace):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            manager = IniManager(ini_path)
+            manager.create([IniItem("general", "theme", "dark")])
+            previous = Path(ini_path).read_text(encoding="utf-8")
+
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                manager.write("general", "theme", "light")
+
+            self.assertEqual(Path(ini_path).read_text(encoding="utf-8"), previous)
+            self.assertEqual(os.listdir(temp_dir), ["settings.ini"])
+
+    def test_malformed_configuration_is_reported_as_missing_value(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            Path(ini_path).write_text("[general\ntheme=dark\n", encoding="utf-8")
+
+            self.assertIsNone(IniManager(ini_path).read("general", "theme"))
+
 
 class CfgPathTestCase(unittest.TestCase):
     def test_check_duplicates_prints_sections_and_keys(self):
