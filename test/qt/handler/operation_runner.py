@@ -8,6 +8,7 @@ from PySide6.QtCore import QThreadPool
 from pylizlib.qt.handler.operation_core import GenericTask, Operation
 from pylizlib.qt.handler.operation_domain import OperationInfo, OperationStatus
 from pylizlib.qt.handler.operation_runner import OperationRunner
+from pylizlib.qt.handler.operation_runner import RunnerStatistics
 
 
 class OperationRunnerTestCase(unittest.TestCase):
@@ -169,6 +170,25 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(len(emitted_statistics), 1)
         self.assertEqual(emitted_statistics[0].failed_operations, 1)
         self.assertEqual(cancellation_seen, [True])
+
+    def test_continued_task_failure_marks_operation_and_statistics_failed(self):
+        later_task_ran = threading.Event()
+        failed_task = GenericTask("recoverable failure", lambda: (_ for _ in ()).throw(ValueError("bad input")))
+        failed_task.abort_all_on_error = False
+        operation = Operation(
+            [failed_task, GenericTask("later", later_task_ran.set)],
+            OperationInfo("partial", "partial"),
+        )
+
+        operation.execute()
+        statistics = RunnerStatistics([operation])
+
+        self.assertTrue(later_task_ran.is_set())
+        self.assertEqual(failed_task.status, OperationStatus.Failed)
+        self.assertEqual(operation.status, OperationStatus.Failed)
+        self.assertIn("recoverable failure", operation.error)
+        self.assertEqual(statistics.failed_operations, 1)
+        self.assertEqual(statistics.completed_operations, 0)
 
 
 if __name__ == "__main__":

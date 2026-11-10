@@ -100,6 +100,7 @@ class Operation(QRunnable):
         self.progress = 0
         self.running = False
         self.error = None
+        self.task_errors: list[str] = []
         self._is_cancelled = False
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(tasks))
         self.finished_callback: Callable | None = None
@@ -138,6 +139,7 @@ class Operation(QRunnable):
                 task.update_task_status(OperationStatus.Failed)
                 logger.error("Error in task %s: %s", task.name, e)
                 self.signals.task_failed.emit(task.name, str(e))
+                self.task_errors.append(f"Task {task.name} failed: {e}")
                 if task.abort_all_on_error:
                     raise RuntimeError(f"Task {task.name} failed: {e}")
             finally:
@@ -150,7 +152,10 @@ class Operation(QRunnable):
             self.set_operation_started()
             self.update_op_status(OperationStatus.InProgress)
             self.execute_tasks()
-            if self._is_cancelled:
+            if self.task_errors:
+                self.error = "; ".join(self.task_errors)
+                self.update_op_status(OperationStatus.Failed)
+            elif self._is_cancelled:
                 self.update_op_status(OperationStatus.Cancelled)
             else:
                 self.update_op_status(OperationStatus.Completed)
