@@ -343,6 +343,21 @@ class DuplicateDirectoryTestCase(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 duplicate_directory(src, dest_dir=dest)
 
+    def test_rejects_destinations_inside_source_even_through_symlink_alias(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "origin"
+            child = src / "child"
+            child.mkdir(parents=True)
+            (child / "file.txt").write_text("data", encoding="utf-8")
+            alias = root / "alias"
+            alias.symlink_to(src, target_is_directory=True)
+
+            for dest in (child / "copy", alias / "child" / "copy"):
+                with self.subTest(destination=dest), self.assertRaises(ValueError):
+                    duplicate_directory(src, dest_dir=dest)
+                self.assertFalse((child / "copy").exists())
+
 
 class RandomSubfolderTestCase(unittest.TestCase):
     def test_returns_subfolder(self):

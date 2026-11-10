@@ -389,6 +389,11 @@ def duplicate_directory(src_dir: Path, dest_dir: Path | None = None, copy_suffix
     if dest_dir is None:
         dest_dir = src_dir.with_name(src_dir.name + copy_suffix)
 
+    resolved_src = src_dir.resolve(strict=True)
+    resolved_dest = dest_dir.resolve(strict=False)
+    if resolved_dest == resolved_src or resolved_src in resolved_dest.parents:
+        raise ValueError("The destination directory cannot be the source or one of its descendants")
+
     # Assicura che la destinazione non esista già
     if dest_dir.exists():
         raise FileExistsError(f"{dest_dir!r} esiste già")
