@@ -36,6 +36,7 @@ class NetResponse:
 
         self.has_json_header = None
         self.json = None
+        self.json_error: str | None = None
         self.response = response
         self.hasResponse = self.response is not None
         if self.hasResponse:
@@ -48,7 +49,10 @@ class NetResponse:
         if self.hasResponse:
             self.has_json_header = "application/json" in self.response.headers.get("Content-Type", "")
             if self.has_json_header:
-                self.json = self.response.json()
+                try:
+                    self.json = self.response.json()
+                except ValueError as exc:
+                    self.json_error = str(exc)
         self.__log()
 
     def __log(self) -> None:
@@ -72,10 +76,16 @@ class NetResponse:
 
         return not self.is_successful()
 
+    def has_json_error(self) -> bool:
+        """Return ``True`` when a JSON response body could not be decoded."""
+        return self.json_error is not None
+
     def get_error(self) -> str:
         """Return a human-readable error description."""
 
         if self.hasResponse:
+            if self.json_error is not None:
+                return f"({self.code}) JSON parse error: {self.json_error}. Response body: {self.text}"
             return "(" + str(self.code) + "): " + self.response.text
         else:
             pre = "(" + self.type.value + ") "

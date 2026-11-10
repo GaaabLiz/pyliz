@@ -53,6 +53,24 @@ class NetResponseTestCase(unittest.TestCase):
         self.assertTrue(wrapped.is_successful())
         self.assertFalse(wrapped.is_error())
 
+    def test_invalid_json_keeps_http_response_and_body(self):
+        response = MagicMock()
+        response.status_code = 200
+        response.text = "{broken json"
+        response.headers = {"Content-Type": "application/json"}
+        response.json.side_effect = ValueError("invalid JSON document")
+
+        wrapped = NetResponse(response, NetResponseType.OK200)
+
+        self.assertTrue(wrapped.hasResponse)
+        self.assertIs(wrapped.response, response)
+        self.assertEqual(wrapped.text, "{broken json")
+        self.assertIsNone(wrapped.json)
+        self.assertTrue(wrapped.has_json_error())
+        self.assertIn("invalid JSON document", wrapped.json_error)
+        self.assertIn("{broken json", wrapped.get_error())
+        self.assertTrue(wrapped.is_successful())
+
 
 class RequestHelpersTestCase(unittest.TestCase):
     @patch("pylizlib.core.network.req.requests.head")
