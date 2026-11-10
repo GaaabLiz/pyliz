@@ -146,9 +146,9 @@ class MasterListSettingCard(ExpandSettingCard):
     def __remove_item(self, item: FolderItem | FileItem):
         match self.item_type:
             case self.Type.FOLDER:
-                if item.folder not in self.items:
+                if item.file not in self.items:
                     return
-                self.items.remove(item.folder)
+                self.items.remove(item.file)
             case self.Type.FILE | self.Type.TEXT:
                 if item.file not in self.items:
                     return
