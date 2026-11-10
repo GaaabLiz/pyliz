@@ -5,6 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+from PIL import Image
+
 from pylizlib.ai.providers import JoyTagProvider, NudeNetProvider
 
 
@@ -113,6 +116,43 @@ class NudeNetVideoSamplingTestCase(unittest.TestCase):
         self.assertEqual(result.nsfw_frames_analyzed, 2)
         self.assertTrue(result.nsfw_analysis_complete)
         self.assertEqual(detect_frame.call_count, 2)
+
+
+class NudeNetTemporaryFrameTestCase(unittest.TestCase):
+    def test_frame_file_is_closed_readable_and_removed_after_detection(self):
+        provider = NudeNetProvider()
+        detector = MagicMock()
+        observed = {}
+
+        def inspect_image(path):
+            observed["path"] = Path(path)
+            observed["exists_during_detection"] = Path(path).is_file()
+            with Image.open(path) as image:
+                observed["size"] = image.size
+            return []
+
+        detector.detect.side_effect = inspect_image
+        before = set(Path(tempfile.gettempdir()).glob("pyliz_nudenet_*"))
+
+        result = provider._detect_frame(detector, np.zeros((3, 4, 3), dtype=np.uint8))
+
+        after = set(Path(tempfile.gettempdir()).glob("pyliz_nudenet_*"))
+        self.assertFalse(result)
+        self.assertTrue(observed["exists_during_detection"])
+        self.assertEqual(observed["size"], (4, 3))
+        self.assertFalse(observed["path"].exists())
+        self.assertEqual(after, before)
+
+    def test_frame_file_is_removed_when_detection_raises(self):
+        provider = NudeNetProvider()
+        detector = MagicMock()
+        detector.detect.side_effect = OSError("detector failed")
+        before = set(Path(tempfile.gettempdir()).glob("pyliz_nudenet_*"))
+
+        with self.assertRaisesRegex(OSError, "detector failed"):
+            provider._detect_frame(detector, np.zeros((2, 2, 3), dtype=np.uint8))
+
+        self.assertEqual(set(Path(tempfile.gettempdir()).glob("pyliz_nudenet_*")), before)
 
 
 if __name__ == "__main__":

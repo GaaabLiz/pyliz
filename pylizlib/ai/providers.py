@@ -426,9 +426,10 @@ class NudeNetProvider(BaseAiProvider):
 
     def _detect_frame(self, detector, frame) -> bool:
         """Saves a raw frame to temp and runs detection."""
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as handle:
-            Image.fromarray(frame).save(handle.name)
-            return self._detect_image(detector, Path(handle.name))
+        with tempfile.TemporaryDirectory(prefix="pyliz_nudenet_") as temp_dir:
+            frame_path = Path(temp_dir) / "frame.png"
+            Image.fromarray(frame).save(frame_path)
+            return self._detect_image(detector, frame_path)
 
     def _contains_explicit_detection(self, detections: list[dict]) -> bool:
         """
