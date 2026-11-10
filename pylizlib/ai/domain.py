@@ -69,6 +69,8 @@ class AiScanResult:
 
     tags: list[str] | None = None
     nsfw: bool | None = None
+    nsfw_frames_analyzed: int | None = None
+    nsfw_analysis_complete: bool | None = None
     ocr_text: list[str] | None = None
     ocr_detected: bool | None = None
 
@@ -78,6 +80,10 @@ class AiScanResult:
             self.tags = other.tags
         if other.nsfw is not None:
             self.nsfw = other.nsfw
+        if other.nsfw_frames_analyzed is not None:
+            self.nsfw_frames_analyzed = other.nsfw_frames_analyzed
+        if other.nsfw_analysis_complete is not None:
+            self.nsfw_analysis_complete = other.nsfw_analysis_complete
         if other.ocr_text is not None:
             self.ocr_text = other.ocr_text
         if other.ocr_detected is not None:

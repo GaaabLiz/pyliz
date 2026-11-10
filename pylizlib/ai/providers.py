@@ -15,7 +15,7 @@ from PIL import Image
 from pylizlib.ai.domain import AiScanResult, AiScanTool
 from pylizlib.ai.utils import unique_preserving_order
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.media.compute.video_sampling import sample_video_frames
+from pylizlib.media.compute.video_sampling import sample_video_frames, sample_video_frames_with_count
 
 if TYPE_CHECKING:
     from pylizlib.media.lizmedia import LizMedia
@@ -375,10 +375,28 @@ class NudeNetProvider(BaseAiProvider):
         if media.is_image:
             return AiScanResult(nsfw=self._detect_image(detector, media.path))
         if media.is_video:
-            for frame in sample_video_frames(media.path, max_frames=self.video_sample_frames):
+            frames, expected_frames = sample_video_frames_with_count(media.path, max_frames=self.video_sample_frames)
+            analyzed_frames = 0
+            for frame in frames:
+                analyzed_frames += 1
                 if self._detect_frame(detector, frame):
-                    return AiScanResult(nsfw=True)
-            return AiScanResult(nsfw=False)
+                    return AiScanResult(
+                        nsfw=True,
+                        nsfw_frames_analyzed=analyzed_frames,
+                        nsfw_analysis_complete=analyzed_frames == expected_frames,
+                    )
+
+            if analyzed_frames == 0 or analyzed_frames < expected_frames:
+                return AiScanResult(
+                    nsfw=None,
+                    nsfw_frames_analyzed=analyzed_frames,
+                    nsfw_analysis_complete=False,
+                )
+            return AiScanResult(
+                nsfw=False,
+                nsfw_frames_analyzed=analyzed_frames,
+                nsfw_analysis_complete=True,
+            )
         return AiScanResult(nsfw=False)
 
     def _get_detector(self):

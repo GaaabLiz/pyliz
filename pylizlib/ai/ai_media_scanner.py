@@ -66,6 +66,8 @@ class AiMediaScanner:
             media.apply_ai_scan_result(
                 tags=aggregate.tags,
                 nsfw=aggregate.nsfw,
+                nsfw_frames_analyzed=aggregate.nsfw_frames_analyzed,
+                nsfw_analysis_complete=aggregate.nsfw_analysis_complete,
                 ocr_text=aggregate.ocr_text,
                 has_ocr_text=aggregate.ocr_detected,
                 file_name=file_name or media.file_name,

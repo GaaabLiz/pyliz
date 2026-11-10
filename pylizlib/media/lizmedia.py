@@ -99,6 +99,8 @@ class LizMedia:
     ai_tags: Optional[List[str]] = None
     ai_scanned: bool = False
     ai_nsfw: Optional[bool] = None
+    ai_nsfw_frames_analyzed: Optional[int] = None
+    ai_nsfw_analysis_complete: Optional[bool] = None
     ai_has_ocr_text: Optional[bool] = None
 
     def __post_init__(self):
@@ -518,6 +520,8 @@ class LizMedia:
             "ai_tags": self._serialize_json_value(self.ai_tags),
             "ai_scanned": self._serialize_json_value(self.ai_scanned),
             "ai_nsfw": self._serialize_json_value(self.ai_nsfw),
+            "ai_nsfw_frames_analyzed": self._serialize_json_value(self.ai_nsfw_frames_analyzed),
+            "ai_nsfw_analysis_complete": self._serialize_json_value(self.ai_nsfw_analysis_complete),
         }
 
     def to_json(self) -> str:
@@ -550,6 +554,8 @@ class LizMedia:
             "ai_tags": self.ai_tags,
             "ai_scanned": self.ai_scanned,
             "ai_nsfw": self.ai_nsfw,
+            "ai_nsfw_frames_analyzed": self.ai_nsfw_frames_analyzed,
+            "ai_nsfw_analysis_complete": self.ai_nsfw_analysis_complete,
         }
 
     def to_json_only_ai(self) -> str:
@@ -582,6 +588,8 @@ class LizMedia:
         *,
         tags: Optional[List[str]] = None,
         nsfw: Optional[bool] = None,
+        nsfw_frames_analyzed: Optional[int] = None,
+        nsfw_analysis_complete: Optional[bool] = None,
         ocr_text: Optional[List[str]] = None,
         has_ocr_text: Optional[bool] = None,
         description: Optional[str] = None,
@@ -602,6 +610,10 @@ class LizMedia:
             self.ai_tags = tags
         if nsfw is not None:
             self.ai_nsfw = nsfw
+        if nsfw_frames_analyzed is not None:
+            self.ai_nsfw_frames_analyzed = nsfw_frames_analyzed
+        if nsfw_analysis_complete is not None:
+            self.ai_nsfw_analysis_complete = nsfw_analysis_complete
         if ocr_text is not None:
             self.ai_ocr_text = ocr_text
         if has_ocr_text is not None:

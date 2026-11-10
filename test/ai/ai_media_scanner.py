@@ -96,6 +96,20 @@ class AiMediaScannerTestCase(unittest.TestCase):
         self.assertEqual(media.ai_tags, ["one"])
         self.assertEqual(tags_provider.calls, 1)
 
+    def test_scan_preserves_unknown_nsfw_result_and_frame_coverage(self):
+        nsfw_provider = _StaticProvider(
+            AiScanTool.NSFW,
+            AiScanResult(nsfw=None, nsfw_frames_analyzed=0, nsfw_analysis_complete=False),
+        )
+        scanner = AiMediaScanner(providers=[nsfw_provider])
+
+        media = scanner.scan(media_path=self.image_path, tools=["nsfw"])
+
+        self.assertIsNone(media.ai_nsfw)
+        self.assertEqual(media.ai_nsfw_frames_analyzed, 0)
+        self.assertFalse(media.ai_nsfw_analysis_complete)
+        self.assertFalse(media.ai_scanned)
+
     def test_scan_requires_supported_tools(self):
         scanner = AiMediaScanner(providers=[])
         with self.assertRaises(ValueError):
