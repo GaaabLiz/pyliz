@@ -263,6 +263,32 @@ class WriteJsonToFileTestCase(unittest.TestCase):
             write_json_to_file(nested, "out.json", {"x": 1})
             self.assertTrue(os.path.isfile(os.path.join(nested, "out.json")))
 
+    def test_serialization_error_preserves_existing_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            file_path = os.path.join(td, "data.json")
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write('{"keep": true}')
+
+            with self.assertRaises(TypeError):
+                write_json_to_file(td, "data.json", {"created": datetime.now()})
+
+            with open(file_path, encoding="utf-8") as file:
+                self.assertEqual(file.read(), '{"keep": true}')
+
+    @patch("pylizlib.core.os.file.os.fsync", side_effect=OSError("disk write failed"))
+    def test_write_error_preserves_existing_file(self, _mock_fsync):
+        with tempfile.TemporaryDirectory() as td:
+            file_path = os.path.join(td, "data.json")
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write('{"keep": true}')
+
+            with self.assertRaisesRegex(OSError, "disk write failed"):
+                write_json_to_file(td, "data.json", {"replace": True})
+
+            with open(file_path, encoding="utf-8") as file:
+                self.assertEqual(file.read(), '{"keep": true}')
+            self.assertEqual(os.listdir(td), ["data.json"])
+
 
 if __name__ == "__main__":
     unittest.main()

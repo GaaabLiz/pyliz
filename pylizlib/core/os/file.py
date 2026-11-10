@@ -176,9 +176,29 @@ def write_json_to_file(path, filename, content):
     if not os.path.exists(path):
         os.makedirs(path)
 
+    # Serialize first so invalid values cannot truncate an existing file.
+    serialized = json.dumps(content, indent=4)
+
     # Crea il percorso completo del file
     file_path = os.path.join(path, filename)
-
-    # Scrive il contenuto JSON nel file
-    with open(file_path, "w") as json_file:
-        json.dump(content, json_file, indent=4)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path,
+            prefix=".json-",
+            delete=False,
+        ) as json_file:
+            temporary_path = json_file.name
+            json_file.write(serialized)
+            json_file.flush()
+            os.fsync(json_file.fileno())
+        os.replace(temporary_path, file_path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
