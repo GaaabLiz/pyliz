@@ -73,6 +73,24 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(running.status, OperationStatus.Cancelled)
         self.assertEqual(queued.status, OperationStatus.Cancelled)
 
+    def test_runner_finished_callback_runs_on_runner_thread(self):
+        callback_threads = []
+        finished = threading.Event()
+        runner = OperationRunner(
+            on_runner_finished=lambda: (callback_threads.append(threading.get_ident()), finished.set())
+        )
+        operation = Operation(
+            [GenericTask("quick", lambda: None)],
+            OperationInfo("quick", "quick"),
+        )
+        runner.add(operation)
+
+        main_thread_id = threading.get_ident()
+        runner.start()
+
+        self.assertTrue(self.wait_until(finished.is_set))
+        self.assertEqual(callback_threads, [main_thread_id])
+
 
 if __name__ == "__main__":
     unittest.main()

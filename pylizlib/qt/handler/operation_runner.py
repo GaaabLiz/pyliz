@@ -1,7 +1,7 @@
 import time
 from typing import Callable
 
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, QThreadPool, Qt, Signal
 
 from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
 from pylizlib.core.log.pylizLogger import logger
@@ -59,6 +59,7 @@ class OperationRunner(QObject):
     task_update_message = Signal(str, str)
     task_failed = Signal(str, str)
     task_finished = Signal(str)
+    _operation_completed = Signal(object)
 
     def __init__(
         self,
@@ -78,6 +79,10 @@ class OperationRunner(QObject):
         self._all_operations: list[Operation] = []
         self._stopping = False
         self._finished_emitted = False
+        self._operation_completed.connect(
+            self.on_operation_finished,
+            Qt.ConnectionType.QueuedConnection,
+        )
 
     def add(self, operation: Operation):
         self.operation_pool.append(operation)
@@ -140,7 +145,7 @@ class OperationRunner(QObject):
         can_start = not self._stopping and self.active_operations < self.thread_pool.maxThreadCount()
         if can_start and self.operation_pool:
             op = self.operation_pool.pop(0)
-            op.set_finished_callback(lambda: self.on_operation_finished(op))
+            op.set_finished_callback(lambda completed=op: self._operation_completed.emit(completed))
             op.set_op_progress_callback(self.on_op_progress_update)
             self.thread_pool.start(op)
             self.active_operations += 1
