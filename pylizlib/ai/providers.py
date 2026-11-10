@@ -5,7 +5,6 @@ import os
 import sys
 import tempfile
 import time
-import urllib.request
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -27,6 +26,10 @@ warnings.filterwarnings("ignore", category=UserWarning)
 _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "bmp", "gif", "tiff", "tif"}
 _VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
 _DEFAULT_MODEL_DIR = os.getenv("PYLIZ_AI_MODELS_PATH", os.path.expanduser("~/Documents/models"))
+# Immutable Hugging Face commits keep the model weights and executable model
+# definition from changing when their upstream ``main`` branches move.
+_JOYTAG_MODEL_REVISION = "6b7f16331a6ccf0fdce37d5a9564715f6e772b22"
+_JOYTAG_CODE_REVISION = "df9e86f69b37ede2560de24503c18ac199e9b3f0"
 
 
 class BaseAiProvider(ABC):
@@ -127,15 +130,22 @@ class JoyTagProvider(BaseAiProvider):
         try:
             import torch
             import torchvision.transforms.functional as tvf
-            from huggingface_hub import snapshot_download
+            from huggingface_hub import hf_hub_download, snapshot_download
         except ImportError as exc:
             raise ImportError("JoyTag scanning requires the optional AI dependencies. Install the 'ai' extra to enable TAGS scans.") from exc
 
-        model_path = snapshot_download(repo_id="fancyfeast/joytag", cache_dir=self.model_dir)
-        py_file_path = os.path.join(model_path, "Models.py")
-        if not os.path.exists(py_file_path):
-            url = "https://huggingface.co/spaces/fancyfeast/joytag/resolve/main/Models.py"
-            urllib.request.urlretrieve(url, py_file_path)
+        model_path = snapshot_download(
+            repo_id="fancyfeast/joytag",
+            revision=_JOYTAG_MODEL_REVISION,
+            cache_dir=self.model_dir,
+        )
+        py_file_path = hf_hub_download(
+            repo_id="fancyfeast/joytag",
+            repo_type="space",
+            filename="Models.py",
+            revision=_JOYTAG_CODE_REVISION,
+            cache_dir=self.model_dir,
+        )
 
         spec = importlib.util.spec_from_file_location("joytag_module", py_file_path)
         joytag_module = importlib.util.module_from_spec(spec)
