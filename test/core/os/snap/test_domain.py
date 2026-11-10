@@ -234,6 +234,11 @@ class TestSnapshotSettings(unittest.TestCase):
         self.assertEqual(s.snap_id_length, 20)
         self.assertEqual(s.folder_id_length, 6)
         self.assertIsInstance(s.copy_strategy, SequentialFileCopyStrategy)
+        self.assertFalse(s.allow_unverified_legacy_snapshots)
+
+    def test_legacy_integrity_override_must_be_a_boolean(self):
+        with self.assertRaises(TypeError):
+            SnapshotSettings(allow_unverified_legacy_snapshots=1)
 
     def test_backup_enabled_requires_both_flag_and_path(self):
         self.assertFalse(SnapshotSettings(backup_pre_install=True, backup_path=None).bck_before_install_enabled)

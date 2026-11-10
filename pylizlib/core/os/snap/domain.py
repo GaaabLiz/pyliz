@@ -303,6 +303,7 @@ class SnapshotSettings:
         snap_id_length: The character length for new snapshot IDs.
         folder_id_length: The character length for new folder association IDs.
         copy_strategy: Strategy object used to copy directory trees.
+        allow_unverified_legacy_snapshots: Allow installation without a content manifest.
     """
 
     json_filename: str = "snapshot.json"
@@ -314,10 +315,13 @@ class SnapshotSettings:
     snap_id_length: int = 20
     folder_id_length: int = 6
     copy_strategy: DirectoryCopyStrategy = field(default_factory=SequentialFileCopyStrategy)
+    allow_unverified_legacy_snapshots: bool = False
 
     def __post_init__(self):
         if not isinstance(self.copy_strategy, DirectoryCopyStrategy):
             raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+        if type(self.allow_unverified_legacy_snapshots) is not bool:
+            raise TypeError("allow_unverified_legacy_snapshots must be a boolean.")
 
     @property
     def bck_before_install_enabled(self) -> bool:

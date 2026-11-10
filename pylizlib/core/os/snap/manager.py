@@ -542,14 +542,18 @@ class SnapshotManager:
             if not source_dir.exists() or not source_dir.is_dir():
                 raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
             SnapshotUtils.assert_no_symlinks(source_dir)
+            install_location = Path(dir_assoc.original_path)
+            if is_critical_system_path(install_location):
+                raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
             if dir_assoc.integrity_manifest is None:
+                if not self.settings.allow_unverified_legacy_snapshots:
+                    raise SnapshotIntegrityError(
+                        f"Snapshot association '{dir_assoc.folder_id}' has no integrity manifest; refusing unverified installation."
+                    )
                 logger.warning(
                     "Snapshot association '%s' has no integrity manifest; content verification is unavailable.",
                     dir_assoc.folder_id,
                 )
-            install_location = Path(dir_assoc.original_path)
-            if is_critical_system_path(install_location):
-                raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
 
         rollbacks = []
         try:
