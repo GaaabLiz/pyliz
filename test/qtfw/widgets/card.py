@@ -10,6 +10,7 @@ class MasterListSettingCardTestCase(unittest.TestCase):
         folder = "/media/archive"
         config_item = object()
         card = SimpleNamespace(
+            Type=MasterListSettingCard.Type,
             item_type=MasterListSettingCard.Type.FOLDER,
             items=[folder],
             configItem=config_item,
