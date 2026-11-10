@@ -128,6 +128,9 @@ class OperationRunner(QObject):
             len(self.operation_pool),
             max(0, self.thread_pool.maxThreadCount() - self.active_operations),
         )
+        if initial_slots == 0 and not self.operation_pool and self.active_operations == 0:
+            self.__set_runner_finished()
+            return
         for _ in range(initial_slots):
             self.__start_next_operation()
 

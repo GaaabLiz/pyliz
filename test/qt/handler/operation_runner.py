@@ -190,6 +190,22 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(statistics.failed_operations, 1)
         self.assertEqual(statistics.completed_operations, 0)
 
+    def test_empty_batch_emits_start_finish_and_callback_once(self):
+        starts = []
+        finishes = []
+        callback_calls = []
+        runner = OperationRunner(on_runner_finished=lambda: callback_calls.append("finished"))
+        runner.runner_start.connect(lambda: starts.append("started"))
+        runner.runner_finish.connect(finishes.append)
+
+        runner.start()
+
+        self.assertEqual(starts, ["started"])
+        self.assertEqual(len(finishes), 1)
+        self.assertEqual(finishes[0].total_operations, 0)
+        self.assertEqual(callback_calls, ["finished"])
+        self.assertEqual(runner.active_operations, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
