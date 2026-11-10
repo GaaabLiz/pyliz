@@ -195,6 +195,56 @@ class DownloadFileTestCase(unittest.TestCase):
             self.assertFalse(result.status)
             self.assertIn("network error", result.error)
 
+    @patch("pylizlib.core.os.file.logger")
+    @patch("pylizlib.core.os.file.requests.get")
+    def test_download_without_content_length_succeeds_and_replaces_atomically(self, mock_get, _mock_logger):
+        response = MagicMock()
+        response.headers = {}
+        response.iter_content.return_value = [b"new content"]
+        mock_get.return_value = response
+
+        with tempfile.TemporaryDirectory() as td:
+            dest = os.path.join(td, "file.bin")
+            with open(dest, "wb") as file:
+                file.write(b"old content")
+            progress_values = []
+
+            result = download_file("https://example.com/file", dest, progress_values.append)
+
+            self.assertTrue(result.status)
+            with open(dest, "rb") as file:
+                self.assertEqual(file.read(), b"new content")
+            self.assertEqual(progress_values, [100])
+            mock_get.assert_called_once_with("https://example.com/file", stream=True, timeout=30)
+            response.close.assert_called_once()
+
+    @patch("pylizlib.core.os.file.logger")
+    @patch("pylizlib.core.os.file.requests.get")
+    def test_interrupted_download_preserves_existing_file(self, mock_get, _mock_logger):
+        response = MagicMock()
+        response.headers = {"content-length": "100"}
+
+        def interrupted_chunks(chunk_size):
+            yield b"partial"
+            raise OSError("connection dropped")
+
+        response.iter_content.side_effect = interrupted_chunks
+        mock_get.return_value = response
+
+        with tempfile.TemporaryDirectory() as td:
+            dest = os.path.join(td, "file.bin")
+            with open(dest, "wb") as file:
+                file.write(b"keep this file")
+
+            result = download_file("https://example.com/file", dest, lambda _: None)
+
+            self.assertFalse(result.status)
+            self.assertIn("connection dropped", result.error)
+            with open(dest, "rb") as file:
+                self.assertEqual(file.read(), b"keep this file")
+            self.assertFalse(any(name.startswith(".download-") for name in os.listdir(td)))
+            response.close.assert_called_once()
+
 
 class WriteJsonToFileTestCase(unittest.TestCase):
     def test_writes_valid_json(self):
