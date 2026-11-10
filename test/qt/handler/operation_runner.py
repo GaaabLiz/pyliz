@@ -117,6 +117,59 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertTrue(self.wait_until(finished.is_set))
         self.assertEqual(runner.active_operations, 0)
 
+    def test_abort_waits_for_other_running_operations(self):
+        failing_entered = threading.Event()
+        fail_now = threading.Event()
+        other_entered = threading.Event()
+        release_other = threading.Event()
+        finished = threading.Event()
+        emitted_statistics = []
+        cancellation_seen = []
+        runner = OperationRunner(
+            max_threads=2,
+            on_runner_finished=finished.set,
+            abort_all_on_error=True,
+        )
+        runner.runner_finish.connect(emitted_statistics.append)
+
+        def fail_after_release():
+            failing_entered.set()
+            fail_now.wait(3)
+            raise ValueError("expected failure")
+
+        def remain_running(task):
+            other_entered.set()
+            release_other.wait(3)
+            cancellation_seen.append(task.is_cancelled)
+
+        failing = Operation(
+            [GenericTask("failure", fail_after_release)],
+            OperationInfo("failure", "failure"),
+        )
+        other = Operation(
+            [GenericTask("other", remain_running)],
+            OperationInfo("other", "other"),
+        )
+        runner.adds([failing, other])
+
+        runner.start()
+        self.assertTrue(failing_entered.wait(2))
+        self.assertTrue(other_entered.wait(2))
+        fail_now.set()
+
+        self.assertTrue(
+            self.wait_until(lambda: failing.is_failed() and runner.active_operations == 1)
+        )
+        self.assertFalse(finished.is_set())
+        self.assertTrue(other.is_cancelled())
+
+        release_other.set()
+        self.assertTrue(self.wait_until(finished.is_set))
+        self.assertEqual(runner.active_operations, 0)
+        self.assertEqual(len(emitted_statistics), 1)
+        self.assertEqual(emitted_statistics[0].failed_operations, 1)
+        self.assertEqual(cancellation_seen, [True])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -124,7 +124,11 @@ class OperationRunner(QObject):
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
         for op in self.operation_pool:
             self.progress_obj.add_single(op.id)
-        for _ in self.operation_pool:
+        initial_slots = min(
+            len(self.operation_pool),
+            max(0, self.thread_pool.maxThreadCount() - self.active_operations),
+        )
+        for _ in range(initial_slots):
             self.__start_next_operation()
 
     def stop(self):
@@ -133,13 +137,16 @@ class OperationRunner(QObject):
         # Cancel all known operations so running ones can gracefully exit
         for op in self._all_operations:
             op.stop()
+        self._cancel_pending_operations()
+        if self.active_operations == 0:
+            self.__set_runner_finished()
+
+    def _cancel_pending_operations(self):
         for op in self.operation_pool:
             op.update_op_status(OperationStatus.Cancelled)
             for task in op.tasks:
                 task.update_task_status(OperationStatus.Cancelled)
         self.operation_pool.clear()
-        if self.active_operations == 0:
-            self.__set_runner_finished()
 
     def __start_next_operation(self):
         can_start = not self._stopping and self.active_operations < self.thread_pool.maxThreadCount()
@@ -163,9 +170,13 @@ class OperationRunner(QObject):
 
         if self.abort_all_on_error and operation.is_failed():
             logger.error("Operation %s failed, stopping all operations", operation.id)
-            self.operation_pool.clear()
-            self.thread_pool.clear()
-            self.__set_runner_finished()
+            self._stopping = True
+            for other_operation in self._all_operations:
+                if other_operation is not operation:
+                    other_operation.stop()
+            self._cancel_pending_operations()
+            if self.active_operations == 0:
+                self.__set_runner_finished()
             return
 
         self.__start_next_operation()
