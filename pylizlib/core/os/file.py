@@ -154,7 +154,7 @@ def download_file(url: str, destinazione: str, on_progress: callable, timeout: f
         temporary_path = None
         if percentuale < 100:
             on_progress(100)
-        logger.trace("Download completed!")
+        logger.debug("Download completed!")
         return Operation(status=True)
     except Exception as e:
         return Operation(status=False, error=str(e))

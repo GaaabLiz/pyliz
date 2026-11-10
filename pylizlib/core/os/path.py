@@ -449,6 +449,6 @@ class PathMatcher:
                 file.write(f"{item}\n")
 
     def log_all(self):
-        logger.trace(f"Working path: {self.working_path}")
+        logger.debug(f"Working path: {self.working_path}")
         for item in self.working_path_items_rel:
             print(item)

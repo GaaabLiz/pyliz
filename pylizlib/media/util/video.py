@@ -151,10 +151,10 @@ class VideoUtils:
                 cv2.imwrite(frame_path, frame)
                 saved_frame_count += 1
                 prev_frame_gray = frame_gray  # Update previous frame
-                logger.trace(f"Frame {frame_count} saved because threshold exceeded: {mean_diff}")
+                logger.debug(f"Frame {frame_count} saved because threshold exceeded: {mean_diff}")
 
             frame_count += 1
-            logger.trace(f"Frame {frame_count} processed, {saved_frame_count} frames saved")
+            logger.debug(f"Frame {frame_count} processed, {saved_frame_count} frames saved")
 
         # Rilascia la cattura del video e chiudi le finestre
         cap.release()

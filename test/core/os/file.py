@@ -169,9 +169,8 @@ class GetFileCDateTestCase(unittest.TestCase):
 
 
 class DownloadFileTestCase(unittest.TestCase):
-    @patch("pylizlib.core.os.file.logger")
     @patch("pylizlib.core.os.file.requests.get")
-    def test_download_file_success(self, mock_get, mock_logger):
+    def test_download_file_success_uses_real_logger(self, mock_get):
         mock_response = MagicMock()
         mock_response.headers = {"content-length": "3"}
         mock_response.iter_content.return_value = [b"abc"]

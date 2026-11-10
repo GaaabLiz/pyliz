@@ -46,7 +46,7 @@ class FrameSelector(ABC):
         Raises:
             ValueError: If the video file cannot be opened.
         """
-        self.logger.trace(f"Validating video file: {video_path}")
+        self.logger.debug(f"Validating video file: {video_path}")
         cap = cv2.VideoCapture(video_path)
 
         if not cap.isOpened():
@@ -56,7 +56,7 @@ class FrameSelector(ABC):
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total_frames / fps
 
-        self.logger.trace(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
+        self.logger.debug(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
         return cap, fps, duration, total_frames
 
 
@@ -71,17 +71,17 @@ class DynamicFrameSelector(FrameSelector):
         Statically analyzes the video to detect scene changes and extracts frames
         accordingly, weighted by scene transitions.
         """
-        self.logger.trace("Starting dynamic frame selection")
+        self.logger.debug("Starting dynamic frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         scene_changes = self._detect_scene_changes(video_path, cap)
         target_frames = frame_options.calculate_dynamic_frame_count(duration, scene_changes)
 
-        self.logger.trace(f"Target frames for analysis: {target_frames}")
+        self.logger.debug(f"Target frames for analysis: {target_frames}")
         frames = self._extract_frames(cap, target_frames, scene_changes)
 
         cap.release()
-        self.logger.trace(f"Dynamic frame selection completed. Selected {len(frames)} frames")
+        self.logger.debug(f"Dynamic frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _detect_scene_changes(
@@ -102,7 +102,7 @@ class DynamicFrameSelector(FrameSelector):
         Returns:
             List of timestamps (seconds) where scene changes were detected.
         """
-        self.logger.trace("Detecting scene changes")
+        self.logger.debug("Detecting scene changes")
         scene_changes = []
         prev_frame = None
 
@@ -186,15 +186,15 @@ class UniformFrameSelector(FrameSelector):
         """
         Selects a target number of frames distributed evenly across the video duration.
         """
-        self.logger.trace("Starting uniform frame selection")
+        self.logger.debug("Starting uniform frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         target_frames = frame_options.calculate_uniform_frame_count(duration)
-        self.logger.trace(f"Target frames for uniform selection: {target_frames}")
+        self.logger.debug(f"Target frames for uniform selection: {target_frames}")
         frames = self._extract_uniform_frames(cap, target_frames, fps)
 
         cap.release()
-        self.logger.trace(f"Uniform frame selection completed. Selected {len(frames)} frames")
+        self.logger.debug(f"Uniform frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_uniform_frames(
@@ -239,12 +239,12 @@ class AllFrameSelector(FrameSelector):
         """
         Extracts all frames sequentially from the video.
         """
-        self.logger.trace("Starting all frame selection")
+        self.logger.debug("Starting all frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         frames = self._extract_all_frames(cap, fps)
         cap.release()
-        self.logger.trace(f"All frame selection completed. Selected {len(frames)} frames")
+        self.logger.debug(f"All frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_all_frames(self, cap: cv2.VideoCapture, fps: float) -> List[Frame]:
