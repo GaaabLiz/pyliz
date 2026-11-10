@@ -132,6 +132,37 @@ class PylizAppTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             app.get_ini_value("general", "theme")
 
+    def test_add_folder_with_ini_success(self):
+        app = self.create_app()
+        app.create_ini("settings.ini")
+        folder = app.add_folder_with_ini("cache", "cache_dir", "paths", "cache")
+        self.assertTrue(os.path.isdir(folder))
+        self.assertEqual(app.get_ini_value("paths", "cache"), folder)
+
+    def test_get_folder_template_path_autocreate(self):
+        app = self.create_app()
+        path = app.get_folder_template_path(PylizDirFoldersTemplate.RESULTS, add_if_not_exist=True)
+        self.assertIsNotNone(path)
+        self.assertTrue(os.path.isdir(path))
+
+    def test_create_ini_file_not_found_raises_oserror(self):
+        app = self.create_app()
+        with patch("pylizlib.core.app.pylizapp.os.path.isfile", return_value=False):
+            with self.assertRaises(OSError):
+                app.create_ini("settings.ini")
+
+    def test_delete_ini_uninitialized_logs_warning(self):
+        app = self.create_app()
+        with patch("pylizlib.core.app.pylizapp.logger.warning") as mock_log:
+            app.delete_ini()
+            mock_log.assert_called_once_with("INI file is not initialized. Nothing to delete.")
+
+    def test_print_hw(self):
+        app = self.create_app()
+        with patch("builtins.print") as mock_print:
+            app.print_hw()
+            mock_print.assert_called_once_with("Hello from PylizApp!")
+
 
 if __name__ == "__main__":
     unittest.main()

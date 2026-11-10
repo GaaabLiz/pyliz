@@ -44,6 +44,15 @@ class OperationProgressTestCase(unittest.TestCase):
 
         self.assertEqual(operation.get_operation_progress(), 40)
 
+    def test_get_operation_progress_empty_tasks(self):
+        operation = OperationProgress(
+            operation_id="op1",
+            operation_progress=0,
+            operation_tasks=[],
+        )
+
+        self.assertEqual(operation.get_operation_progress(), 0)
+
 
 class ProgressHandlerTestCase(unittest.TestCase):
     def test_add_and_get_operation_progress(self):
@@ -62,6 +71,14 @@ class ProgressHandlerTestCase(unittest.TestCase):
         handler.set_task_progress("op2", "t2", 0)
 
         self.assertEqual(handler.get_master_progress(), 50)
+
+    def test_get_master_progress_empty(self):
+        handler = ProgressHandler()
+        self.assertEqual(handler.get_master_progress(), 0)
+
+    def test_get_operation_progress_missing(self):
+        handler = ProgressHandler()
+        self.assertEqual(handler.get_operation_progress("missing_op"), 0)
 
 
 class QueueProgressTestCase(unittest.TestCase):
@@ -86,6 +103,14 @@ class QueueProgressTestCase(unittest.TestCase):
     def test_total_progress_with_zero_count(self):
         queue = QueueProgress(mode=QueueProgressMode.STEP, total_count=0)
         self.assertEqual(queue.get_total_progress(), 0)
+
+    def test_get_step_progress_missing(self):
+        queue = QueueProgress(mode=QueueProgressMode.STEP, total_count=2)
+        self.assertEqual(queue.get_step_progress(99), 0)
+
+    def test_get_single_progress_missing(self):
+        queue = QueueProgress(mode=QueueProgressMode.SINGLE, total_count=2)
+        self.assertEqual(queue.get_single_progress("non_existent"), 0)
 
 
 class StepProgressFunctionTestCase(unittest.TestCase):
