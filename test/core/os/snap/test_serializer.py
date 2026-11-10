@@ -44,6 +44,10 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         snap.add_data_item("k", "v")
         snap.tags = ["alpha", "beta"]
         snap.date_modified = datetime.now()
+        snap.directories[0].integrity_manifest = {
+            ".": {"type": "directory", "size": 0, "sha256": None},
+            "file.txt": {"type": "file", "size": 3, "sha256": "a" * 64},
+        }
 
         json_path = TEST_LOCAL_ROOT / "ser_snap.json"
         SnapshotSerializer.to_json(snap, json_path)
@@ -54,6 +58,7 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         self.assertEqual(loaded.tags, snap.tags)
         self.assertEqual(loaded.data, snap.data)
         self.assertEqual(len(loaded.directories), len(snap.directories))
+        self.assertEqual(loaded.directories[0].integrity_manifest, snap.directories[0].integrity_manifest)
         self.assertIsNotNone(loaded.date_modified)
 
     def test_optional_datetime_fields_survive_as_none(self):

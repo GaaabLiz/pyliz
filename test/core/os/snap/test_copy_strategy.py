@@ -15,6 +15,7 @@ from pylizlib.core.os.snap.copy_strategy import (
     VerifiedFileCopyStrategy,
 )
 from pylizlib.core.os.snap.domain import SnapshotSettings
+from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 
 
 class InterleavingCopyStrategy(SequentialFileCopyStrategy):
@@ -81,6 +82,36 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
         self.assertEqual(progress[-1], (10, 10))
         self.assertEqual(len(messages), 2)
 
+    def test_sequential_strategy_records_and_checks_a_content_manifest(self):
+        (self.source / "empty").mkdir()
+        manifest = {}
+        destination = self.root / "manifest-copy"
+        SequentialFileCopyStrategy().copy_directory(self.source, destination, manifest=manifest)
+
+        self.assertEqual(manifest["."]["type"], "directory")
+        self.assertEqual(manifest["empty"], {"type": "directory", "size": 0, "sha256": None})
+        self.assertEqual(manifest["a.txt"]["size"], 5)
+        self.assertRegex(manifest["a.txt"]["sha256"], r"^[0-9a-f]{64}$")
+
+        (destination / "a.txt").write_text("bad-a", encoding="utf-8")
+        with self.assertRaises(SnapshotIntegrityError):
+            SequentialFileCopyStrategy().copy_directory(
+                destination,
+                self.root / "verified-copy",
+                expected_manifest=manifest,
+            )
+
+    def test_manifest_verification_detects_missing_files_before_publication(self):
+        manifest = {}
+        destination = self.root / "manifest-copy"
+        SequentialFileCopyStrategy().copy_directory(self.source, destination, manifest=manifest)
+        (destination / "a.txt").unlink()
+
+        published = self.root / "failed-verified-copy"
+        with self.assertRaises(SnapshotIntegrityError):
+            SequentialFileCopyStrategy().copy_directory(destination, published, expected_manifest=manifest)
+        self.assertFalse(published.exists())
+
     def test_verified_strategy_retries_an_unobservable_mixed_copy(self):
         observed_states = [("old-a", "old-b")]
         delegate = InterleavingCopyStrategy(observed_states)
@@ -104,6 +135,14 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
         self.assertEqual(delegate.calls, 2)
         self.assertFalse(list(self.root.glob(".verified_copy_*")))
 
+    def test_verified_strategy_returns_manifest_from_the_published_copy(self):
+        manifest = {}
+        destination = self.root / "verified-manifest-copy"
+        VerifiedFileCopyStrategy().copy_directory(self.source, destination, manifest=manifest)
+
+        self.assertEqual(manifest["a.txt"]["size"], 5)
+        self.assertEqual(manifest["a.txt"]["sha256"], VerifiedFileCopyStrategy._manifest(destination)["a.txt"][0])
+
     def test_snapshot_provider_strategy_copies_from_the_frozen_tree(self):
         class CopyingSnapshotProvider(SourceSnapshotProvider):
             @contextmanager
@@ -115,10 +154,12 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
                     yield frozen
 
         destination = self.root / "provider-copy"
-        ProviderSnapshotCopyStrategy(CopyingSnapshotProvider()).copy_directory(self.source, destination)
+        manifest = {}
+        ProviderSnapshotCopyStrategy(CopyingSnapshotProvider()).copy_directory(self.source, destination, manifest=manifest)
 
         self.assertEqual((destination / "a.txt").read_text(), "old-a")
         self.assertEqual((destination / "b.txt").read_text(), "old-b")
+        self.assertEqual(manifest["a.txt"]["size"], 5)
 
     def test_snapshot_provider_strategy_rejects_a_symlinked_snapshot_root(self):
         link = self.root / "frozen-link"

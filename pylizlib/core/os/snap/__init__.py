@@ -35,6 +35,7 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     SnapshotSortKey,
 )
+from pylizlib.core.os.snap.integrity import IntegrityManifest, SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.searcher import (
     QueryType,
@@ -64,6 +65,9 @@ __all__ = [
     "SourceSnapshotProvider",
     "ProviderSnapshotCopyStrategy",
     "SourceChangedError",
+    # integrity
+    "IntegrityManifest",
+    "SnapshotIntegrityError",
     # serializer
     "SnapshotSerializer",
     # utils
