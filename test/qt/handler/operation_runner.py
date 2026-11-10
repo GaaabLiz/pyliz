@@ -206,6 +206,40 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(callback_calls, ["finished"])
         self.assertEqual(runner.active_operations, 0)
 
+    def test_stopping_one_runner_preserves_another_runners_work(self):
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        second_entered = threading.Event()
+        release_second = threading.Event()
+        first_finished = threading.Event()
+        second_finished = threading.Event()
+        runner_a = OperationRunner(max_threads=1, on_runner_finished=first_finished.set)
+        runner_b = OperationRunner(max_threads=1, on_runner_finished=second_finished.set)
+        first_operation = Operation(
+            [GenericTask("first", lambda: (first_entered.set(), release_first.wait(3)))],
+            OperationInfo("runner A", "runner A"),
+        )
+        second_operation = Operation(
+            [GenericTask("second", lambda: (second_entered.set(), release_second.wait(3)))],
+            OperationInfo("runner B", "runner B"),
+        )
+        runner_a.add(first_operation)
+        runner_b.add(second_operation)
+
+        runner_a.start()
+        self.assertTrue(first_entered.wait(2))
+        runner_b.start()
+        runner_a.stop()
+        release_first.set()
+
+        self.assertTrue(self.wait_until(second_entered.is_set))
+        release_second.set()
+        self.assertTrue(self.wait_until(first_finished.is_set))
+        self.assertTrue(self.wait_until(second_finished.is_set))
+        self.assertEqual(first_operation.status, OperationStatus.Cancelled)
+        self.assertEqual(second_operation.status, OperationStatus.Completed)
+        self.assertEqual(runner_b.active_operations, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

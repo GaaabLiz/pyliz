@@ -69,7 +69,7 @@ class OperationRunner(QObject):
     ):
         super().__init__()
         self.max_threads = max_threads
-        self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool = QThreadPool(self)
         self.thread_pool.setMaxThreadCount(self.max_threads)
         self.operation_pool: list[Operation] = []
         self.active_operations = 0
