@@ -28,6 +28,7 @@ from typing import ClassVar, Optional
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder
+from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.utils import get_folder_size_mb
 
 
@@ -154,69 +155,36 @@ class SnapDirAssociation:
         """
         return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
-    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None, message_callback=None):
-        """
-        Copies the entire content of the directory specified by `original_path`
-        into a subdirectory within the given `catalogue_target_path`.
-
-        The new subdirectory will be named using the `directory_name` property.
-
-        Args:
-            catalogue_target_path: The base path in the catalogue where the directory
-                                   content will be copied.
-            progress_callback: A callable taking (copied_bytes: int, total_bytes: int)
-            message_callback: A callable taking (message: str) to report the current file.
-        """
-        import os
-
+    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None, message_callback=None, *, copy_strategy: DirectoryCopyStrategy | None = None):
+        """Copy this association using the configured directory-copy strategy."""
         source = Path(self.original_path)
         directory_name = self.directory_name
+        selected_strategy = copy_strategy or SequentialFileCopyStrategy()
+        if not isinstance(selected_strategy, DirectoryCopyStrategy):
+            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+
         target_is_junction = getattr(catalogue_target_path, "is_junction", None)
         if catalogue_target_path.is_symlink() or (target_is_junction is not None and target_is_junction()):
             raise ValueError(f"Snapshot storage root '{catalogue_target_path}' cannot be a symbolic link.")
-        destination = catalogue_target_path.joinpath(directory_name)
+        destination = catalogue_target_path / directory_name
         target_root = catalogue_target_path.resolve(strict=False)
-        resolved_destination = destination.resolve(strict=False)
         expected_destination = target_root / directory_name
+        resolved_destination = destination.resolve(strict=False)
         if resolved_destination != expected_destination or not resolved_destination.is_relative_to(target_root):
             raise ValueError(f"Snapshot directory destination '{destination}' escapes '{catalogue_target_path}'.")
+
         destination.parent.mkdir(parents=True, exist_ok=True)
         if catalogue_target_path.is_symlink() or catalogue_target_path.resolve(strict=False) != target_root:
             raise ValueError(f"Snapshot storage root '{catalogue_target_path}' changed during copy.")
-        destination.mkdir(exist_ok=False)
-        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination:
-            raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
-
-        total_bytes = 0
-        if progress_callback:
-            total_bytes = int((self.mb_size or 0) * 1024 * 1024)
-            if total_bytes == 0:
-                # If size wasn't computed properly, try to get it here
-                total_bytes = sum(f.stat().st_size for f in source.rglob("*") if f.is_file())
-
-        copied_bytes = [0]
-
-        def copy_with_prog(src, dst, *, follow_symlinks=True):
-            if catalogue_target_path.is_symlink() or destination.is_symlink():
-                raise ValueError(f"Snapshot storage path '{destination}' was replaced by a symbolic link.")
-            current_destination = destination.resolve(strict=False)
-            if current_destination != resolved_destination:
-                raise ValueError(f"Snapshot storage path '{destination}' changed during copy.")
-            if message_callback:
-                message_callback(f"Elaborazione: {Path(src).name}")
-            shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
-            if progress_callback:
-                copied_bytes[0] += os.path.getsize(src)
-                progress_callback(copied_bytes[0], total_bytes)
-
-        for src_path in source.iterdir():
-            dst_path = destination / src_path.name
-            if src_path.is_dir():
-                shutil.copytree(src_path, dst_path, copy_function=copy_with_prog)
-            else:
-                copy_with_prog(src_path, dst_path)
-
-        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination:
+        try:
+            selected_strategy.copy_directory(source, destination, progress_callback, message_callback)
+        except Exception:
+            if destination.is_symlink():
+                destination.unlink(missing_ok=True)
+            elif destination.exists():
+                shutil.rmtree(destination)
+            raise
+        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination or not destination.is_dir():
             raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
 
 
@@ -312,6 +280,7 @@ class SnapshotSettings:
                                             full control over installed directories (default False).
         snap_id_length: The character length for new snapshot IDs.
         folder_id_length: The character length for new folder association IDs.
+        copy_strategy: Strategy object used to copy directory trees.
     """
 
     json_filename: str = "snapshot.json"
@@ -322,6 +291,11 @@ class SnapshotSettings:
     install_with_everyone_full_control: bool = False
     snap_id_length: int = 20
     folder_id_length: int = 6
+    copy_strategy: DirectoryCopyStrategy = field(default_factory=SequentialFileCopyStrategy)
+
+    def __post_init__(self):
+        if not isinstance(self.copy_strategy, DirectoryCopyStrategy):
+            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
 
     @property
     def bck_before_install_enabled(self) -> bool:

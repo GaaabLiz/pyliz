@@ -17,6 +17,14 @@ Sub-modules:
 """
 
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
+from pylizlib.core.os.snap.copy_strategy import (
+    DirectoryCopyStrategy,
+    ProviderSnapshotCopyStrategy,
+    SequentialFileCopyStrategy,
+    SourceChangedError,
+    SourceSnapshotProvider,
+    VerifiedFileCopyStrategy,
+)
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -49,6 +57,13 @@ __all__ = [
     "SnapshotBackupInfo",
     "SnapshotSettings",
     "SnapshotSortKey",
+    # copy strategies
+    "DirectoryCopyStrategy",
+    "SequentialFileCopyStrategy",
+    "VerifiedFileCopyStrategy",
+    "SourceSnapshotProvider",
+    "ProviderSnapshotCopyStrategy",
+    "SourceChangedError",
     # serializer
     "SnapshotSerializer",
     # utils

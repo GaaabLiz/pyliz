@@ -22,6 +22,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     SnapEditAction,
@@ -138,6 +139,7 @@ class SnapshotUtils:
         *,
         replace_existing: bool = False,
         prepare_staging=None,
+        copy_strategy: DirectoryCopyStrategy | None = None,
         message_callback=None,
         operation: str = "Snapshot copy",
     ) -> Path:
@@ -148,6 +150,10 @@ class SnapshotUtils:
         transaction_path = Path(tempfile.mkdtemp(prefix="_staging_snapshot_", dir=catalogue_root))
         staged_path = transaction_path / "snapshot"
         backup_path = transaction_path / "original"
+        selected_strategy = copy_strategy or SequentialFileCopyStrategy()
+        if not isinstance(selected_strategy, DirectoryCopyStrategy):
+            shutil.rmtree(transaction_path)
+            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
         original_moved = False
         published = False
         preserve_transaction = False
@@ -155,13 +161,7 @@ class SnapshotUtils:
             # Copy symlink objects into staging instead of following them. The
             # scan rejects them before any copy can become visible in storage.
             SnapshotUtils.assert_no_symlinks(source)
-
-            def copy_with_message(src, dst):
-                if message_callback:
-                    message_callback(f"Copia in corso: {Path(src).name}")
-                return shutil.copy2(src, dst, follow_symlinks=True)
-
-            shutil.copytree(source, staged_path, symlinks=True, copy_function=copy_with_message)
+            selected_strategy.copy_directory(source, staged_path, message_callback=message_callback)
             SnapshotUtils.assert_no_symlinks(staged_path)
             if prepare_staging is not None:
                 prepare_staging(staged_path)

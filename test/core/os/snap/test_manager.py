@@ -27,6 +27,7 @@ from unittest.mock import MagicMock, patch
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
+from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -70,6 +71,23 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         self.assertTrue(mgr.path_snapshot_json.exists())
         for assoc in snap.directories:
             self.assertTrue((mgr.path_snapshot / assoc.directory_name).exists())
+
+    def test_create_uses_strategy_from_snapshot_settings(self):
+        class RecordingStrategy(SequentialFileCopyStrategy):
+            def __init__(self):
+                self.sources = []
+
+            def copy_directory(self, source, destination, progress_callback=None, message_callback=None):
+                self.sources.append(Path(source))
+                return super().copy_directory(source, destination, progress_callback, message_callback)
+
+        snap = make_snapshot("ConfiguredCopyStrategy", self._src, n=2)
+        strategy = RecordingStrategy()
+        mgr = self._mgr(snap, SnapshotSettings(copy_strategy=strategy))
+
+        mgr.create()
+
+        self.assertEqual(strategy.sources, [Path(assoc.original_path) for assoc in snap.directories])
 
     def test_create_explicitly_replaces_existing_contents(self):
         snap = make_snapshot("MgrRecreate", self._src, n=1)
@@ -469,8 +487,8 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         original_dir = Path(snap.directories[0].original_path)
         (original_dir / "important_file.txt").write_text("dont lose me")
 
-        # We mock copytree to fail
-        with patch("shutil.copytree", side_effect=Exception("Simulated copy failure")):
+        # The configured directory-copy strategy must fail before installation.
+        with patch.object(mgr.settings.copy_strategy, "copy_directory", side_effect=Exception("Simulated copy failure")):
             with self.assertRaises(RuntimeError):
                 mgr.install(clear_destination=True)
 
@@ -603,11 +621,11 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         snap = self._create_same_name_snapshot()
         new = snap.clone()
         new.directories[1].index = 1
-        mgr = self._mgr(new)
+        mgr = self._mgr(snap)
         before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
 
         with self.assertRaises(ValueError):
-            mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
+            self._mgr(new)
 
         self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
 

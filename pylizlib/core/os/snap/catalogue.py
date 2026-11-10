@@ -163,6 +163,7 @@ class SnapshotCatalogue:
                         restored_snapshot.id,
                         self.path_catalogue,
                         replace_existing=True,
+                        copy_strategy=self.settings.copy_strategy,
                         operation="Snapshot-directory restore",
                     )
                 except Exception as e:
@@ -208,7 +209,7 @@ class SnapshotCatalogue:
                     if destination.exists():
                         destination.rename(backup_dest)
 
-                    shutil.copytree(extracted_dir, destination)
+                    self.settings.copy_strategy.copy_directory(extracted_dir, destination)
                     completed_rollbacks.append(task)
 
             except Exception as e:
@@ -465,7 +466,13 @@ class SnapshotCatalogue:
                         continue
 
                     # 4. Copy the extracted folder to the catalogue
-                    SnapshotUtils.publish_snapshot_tree(potential_snap_dir, snap_id, self.path_catalogue, operation="Catalogue import")
+                    SnapshotUtils.publish_snapshot_tree(
+                        potential_snap_dir,
+                        snap_id,
+                        self.path_catalogue,
+                        copy_strategy=self.settings.copy_strategy,
+                        operation="Catalogue import",
+                    )
                     logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
 
                 except Exception as e:
@@ -514,7 +521,13 @@ class SnapshotCatalogue:
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
             # 4. Copy the extracted folder to the catalogue
-            SnapshotUtils.publish_snapshot_tree(temp_dir_path, snapshot_to_import.id, self.path_catalogue, operation="Snapshot import")
+            SnapshotUtils.publish_snapshot_tree(
+                temp_dir_path,
+                snapshot_to_import.id,
+                self.path_catalogue,
+                copy_strategy=self.settings.copy_strategy,
+                operation="Snapshot import",
+            )
 
     def update_assoc_with_installed(self, snap_id: str, message_callback=None):
         """
