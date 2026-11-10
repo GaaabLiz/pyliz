@@ -558,6 +558,37 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         self.assertTrue(original_dir.exists())
         self.assertFalse(list(original_dir.parent.glob("*_staging_*")))
 
+    def test_install_refuses_legacy_snapshot_without_manifest_by_default(self):
+        snap = make_snapshot("InstallLegacy", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        snap.directories[0].integrity_manifest = None
+        SnapshotSerializer.to_json(snap, mgr.path_snapshot_json)
+        legacy_snapshot = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        legacy_manager = self._mgr(legacy_snapshot)
+        original_dir = Path(snap.directories[0].original_path)
+        (original_dir / "preserve.txt").write_text("existing destination", encoding="utf-8")
+
+        with self.assertRaisesRegex(SnapshotIntegrityError, "no integrity manifest"):
+            legacy_manager.install(clear_destination=True)
+
+        self.assertEqual((original_dir / "preserve.txt").read_text(encoding="utf-8"), "existing destination")
+
+    def test_install_can_explicitly_allow_legacy_snapshot_without_manifest(self):
+        snap = make_snapshot("InstallLegacyOptIn", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        snap.directories[0].integrity_manifest = None
+        SnapshotSerializer.to_json(snap, mgr.path_snapshot_json)
+        legacy_snapshot = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        settings = SnapshotSettings(allow_unverified_legacy_snapshots=True)
+        legacy_manager = SnapshotManager(legacy_snapshot, CATALOGUE_PATH, settings)
+
+        legacy_manager.install(clear_destination=True)
+
+        original_dir = Path(snap.directories[0].original_path)
+        self.assertTrue((original_dir / "i1_file.txt").exists())
+
     def test_remove_installed_copies_deletes_original_paths(self):
         install_dir = TEST_LOCAL_ROOT / "installed_copy"
         install_dir.mkdir(parents=True, exist_ok=True)
