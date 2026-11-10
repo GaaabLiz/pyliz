@@ -293,7 +293,7 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
                 entry_path = Path(entry.path)
                 items.append(entry_path)
 
-                if recursive and entry.is_dir():
+                if recursive and entry.is_dir(follow_symlinks=False):
                     items.extend(get_path_items(entry_path, recursive=True))
             except PermissionError:
                 continue

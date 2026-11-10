@@ -285,6 +285,26 @@ class GetPathItemsTestCase(unittest.TestCase):
             # 2 dirs + 5 files = 7
             self.assertEqual(len(items), 7)
 
+    def test_recursive_scan_reports_symlinks_without_following_them(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "root"
+            outside = Path(td) / "outside"
+            (root / "inside").mkdir(parents=True)
+            outside.mkdir()
+            (root / "inside" / "file.txt").write_text("inside", encoding="utf-8")
+            (outside / "outside.txt").write_text("outside", encoding="utf-8")
+            (root / "cycle").symlink_to(root, target_is_directory=True)
+            (root / "external").symlink_to(outside, target_is_directory=True)
+
+            items = get_path_items(root, recursive=True)
+            relative_items = {item.relative_to(root).as_posix() for item in items}
+
+            self.assertIn("cycle", relative_items)
+            self.assertIn("external", relative_items)
+            self.assertIn("inside", relative_items)
+            self.assertIn("inside/file.txt", relative_items)
+            self.assertEqual(relative_items, {"cycle", "external", "inside", "inside/file.txt"})
+
 
 class ClearFolderContentsTestCase(unittest.TestCase):
     def test_clears_all(self):
