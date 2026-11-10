@@ -43,6 +43,21 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(operation.status, OperationStatus.Cancelled)
         self.assertTrue(all(task.status == OperationStatus.Cancelled for task in operation.tasks))
 
+    def test_cancelled_task_flag_is_checked_before_execution(self):
+        executed = []
+        cancelled_task = GenericTask("cancelled", lambda: executed.append("cancelled"))
+        cancelled_task.cancel()
+        operation = Operation(
+            [cancelled_task, GenericTask("later", lambda: executed.append("later"))],
+            OperationInfo("test", "test"),
+        )
+
+        operation.execute()
+
+        self.assertEqual(executed, ["later"])
+        self.assertEqual(cancelled_task.status, OperationStatus.Cancelled)
+        self.assertEqual(operation.status, OperationStatus.Cancelled)
+
     def test_stop_waits_for_running_worker_and_does_not_start_queued_operation(self):
         entered = threading.Event()
         release = threading.Event()

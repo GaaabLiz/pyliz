@@ -121,7 +121,7 @@ class Operation(QRunnable):
 
     def execute_tasks(self):
         for task in self.tasks:
-            if self._is_cancelled:
+            if self._is_cancelled or task.is_cancelled:
                 task.update_task_status(OperationStatus.Cancelled)
                 self.signals.task_finished.emit(task.name)
                 continue
@@ -155,7 +155,7 @@ class Operation(QRunnable):
             if self.task_errors:
                 self.error = "; ".join(self.task_errors)
                 self.update_op_status(OperationStatus.Failed)
-            elif self._is_cancelled:
+            elif self._is_cancelled or any(task.is_cancelled for task in self.tasks):
                 self.update_op_status(OperationStatus.Cancelled)
             else:
                 self.update_op_status(OperationStatus.Completed)
@@ -267,7 +267,11 @@ class Operation(QRunnable):
         return self.status == OperationStatus.Failed
 
     def is_cancelled(self):
-        return self.status == OperationStatus.Cancelled or self._is_cancelled
+        return (
+            self.status == OperationStatus.Cancelled
+            or self._is_cancelled
+            or any(task.is_cancelled for task in self.tasks)
+        )
 
     def is_in_progress(self):
         return self.status == OperationStatus.InProgress
