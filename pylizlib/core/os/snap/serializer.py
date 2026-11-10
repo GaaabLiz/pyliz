@@ -49,6 +49,7 @@ class SnapshotSerializer:
             snapshot: The Snapshot object to serialize.
             path: The file path where the JSON data will be saved.
         """
+        snapshot.validate()
         data_dict = asdict(snapshot)
         json_str = json.dumps(data_dict, default=SnapshotSerializer._converter, indent=4)
         path.write_text(json_str, encoding="utf-8")
@@ -57,6 +58,8 @@ class SnapshotSerializer:
     def from_json(cls, filepath: Path) -> Snapshot:
         """Reads a Snapshot from a JSON file, converting datetimes and enums."""
         data = json.loads(filepath.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Snapshot JSON root must be an object.")
 
         # Convert datetime fields from ISO8601 string to datetime
         for key in [
@@ -70,14 +73,20 @@ class SnapshotSerializer:
 
         # Convert 'directories' into a list of SnapDirAssociation
         if "directories" in data and isinstance(data["directories"], list):
-            data["directories"] = [SnapDirAssociation(**d) if isinstance(d, dict) else d for d in data["directories"]]
+            if any(not isinstance(directory, dict) for directory in data["directories"]):
+                raise ValueError("Snapshot JSON directories must contain objects.")
+            data["directories"] = [SnapDirAssociation(**directory) for directory in data["directories"]]
+        elif "directories" in data:
+            raise ValueError("Snapshot JSON directories must be a list.")
 
         if "os_created" not in data:
             import platform
 
             data["os_created"] = platform.system()
 
-        return Snapshot(**data)
+        snapshot = Snapshot(**data)
+        snapshot.validate()
+        return snapshot
 
     @classmethod
     def update_field(

@@ -16,6 +16,7 @@ Classes:
     Snapshot            – A named collection of directory associations.
 """
 
+import math
 import platform
 import shutil
 from dataclasses import dataclass, field
@@ -28,6 +29,26 @@ from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder
 from pylizlib.core.os.utils import get_folder_size_mb
+
+
+def validate_directory_component(value: str, field_name: str = "directory name", allow_empty: bool = False) -> str:
+    """Validate a single portable path component used inside a snapshot."""
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string.")
+    if allow_empty and value == "":
+        return value
+    if (
+        not value
+        or value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or ":" in value
+        or "\x00" in value
+        or Path(value).is_absolute()
+        or Path(value).name != value
+    ):
+        raise ValueError(f"{field_name} must be a single relative path component: {value!r}.")
+    return value
 
 
 @dataclass
@@ -49,7 +70,7 @@ class SnapDirAssociation:
     _current_index: ClassVar[int] = 0
 
     def __post_init__(self):
-        self.original_path = Path(self.original_path).as_posix()
+        self.validate()
         if self.mb_size is None:
             try:
                 self.mb_size = get_folder_size_mb(Path(self.original_path))
@@ -58,6 +79,25 @@ class SnapDirAssociation:
             except Exception as e:  # Catch other potential errors from os.walk/getsize
                 logger.error(f"Error calculating size for {self.original_path}: {e}")
                 self.mb_size = 0.0
+
+    def validate(self) -> None:
+        """Validate the fields that define this association's stored path."""
+        if type(self.index) is not int:
+            raise TypeError("Snapshot directory index must be an integer.")
+        if self.index < 0:
+            raise ValueError("Snapshot directory index cannot be negative.")
+        if not isinstance(self.original_path, str):
+            raise TypeError("Snapshot directory original_path must be a string.")
+        if not self.original_path or "\x00" in self.original_path:
+            raise ValueError("Snapshot directory original_path must be a non-empty path without NUL characters.")
+        if not isinstance(self.folder_id, str) or not self.folder_id:
+            raise TypeError("Snapshot directory folder_id must be a non-empty string.")
+        self.original_path = Path(self.original_path).as_posix()
+        if self.mb_size is not None:
+            if type(self.mb_size) not in (int, float):
+                raise TypeError("Snapshot directory mb_size must be a non-negative number or None.")
+            if self.mb_size < 0 or (type(self.mb_size) is float and not math.isfinite(self.mb_size)):
+                raise ValueError("Snapshot directory mb_size must be finite and non-negative.")
 
     @classmethod
     def next_index(cls):
@@ -73,7 +113,11 @@ class SnapDirAssociation:
     @property
     def directory_name(self) -> str:
         """The name of the directory when copied into the snapshot folder."""
-        return self.index.__str__() + "-" + Path(self.original_path).name
+        self.validate()
+        basename = Path(self.original_path).name
+        if not basename:
+            raise ValueError("Snapshot directory original_path must have a final path component.")
+        return validate_directory_component(f"{self.index}-{basename}")
 
     @staticmethod
     def gen_random(
@@ -127,6 +171,9 @@ class SnapDirAssociation:
 
         source = Path(self.original_path)
         destination = catalogue_target_path.joinpath(self.directory_name)
+        target_root = catalogue_target_path.resolve(strict=False)
+        if not destination.resolve(strict=False).is_relative_to(target_root):
+            raise ValueError(f"Snapshot directory destination '{destination}' escapes '{catalogue_target_path}'.")
         destination.mkdir(parents=True, exist_ok=True)
 
         total_bytes = 0
@@ -214,6 +261,22 @@ class SnapEditAction:
     new_directory_name: str = ""
     folder_id: str = ""
 
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate every action field before it can participate in a filesystem plan."""
+        if not isinstance(self.action_type, SnapEditType):
+            raise TypeError("Snapshot edit action_type must be a SnapEditType.")
+        if not isinstance(self.timestamp, datetime):
+            raise TypeError("Snapshot edit timestamp must be a datetime.")
+        for name in ("new_path", "folder_id_to_remove", "folder_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str):
+                raise TypeError(f"Snapshot edit {name} must be a string.")
+        for name in ("directory_name_to_remove", "old_directory_name", "new_directory_name"):
+            validate_directory_component(getattr(self, name), name, allow_empty=True)
+
 
 @dataclass
 class SnapshotSettings:
@@ -290,6 +353,38 @@ class Snapshot:
     date_last_modified: datetime | None = None
     os_created: str = field(default_factory=platform.system)
     data: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate snapshot metadata, including every association used for paths."""
+        for name in ("id", "name", "desc", "author", "os_created"):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"Snapshot {name} must be a string.")
+        if not self.id:
+            raise ValueError("Snapshot ID cannot be empty.")
+        validate_directory_component(self.id, "Snapshot ID")
+        if not isinstance(self.date_created, datetime):
+            raise TypeError("Snapshot date_created must be a datetime.")
+        for name in ("date_modified", "date_last_used", "date_last_modified"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, datetime):
+                raise TypeError(f"Snapshot {name} must be a datetime or None.")
+        if not isinstance(self.directories, list) or any(not isinstance(item, SnapDirAssociation) for item in self.directories):
+            raise TypeError("Snapshot directories must be a list of SnapDirAssociation objects.")
+        for association in self.directories:
+            association.validate()
+        directory_names = [association.directory_name for association in self.directories]
+        folder_ids = [association.folder_id for association in self.directories]
+        if len(set(directory_names)) != len(directory_names):
+            raise ValueError("Snapshot association directory names must be unique.")
+        if len(set(folder_ids)) != len(folder_ids):
+            raise ValueError("Snapshot association folder IDs must be unique.")
+        if not isinstance(self.tags, list) or any(not isinstance(tag, str) for tag in self.tags):
+            raise TypeError("Snapshot tags must be a list of strings.")
+        if not isinstance(self.data, dict) or any(not isinstance(key, str) or not isinstance(value, str) for key, value in self.data.items()):
+            raise TypeError("Snapshot data must be a dictionary of strings.")
 
     @property
     def tags_as_string(self) -> str:

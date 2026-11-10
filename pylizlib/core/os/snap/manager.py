@@ -29,6 +29,7 @@ from pylizlib.core.os.snap.domain import (
     SnapEditType,
     Snapshot,
     SnapshotSettings,
+    validate_directory_component,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
@@ -53,12 +54,32 @@ class SnapshotManager:
         self.snapshot = snapshot
         self.settings = settings
         self.path_catalogue = catalogue_path
-        self.path_snapshot = SnapshotUtils.get_snapshot_path(self.snapshot.folder_name, self.path_catalogue)
+        self.snapshot.validate()
+        validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
+        self.path_snapshot = SnapshotUtils.validate_snapshot_root(self.snapshot.folder_name, self.path_catalogue)
         self.path_snapshot_json = SnapshotUtils.get_snapshot_json_path(self.snapshot.folder_name, self.path_catalogue, self.settings.json_filename)
+
+    def _snapshot_root_path(self) -> Path:
+        """Validate that the catalogue entry still names this snapshot root."""
+        root = SnapshotUtils.validate_snapshot_root(self.snapshot.folder_name, self.path_catalogue)
+        if root != self.path_snapshot:
+            raise ValueError("The snapshot ID changed after the manager was initialized.")
+        return root
+
+    def _snapshot_child_path(self, name: str) -> Path:
+        """Return a validated, contained child of this snapshot."""
+        self.snapshot.validate()
+        path = SnapshotUtils.get_snapshot_child_path(self.snapshot.folder_name, self.path_catalogue, name)
+        if path.parent != self.path_snapshot:
+            raise ValueError("The snapshot ID changed after the manager was initialized.")
+        return path
 
     def __save_json(self):
         """Saves the current snapshot object state to its JSON file."""
-        SnapshotSerializer.to_json(self.snapshot, self.path_snapshot_json)
+        json_path = self._snapshot_child_path(self.settings.json_filename)
+        if json_path != self.path_snapshot_json:
+            raise ValueError("The snapshot JSON path changed after the manager was initialized.")
+        SnapshotSerializer.to_json(self.snapshot, json_path)
 
     def create(self, progress_callback=None, message_callback=None, *, replace_existing: bool = False):
         """
@@ -71,6 +92,9 @@ class SnapshotManager:
         Raises:
             FileExistsError: If the destination exists and replacement is disabled.
         """
+        self.snapshot.validate()
+        validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
+        self._snapshot_root_path()
         if not replace_existing and (self.path_snapshot.exists() or self.path_snapshot.is_symlink()):
             raise FileExistsError(f"Snapshot destination '{self.path_snapshot}' already exists.")
 
@@ -96,7 +120,8 @@ class SnapshotManager:
                 snap_dir.copy_install_to(staging_path, progress_callback=dir_progress, message_callback=message_callback)
 
             # Write json to staging BEFORE making it the final destination
-            SnapshotSerializer.to_json(self.snapshot, staging_path / self.settings.json_filename)
+            json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
+            SnapshotSerializer.to_json(self.snapshot, json_path)
 
             if self.path_snapshot.exists() or self.path_snapshot.is_symlink():
                 if not replace_existing:
@@ -118,15 +143,17 @@ class SnapshotManager:
         """
         Deletes the snapshot's directory, propagating filesystem failures.
         """
-        remove_directory_or_move_to_temp(self.path_snapshot, message_callback=message_callback)
+        remove_directory_or_move_to_temp(self._snapshot_root_path(), message_callback=message_callback)
 
     def update_json_data_fields(self):
         """
         Updates the 'data' and 'date_last_modified' fields in the snapshot's JSON file.
         This method is typically called after modifying the snapshot's data dictionary.
         """
-        SnapshotSerializer.update_field(self.path_snapshot_json, "data", self.snapshot.data)
-        SnapshotSerializer.update_field(self.path_snapshot_json, "date_last_modified", datetime.now().isoformat())
+        self.snapshot.validate()
+        json_path = self._snapshot_child_path(self.settings.json_filename)
+        SnapshotSerializer.update_field(json_path, "data", self.snapshot.data)
+        SnapshotSerializer.update_field(json_path, "date_last_modified", datetime.now().isoformat())
         self.snapshot.date_last_modified = datetime.now()
 
     def update_json_base_fields(self):
@@ -134,11 +161,13 @@ class SnapshotManager:
         Updates the basic metadata fields (name, desc, author, tags, date_modified)
         of the snapshot's JSON file.
         """
-        SnapshotSerializer.update_field(self.path_snapshot_json, "name", self.snapshot.name)
-        SnapshotSerializer.update_field(self.path_snapshot_json, "desc", self.snapshot.desc)
-        SnapshotSerializer.update_field(self.path_snapshot_json, "author", self.snapshot.author)
-        SnapshotSerializer.update_field(self.path_snapshot_json, "tags", self.snapshot.tags)
-        SnapshotSerializer.update_field(self.path_snapshot_json, "date_modified", datetime.now().isoformat())
+        self.snapshot.validate()
+        json_path = self._snapshot_child_path(self.settings.json_filename)
+        SnapshotSerializer.update_field(json_path, "name", self.snapshot.name)
+        SnapshotSerializer.update_field(json_path, "desc", self.snapshot.desc)
+        SnapshotSerializer.update_field(json_path, "author", self.snapshot.author)
+        SnapshotSerializer.update_field(json_path, "tags", self.snapshot.tags)
+        SnapshotSerializer.update_field(json_path, "date_modified", datetime.now().isoformat())
         self.snapshot.date_modified = datetime.now()
 
     def install_directory(self, destination_path: Path):
@@ -159,7 +188,7 @@ class SnapshotManager:
             original_path=destination_path.as_posix(),
             folder_id=gen_random_string(self.settings.folder_id_length),
         )
-        new_dir.copy_install_to(self.path_snapshot)
+        new_dir.copy_install_to(self._snapshot_root_path())
         self.snapshot.directories.append(new_dir)
         self.__save_json()
 
@@ -173,7 +202,7 @@ class SnapshotManager:
         """
         dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
-            dir_path = self.path_snapshot.joinpath(dir_to_remove.directory_name)
+            dir_path = self._snapshot_child_path(dir_to_remove.directory_name)
             remove_directory_or_move_to_temp(dir_path)
             self.snapshot.directories.remove(dir_to_remove)
             self.__save_json()
@@ -187,8 +216,13 @@ class SnapshotManager:
         Args:
             edits: A list of SnapEditAction objects.
         """
-        old_json = self.path_snapshot_json.read_bytes()
-        old = SnapshotSerializer.from_json(self.path_snapshot_json)
+        self.snapshot.validate()
+        self._snapshot_root_path()
+        for edit in edits:
+            edit.validate()
+        snapshot_json_path = self._snapshot_child_path(self.settings.json_filename)
+        old_json = snapshot_json_path.read_bytes()
+        old = SnapshotSerializer.from_json(snapshot_json_path)
         expected_edits = SnapshotUtils.get_edits_between_snapshots(old, self.snapshot)
         old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
         new_by_id = {assoc.folder_id: assoc for assoc in self.snapshot.directories}
@@ -223,15 +257,15 @@ class SnapshotManager:
             if edit.action_type == SnapEditType.ADD_DIR:
                 additions.append(new_by_id[edit.folder_id])
             else:
-                source = self.path_snapshot / old_by_id[edit.folder_id].directory_name
-                target = self.path_snapshot / new_by_id[edit.folder_id].directory_name if edit.action_type == SnapEditType.RENAME_DIR else None
+                source = self._snapshot_child_path(old_by_id[edit.folder_id].directory_name)
+                target = self._snapshot_child_path(new_by_id[edit.folder_id].directory_name) if edit.action_type == SnapEditType.RENAME_DIR else None
                 moves.append((source, target))
 
         # Validate the complete plan before touching any stored copy.
         sources = {source for source, _ in moves}
-        targets = [target for _, target in moves if target is not None] + [self.path_snapshot / assoc.directory_name for assoc in additions]
+        targets = [target for _, target in moves if target is not None] + [self._snapshot_child_path(assoc.directory_name) for assoc in additions]
         for assoc in old.directories:
-            source = self.path_snapshot / assoc.directory_name
+            source = self._snapshot_child_path(assoc.directory_name)
             if not source.is_dir():
                 raise FileNotFoundError(f"Snapshot directory '{source}' is missing.")
         for target in targets:
@@ -255,7 +289,7 @@ class SnapshotManager:
                     publications.append((staged, target))
             for assoc in additions:
                 assoc.copy_install_to(staging_path / "additions", message_callback=message_callback)
-                publications.append((staging_path / "additions" / assoc.directory_name, self.path_snapshot / assoc.directory_name))
+                publications.append((staging_path / "additions" / assoc.directory_name, self._snapshot_child_path(assoc.directory_name)))
 
             for staged, target in publications:
                 if target.exists():
@@ -264,7 +298,7 @@ class SnapshotManager:
                 published.append((staged, target))
 
             for assoc in self.snapshot.directories:
-                expected_path = self.path_snapshot / assoc.directory_name
+                expected_path = self._snapshot_child_path(assoc.directory_name)
                 if not expected_path.is_dir():
                     raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
             saving_json = True
@@ -275,7 +309,7 @@ class SnapshotManager:
             for staged, source in reversed(staged_originals):
                 staged.rename(source)
             if saving_json:
-                self.path_snapshot_json.write_bytes(old_json)
+                self._snapshot_child_path(self.settings.json_filename).write_bytes(old_json)
             shutil.rmtree(staging_path)
             raise
 
@@ -290,6 +324,7 @@ class SnapshotManager:
         Raises:
             FileNotFoundError: If the original snapshot path does not exist.
         """
+        self._snapshot_root_path()
         if not self.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
         new_snap = self.snapshot.clone()
@@ -306,6 +341,8 @@ class SnapshotManager:
         Updates the snapshot's internal copy of each associated directory
         with the current version from the original system path.
         """
+        self.snapshot.validate()
+        self._snapshot_root_path()
         # 1 & 2. Validate all sources before deleting anything
         for dir_assoc in self.snapshot.directories:
             system_path = Path(dir_assoc.original_path)
@@ -316,11 +353,11 @@ class SnapshotManager:
         try:
             for dir_assoc in self.snapshot.directories:
                 system_path = Path(dir_assoc.original_path)
-                snapshot_copy_path = self.path_snapshot / dir_assoc.directory_name
+                snapshot_copy_path = self._snapshot_child_path(dir_assoc.directory_name)
 
                 # 4. Copy each source to staging
-                staging_dir = self.path_snapshot / f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}"
-                backup_dir = self.path_snapshot / f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}"
+                staging_dir = self._snapshot_child_path(f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}")
+                backup_dir = self._snapshot_child_path(f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}")
 
                 logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
 
@@ -428,6 +465,8 @@ class SnapshotManager:
                 installed directories. Defaults to False; ACL changes require explicit opt-in.
             clear_destination (bool): If True, clears the destination directories before copying.
         """
+        self.snapshot.validate()
+        self._snapshot_root_path()
         import os
         import platform
         import sys
@@ -449,7 +488,7 @@ class SnapshotManager:
 
         # 1. Preflight
         for dir_assoc in self.snapshot.directories:
-            source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
+            source_dir = self._snapshot_child_path(dir_assoc.directory_name)
             if not source_dir.exists() or not source_dir.is_dir():
                 raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
             install_location = Path(dir_assoc.original_path)
@@ -459,7 +498,7 @@ class SnapshotManager:
         rollbacks = []
         try:
             for i, dir_assoc in enumerate(self.snapshot.directories):
-                source_dir = self.path_snapshot.joinpath(dir_assoc.directory_name)
+                source_dir = self._snapshot_child_path(dir_assoc.directory_name)
                 install_location = Path(dir_assoc.original_path)
 
                 # 2. Copiare in una directory temporanea (Staging)
@@ -556,7 +595,7 @@ class SnapshotManager:
         # 7. Aggiornare `date_last_used` soltanto dopo commit riuscito
         self.snapshot.date_last_used = datetime.now()
         SnapshotSerializer.update_field(
-            self.path_snapshot_json,
+            self._snapshot_child_path(self.settings.json_filename),
             "date_last_used",
             self.snapshot.date_last_used.isoformat(),
         )
@@ -579,8 +618,11 @@ class SnapshotManager:
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
                 raise ValueError(f"Unsupported backup type: {backup_type}")
-            if backup_type == BackupType.SNAPSHOT_DIRECTORY and not self.path_snapshot_json.is_file():
-                raise FileNotFoundError(f"Snapshot metadata '{self.path_snapshot_json}' is missing.")
+            self.snapshot.validate()
+            self._snapshot_root_path()
+            snapshot_json_path = self._snapshot_child_path(self.settings.json_filename)
+            if backup_type == BackupType.SNAPSHOT_DIRECTORY and not snapshot_json_path.is_file():
+                raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             backup_type_suffix = ""
@@ -611,7 +653,7 @@ class SnapshotManager:
                         for file_path in SnapshotUtils.iter_files_strict(folder):
                             yield file_path, Path(d.directory_name) / file_path.relative_to(folder)
                 else:
-                    for file_path in SnapshotUtils.iter_files_strict(self.path_snapshot):
+                    for file_path in SnapshotUtils.iter_files_strict(self._snapshot_root_path()):
                         yield file_path, file_path.relative_to(self.path_snapshot)
 
             return SnapshotUtils.write_verified_zip(zip_path, files_to_archive(), message_callback)

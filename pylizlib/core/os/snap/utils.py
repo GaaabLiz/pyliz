@@ -28,6 +28,7 @@ from pylizlib.core.os.snap.domain import (
     SnapEditType,
     Snapshot,
     SnapshotSortKey,
+    validate_directory_component,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
@@ -142,6 +143,7 @@ class SnapshotUtils:
             raise ValueError(f"The provided path {path_snapshot} is not a directory.")
         if not path_snapshot.exists():
             raise FileNotFoundError(f"The provided path {path_snapshot} does not exist.")
+        validate_directory_component(json_filename, "Snapshot JSON filename")
         path_snapshot_json = path_snapshot.joinpath(json_filename)
         if not path_snapshot_json.is_file():
             raise FileNotFoundError(f"No snapshot.json file found in {path_snapshot}.")
@@ -163,12 +165,9 @@ class SnapshotUtils:
         Raises:
             ValueError: If the folder_name attempts path traversal or is invalid.
         """
-        if not folder_name or not folder_name.strip():
+        validate_directory_component(folder_name, "Snapshot ID")
+        if not folder_name.strip():
             raise ValueError("Snapshot ID cannot be empty.")
-        if folder_name in (".", ".."):
-            raise ValueError(f"Invalid Snapshot ID: '{folder_name}'.")
-        if "/" in folder_name or "\\" in folder_name:
-            raise ValueError(f"Snapshot ID cannot contain path separators: '{folder_name}'.")
 
         destination_path = catalogue_path / folder_name
 
@@ -176,15 +175,38 @@ class SnapshotUtils:
             catalogue_resolved = catalogue_path.resolve(strict=False)
             destination_resolved = destination_path.resolve(strict=False)
 
-            # Ensure destination is strictly inside catalogue
-            if destination_resolved == catalogue_resolved or not str(destination_resolved).startswith(str(catalogue_resolved)):
-                raise ValueError(f"Snapshot path must be strictly contained within catalogue. Resolved: {destination_resolved}")
+            # Resolve to exactly this catalogue entry. This rejects traversal
+            # and snapshot roots replaced by symlinks, including links that
+            # point elsewhere inside the catalogue.
+            expected_path = catalogue_resolved / folder_name
+            if destination_resolved != expected_path:
+                raise ValueError(f"Snapshot path must resolve to its catalogue entry. Resolved: {destination_resolved}")
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
             raise ValueError(f"Invalid snapshot path: {e}")
 
         return destination_path
+
+    @staticmethod
+    def validate_snapshot_root(folder_name: str, catalogue_path: Path) -> Path:
+        """Return the snapshot root, rejecting a root replaced by a symlink."""
+        root = SnapshotUtils.get_snapshot_path(folder_name, catalogue_path)
+        expected_root = catalogue_path.resolve(strict=False) / folder_name
+        if root.resolve(strict=False) != expected_root:
+            raise ValueError(f"Snapshot root '{root}' resolves outside its catalogue entry.")
+        return root
+
+    @staticmethod
+    def get_snapshot_child_path(folder_name: str, catalogue_path: Path, child_name: str) -> Path:
+        """Resolve and contain a single child path beneath its snapshot root."""
+        validate_directory_component(child_name)
+        root = SnapshotUtils.validate_snapshot_root(folder_name, catalogue_path)
+        destination = root / child_name
+        expected_root = catalogue_path.resolve(strict=False) / folder_name
+        if destination.resolve(strict=False) != expected_root / child_name:
+            raise ValueError(f"Snapshot child '{destination}' resolves through a symbolic link.")
+        return destination
 
     @staticmethod
     def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
@@ -199,7 +221,7 @@ class SnapshotUtils:
         Returns:
             The full path to the snapshot's JSON file.
         """
-        return SnapshotUtils.get_snapshot_path(folder_name, catalogue_path).joinpath(json_filename)
+        return SnapshotUtils.get_snapshot_child_path(folder_name, catalogue_path, json_filename)
 
     @staticmethod
     def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
