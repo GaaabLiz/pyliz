@@ -17,6 +17,17 @@ class IniManagerTestCase(unittest.TestCase):
 
             self.assertTrue(os.path.isfile(ini_path))
 
+    @patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("cannot create INI"))
+    def test_create_propagates_file_creation_errors(self, _mock_replace):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+
+            with self.assertRaisesRegex(OSError, "cannot create INI"):
+                IniManager(ini_path).create()
+
+            self.assertFalse(os.path.exists(ini_path))
+            self.assertEqual(os.listdir(temp_dir), [])
+
     def test_create_and_read_items(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             ini_path = os.path.join(temp_dir, "settings.ini")
@@ -67,16 +78,16 @@ class IniManagerTestCase(unittest.TestCase):
             self.assertTrue(os.path.isfile(ini_path))
             self.assertEqual(manager.read("general", "theme"), "light")
 
-    @patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("replace failed"))
-    def test_failed_atomic_write_preserves_existing_configuration(self, _mock_replace):
+    def test_failed_atomic_write_preserves_existing_configuration(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             ini_path = os.path.join(temp_dir, "settings.ini")
             manager = IniManager(ini_path)
             manager.create([IniItem("general", "theme", "dark")])
             previous = Path(ini_path).read_text(encoding="utf-8")
 
-            with self.assertRaisesRegex(OSError, "replace failed"):
-                manager.write("general", "theme", "light")
+            with patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    manager.write("general", "theme", "light")
 
             self.assertEqual(Path(ini_path).read_text(encoding="utf-8"), previous)
             self.assertEqual(os.listdir(temp_dir), ["settings.ini"])

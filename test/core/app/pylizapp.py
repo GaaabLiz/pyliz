@@ -84,6 +84,21 @@ class PylizAppTestCase(unittest.TestCase):
         self.assertEqual(app.get_ini_value("general", "theme"), "light")
         self.assertIs(app.get_ini_value("general", "enabled", is_bool=True), True)
 
+    def test_failed_ini_creation_does_not_publish_initialized_path(self):
+        app = self.create_app()
+
+        with patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("cannot create INI")):
+            with self.assertRaisesRegex(OSError, "cannot create INI"):
+                app.create_ini("settings.ini")
+
+        self.assertIsNone(app.get_ini_path())
+        with self.assertRaises(RuntimeError):
+            app.get_ini_value("general", "theme")
+
+        ini_path = app.create_ini("valid.ini")
+        self.assertTrue(os.path.isfile(ini_path))
+        self.assertEqual(app.get_ini_path(), ini_path)
+
     def test_set_get_ini_before_create_raises(self):
         app = self.create_app()
 

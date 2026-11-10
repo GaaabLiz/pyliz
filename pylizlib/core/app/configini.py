@@ -44,6 +44,32 @@ class IniManager:
         if parent:
             os.makedirs(parent, exist_ok=True)
 
+    def _write_atomic(self, config: configparser.ConfigParser) -> None:
+        """Write a complete INI beside the destination and replace atomically."""
+        self._ensure_parent_dir()
+        parent = os.path.dirname(os.path.abspath(self.path))
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=parent,
+                prefix=".ini-",
+                delete=False,
+            ) as configfile:
+                temporary_path = configfile.name
+                config.write(configfile)
+                configfile.flush()
+                os.fsync(configfile.fileno())
+            os.replace(temporary_path, self.path)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+
     def exists(self) -> bool:
         """Return ``True`` when the INI file exists on disk."""
 
@@ -63,11 +89,11 @@ class IniManager:
             self.config.set(item.section, item.key, str(item.value))
 
         try:
-            self._ensure_parent_dir()
-            with open(self.path, "w", encoding="utf-8") as configfile:
-                self.config.write(configfile)
+            with _ini_write_lock:
+                self._write_atomic(self.config)
         except OSError as exc:
             logger.error(f"Error while creating configuration file '{self.path}': {exc}")
+            raise
 
     def read(
         self,
@@ -116,30 +142,7 @@ class IniManager:
             if not config.has_section(section):
                 config.add_section(section)
             config.set(section, key, str(value))
-            self._ensure_parent_dir()
-
-            temporary_path = None
-            try:
-                parent = os.path.dirname(os.path.abspath(self.path))
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    encoding="utf-8",
-                    dir=parent,
-                    prefix=".ini-",
-                    delete=False,
-                ) as configfile:
-                    temporary_path = configfile.name
-                    config.write(configfile)
-                    configfile.flush()
-                    os.fsync(configfile.fileno())
-                os.replace(temporary_path, self.path)
-                temporary_path = None
-            finally:
-                if temporary_path is not None:
-                    try:
-                        os.unlink(temporary_path)
-                    except FileNotFoundError:
-                        pass
+            self._write_atomic(config)
             self.config = config
 
 

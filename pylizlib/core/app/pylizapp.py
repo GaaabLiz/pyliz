@@ -151,12 +151,17 @@ class PylizApp:
     def create_ini(self, config_name: str, list_of_items: list[IniItem] | None = None) -> str:
         """Create or load the application INI file."""
 
-        self.__ini_path = os.path.join(self.path, config_name)
-        self.__ini = IniManager(self.__ini_path)
-        if not self.__ini.exists():
-            self.__ini.create(list_of_items)
+        ini_path = os.path.join(self.path, config_name)
+        ini = IniManager(ini_path)
+        if not ini.exists():
+            ini.create(list_of_items)
+        if not os.path.isfile(ini_path):
+            raise OSError(f"Configuration file was not created: {ini_path}")
+
+        self.__ini_path = ini_path
+        self.__ini = ini
         self.__ini_initialized = True
-        return self.__ini_path
+        return ini_path
 
     def get_ini_value(
         self,
