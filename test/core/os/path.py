@@ -26,6 +26,7 @@ from pylizlib.core.os.path import (
     get_second_to_last_directory,
     random_subfolder,
     remove_directory_or_move_to_temp,
+    scan_directory,
     scan_directory_match_bool,
 )
 
@@ -188,6 +189,28 @@ class ScanDirectoryMatchBoolTestCase(unittest.TestCase):
             result = scan_directory_match_bool(td, lambda p: p.endswith(".zip"))
             self.assertEqual(len(result), 0)
 
+
+class ScanDirectoryTestCase(unittest.TestCase):
+    def test_nested_tree_visits_each_item_once_with_full_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            nested = first / "nested"
+            second = root / "second"
+            nested.mkdir(parents=True)
+            second.mkdir()
+            expected_files = {str(root / "root.txt"), str(first / "same.txt"), str(nested / "leaf.txt")}
+            for file_path in expected_files:
+                Path(file_path).write_text("data", encoding="utf-8")
+            expected_folders = {str(first), str(nested), str(second)}
+            found_files = []
+            found_folders = []
+
+            scan_directory(str(root), found_files.append, found_folders.append)
+
+            self.assertCountEqual(found_files, expected_files)
+            self.assertCountEqual(found_folders, expected_folders)
+            self.assertEqual(len(found_files), len(expected_files))
 
 class DirContainsTestCase(unittest.TestCase):
     def test_contains_all(self):

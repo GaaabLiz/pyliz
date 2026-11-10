@@ -174,7 +174,7 @@ def count_pathsub_elements(path):
 
 def scan_directory(path: str, on_file, on_folder):
     """
-    Scan a directory and call the on_file and on_folder functions for each file and folder found
+    Scan a directory once and call each callback with the full path of its item.
     :param path: The path to scan
     :param on_file: function to call for each file found
     :param on_folder: function to call for each folder found
@@ -182,9 +182,9 @@ def scan_directory(path: str, on_file, on_folder):
     """
     for root, dirs, files in os.walk(path):
         for file in files:
-            on_file(file)
+            on_file(os.path.join(root, file))
         for dir in dirs:
-            scan_directory(os.path.join(root, dir), on_file, on_folder)
+            on_folder(os.path.join(root, dir))
 
 
 def scan_directory_match_bool(path: str, to_be_add: Callable[[str], bool]) -> List[str]:
