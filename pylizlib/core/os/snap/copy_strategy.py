@@ -8,9 +8,15 @@ import shutil
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, MutableMapping
 from pathlib import Path
 from typing import ContextManager
+
+from pylizlib.core.os.snap.integrity import (
+    IntegrityManifest,
+    assert_manifest_matches,
+    validate_integrity_manifest,
+)
 
 ProgressCallback = Callable[[int, int], None]
 MessageCallback = Callable[[str], None]
@@ -25,7 +31,9 @@ class DirectoryCopyStrategy(ABC):
 
     Implementations must create ``destination`` on success and remove their
     partial destination if copying fails. The destination must not exist when
-    the method starts.
+    the method starts. When ``manifest`` is supplied, implementations record
+    files as they copy them; when ``expected_manifest`` is supplied, they must
+    reject the copy before publishing if any path, type, size, or hash differs.
     """
 
     @abstractmethod
@@ -35,8 +43,11 @@ class DirectoryCopyStrategy(ABC):
         destination: Path,
         progress_callback: ProgressCallback | None = None,
         message_callback: MessageCallback | None = None,
+        *,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Copy a directory tree and return its published destination."""
+        """Copy a tree, optionally recording or validating its content manifest."""
 
 
 def _remove_tree(path: Path) -> None:
@@ -76,6 +87,9 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
         destination: Path,
         progress_callback: ProgressCallback | None = None,
         message_callback: MessageCallback | None = None,
+        *,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
         source = Path(source)
         destination = Path(destination)
@@ -85,6 +99,10 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
         destination.parent.mkdir(parents=True, exist_ok=True)
 
+        capture_integrity = manifest is not None or expected_manifest is not None
+        if expected_manifest is not None:
+            validate_integrity_manifest(dict(expected_manifest))
+        observed: IntegrityManifest | None = {".": {"type": "directory", "size": 0, "sha256": None}} if capture_integrity else None
         total_bytes = self._total_bytes(source) if progress_callback else 0
         copied_bytes = 0
 
@@ -92,7 +110,21 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
             nonlocal copied_bytes
             if message_callback:
                 message_callback(f"Copia in corso: {Path(src).name}")
-            result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+            if capture_integrity:
+                digest = hashlib.sha256()
+                file_size = 0
+                with open(src, "rb") as source_file, open(dst, "xb") as destination_file:
+                    for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
+                        destination_file.write(chunk)
+                        digest.update(chunk)
+                        file_size += len(chunk)
+                shutil.copystat(src, dst, follow_symlinks=follow_symlinks)
+                relative_path = Path(dst).relative_to(destination).as_posix()
+                assert observed is not None
+                observed[relative_path] = {"type": "file", "size": file_size, "sha256": digest.hexdigest()}
+                result = dst
+            else:
+                result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
             if progress_callback:
                 copied_bytes += Path(dst).stat().st_size
                 progress_callback(copied_bytes, total_bytes)
@@ -106,6 +138,23 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
                     shutil.copytree(source_item, destination_item, copy_function=copy_file)
                 else:
                     copy_file(str(source_item), str(destination_item))
+            if capture_integrity:
+                assert observed is not None
+
+                def raise_walk_error(error: OSError) -> None:
+                    raise error
+
+                for current, directories, _ in os.walk(destination, onerror=raise_walk_error):
+                    directories[:] = sorted(directories)
+                    for name in directories:
+                        relative_path = (Path(current) / name).relative_to(destination).as_posix()
+                        observed[relative_path] = {"type": "directory", "size": 0, "sha256": None}
+                validate_integrity_manifest(observed)
+                if expected_manifest is not None:
+                    assert_manifest_matches(dict(expected_manifest), observed)
+                if manifest is not None:
+                    manifest.clear()
+                    manifest.update(observed)
         except Exception:
             _remove_tree(destination)
             raise
@@ -164,6 +213,9 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
         destination: Path,
         progress_callback: ProgressCallback | None = None,
         message_callback: MessageCallback | None = None,
+        *,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
         source = Path(source)
         destination = Path(destination)
@@ -175,12 +227,21 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
             before = self._manifest(source)
             with tempfile.TemporaryDirectory(prefix=".verified_copy_", dir=destination.parent) as temporary_directory:
                 staged = Path(temporary_directory) / "copy"
-                self.delegate.copy_directory(source, staged, progress_callback, message_callback)
+                attempt_manifest: IntegrityManifest | None = {} if manifest is not None or expected_manifest is not None else None
+                if attempt_manifest is None:
+                    self.delegate.copy_directory(source, staged, progress_callback, message_callback)
+                else:
+                    self.delegate.copy_directory(source, staged, progress_callback, message_callback, manifest=attempt_manifest)
                 after = self._manifest(source)
                 if before == after:
+                    if expected_manifest is not None:
+                        assert_manifest_matches(dict(expected_manifest), attempt_manifest or {})
                     if destination.exists() or destination.is_symlink():
                         raise FileExistsError(f"Copy destination '{destination}' was created during copying.")
                     staged.rename(destination)
+                    if manifest is not None:
+                        manifest.clear()
+                        manifest.update(attempt_manifest or {})
                     return destination
             if attempt < self.max_attempts and message_callback:
                 message_callback(f"Sorgente modificata durante la copia; nuovo tentativo {attempt + 1}/{self.max_attempts}.")
@@ -216,6 +277,9 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         destination: Path,
         progress_callback: ProgressCallback | None = None,
         message_callback: MessageCallback | None = None,
+        *,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
@@ -223,10 +287,16 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         destination.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".provider_copy_", dir=destination.parent) as temporary_directory:
             staged = Path(temporary_directory) / "copy"
-            self._copy_from_provider(source, staged, progress_callback, message_callback)
+            observed: IntegrityManifest | None = {} if manifest is not None or expected_manifest is not None else None
+            self._copy_from_provider(source, staged, progress_callback, message_callback, observed)
+            if expected_manifest is not None:
+                assert_manifest_matches(dict(expected_manifest), observed or {})
             if destination.exists() or destination.is_symlink():
                 raise FileExistsError(f"Copy destination '{destination}' was created during copying.")
             staged.rename(destination)
+            if manifest is not None:
+                manifest.clear()
+                manifest.update(observed or {})
         return destination
 
     def _copy_from_provider(
@@ -235,9 +305,18 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         destination: Path,
         progress_callback: ProgressCallback | None,
         message_callback: MessageCallback | None,
+        observed_manifest: MutableMapping[str, dict[str, str | int | None]] | None,
     ) -> Path:
         with self.provider.create_snapshot(Path(source)) as stable_source:
             stable_source = Path(stable_source)
             if _is_link_or_junction(stable_source) or not stable_source.is_dir():
                 raise NotADirectoryError(f"Snapshot provider returned invalid source '{stable_source}'.")
-            return self.delegate.copy_directory(stable_source, destination, progress_callback, message_callback)
+            if observed_manifest is None:
+                return self.delegate.copy_directory(stable_source, destination, progress_callback, message_callback)
+            return self.delegate.copy_directory(
+                stable_source,
+                destination,
+                progress_callback,
+                message_callback,
+                manifest=observed_manifest,
+            )

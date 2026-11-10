@@ -29,6 +29,7 @@ from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import random_subfolder
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
+from pylizlib.core.os.snap.integrity import IntegrityManifest, validate_integrity_manifest
 from pylizlib.core.os.utils import get_folder_size_mb
 
 
@@ -68,6 +69,7 @@ class SnapDirAssociation:
     original_path: str
     folder_id: str
     mb_size: float | None = None
+    integrity_manifest: IntegrityManifest | None = None
     _current_index: ClassVar[int] = 0
 
     def __post_init__(self):
@@ -99,6 +101,7 @@ class SnapDirAssociation:
                 raise TypeError("Snapshot directory mb_size must be a non-negative number or None.")
             if self.mb_size < 0 or (type(self.mb_size) is float and not math.isfinite(self.mb_size)):
                 raise ValueError("Snapshot directory mb_size must be finite and non-negative.")
+        validate_integrity_manifest(self.integrity_manifest)
 
     @classmethod
     def next_index(cls):
@@ -155,7 +158,16 @@ class SnapDirAssociation:
         """
         return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
 
-    def copy_install_to(self, catalogue_target_path: Path, progress_callback=None, message_callback=None, *, copy_strategy: DirectoryCopyStrategy | None = None):
+    def copy_install_to(
+        self,
+        catalogue_target_path: Path,
+        progress_callback=None,
+        message_callback=None,
+        *,
+        copy_strategy: DirectoryCopyStrategy | None = None,
+        manifest: IntegrityManifest | None = None,
+        expected_manifest: IntegrityManifest | None = None,
+    ):
         """Copy this association using the configured directory-copy strategy."""
         source = Path(self.original_path)
         directory_name = self.directory_name
@@ -177,7 +189,17 @@ class SnapDirAssociation:
         if catalogue_target_path.is_symlink() or catalogue_target_path.resolve(strict=False) != target_root:
             raise ValueError(f"Snapshot storage root '{catalogue_target_path}' changed during copy.")
         try:
-            selected_strategy.copy_directory(source, destination, progress_callback, message_callback)
+            if manifest is None and expected_manifest is None:
+                selected_strategy.copy_directory(source, destination, progress_callback, message_callback)
+            else:
+                selected_strategy.copy_directory(
+                    source,
+                    destination,
+                    progress_callback,
+                    message_callback,
+                    manifest=manifest,
+                    expected_manifest=expected_manifest,
+                )
         except Exception:
             if destination.is_symlink():
                 destination.unlink(missing_ok=True)
@@ -499,6 +521,11 @@ class Snapshot:
                     original_path=dir_assoc.original_path,
                     folder_id=dir_assoc.folder_id,
                     mb_size=dir_assoc.mb_size,
+                    integrity_manifest=(
+                        {path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()}
+                        if dir_assoc.integrity_manifest is not None
+                        else None
+                    ),
                 )
                 for dir_assoc in self.directories
             ],

@@ -110,6 +110,18 @@ class TestSnapDirAssociationConstruction(unittest.TestCase):
         with self.assertRaises(TypeError):
             _ = assoc.directory_name
 
+    def test_integrity_manifest_rejects_paths_outside_association(self):
+        with self.assertRaises(ValueError):
+            SnapDirAssociation(
+                index=1,
+                original_path="/source",
+                folder_id="manifest-path",
+                integrity_manifest={
+                    ".": {"type": "directory", "size": 0, "sha256": None},
+                    "../outside.txt": {"type": "file", "size": 1, "sha256": "0" * 64},
+                },
+            )
+
 
 class TestSnapDirAssociationCopyInstallTo(unittest.TestCase):
     """Tests for SnapDirAssociation.copy_install_to."""

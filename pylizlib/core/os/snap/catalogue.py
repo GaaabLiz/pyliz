@@ -568,7 +568,13 @@ class SnapshotCatalogue:
             clear_destination: If True, clears the destination directories before copying.
             progress_callback: Optional callback for installation progress.
         """
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        stored_snapshot = self.get_by_id(snap.id)
+        if stored_snapshot is None:
+            raise ValueError(f"No snapshot found with ID {snap.id}.")
+
+        # The caller may hold a model loaded before the snapshot was updated.
+        # Installation must use the persisted manifest that matches on-disk data.
+        snap_manager = SnapshotManager(stored_snapshot, self.path_catalogue, self.settings)
         if self.settings.bck_before_install_enabled:
             snap_manager.create_backup(
                 self.settings.backup_path,
@@ -576,6 +582,7 @@ class SnapshotCatalogue:
                 BackupType.ASSOCIATED_DIRECTORIES,
             )
         snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
+        snap.date_last_used = stored_snapshot.date_last_used
 
     def exists(self, snap_id: str) -> bool:
         """

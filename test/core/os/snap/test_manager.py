@@ -35,6 +35,7 @@ from pylizlib.core.os.snap.domain import (
     Snapshot,
     SnapshotSettings,
 )
+from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
@@ -71,15 +72,33 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         self.assertTrue(mgr.path_snapshot_json.exists())
         for assoc in snap.directories:
             self.assertTrue((mgr.path_snapshot / assoc.directory_name).exists())
+            self.assertIsNotNone(assoc.integrity_manifest)
+            self.assertIn(".", assoc.integrity_manifest)
 
     def test_create_uses_strategy_from_snapshot_settings(self):
         class RecordingStrategy(SequentialFileCopyStrategy):
             def __init__(self):
                 self.sources = []
 
-            def copy_directory(self, source, destination, progress_callback=None, message_callback=None):
+            def copy_directory(
+                self,
+                source,
+                destination,
+                progress_callback=None,
+                message_callback=None,
+                *,
+                manifest=None,
+                expected_manifest=None,
+            ):
                 self.sources.append(Path(source))
-                return super().copy_directory(source, destination, progress_callback, message_callback)
+                return super().copy_directory(
+                    source,
+                    destination,
+                    progress_callback,
+                    message_callback,
+                    manifest=manifest,
+                    expected_manifest=expected_manifest,
+                )
 
         snap = make_snapshot("ConfiguredCopyStrategy", self._src, n=2)
         strategy = RecordingStrategy()
@@ -428,6 +447,7 @@ class TestSnapshotManagerUpdateAssocDirs(unittest.TestCase):
         self.assertTrue((internal_copy / "new_file.txt").exists())
         loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
         self.assertIsNotNone(loaded.date_last_modified)
+        self.assertIn("new_file.txt", loaded.directories[0].integrity_manifest)
 
     def test_missing_source_aborts_update(self):
         snap = make_snapshot("AssocMissing", self._src, n=1)
@@ -521,6 +541,22 @@ class TestSnapshotManagerInstall(unittest.TestCase):
         with self.assertRaises(FileNotFoundError) as ctx:
             mgr.install(clear_destination=True)
         self.assertIn("does not exist inside the snapshot", str(ctx.exception))
+
+    def test_install_rejects_missing_snapshot_file_without_replacing_destination(self):
+        snap = make_snapshot("InstallCorrupt", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        original_dir = Path(snap.directories[0].original_path)
+        internal_copy = mgr.path_snapshot / snap.directories[0].directory_name
+        (internal_copy / "i1_file.txt").unlink()
+        (original_dir / "preserve.txt").write_text("existing destination", encoding="utf-8")
+
+        with self.assertRaisesRegex(SnapshotIntegrityError, "integrity manifest"):
+            mgr.install(clear_destination=True)
+
+        self.assertEqual((original_dir / "preserve.txt").read_text(encoding="utf-8"), "existing destination")
+        self.assertTrue(original_dir.exists())
+        self.assertFalse(list(original_dir.parent.glob("*_staging_*")))
 
     def test_remove_installed_copies_deletes_original_paths(self):
         install_dir = TEST_LOCAL_ROOT / "installed_copy"

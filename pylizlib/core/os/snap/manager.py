@@ -31,6 +31,7 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     validate_directory_component,
 )
+from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
 from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
@@ -103,6 +104,7 @@ class SnapshotManager:
         staging_path = transaction_path / "new"
         backup_path = transaction_path / "original"
         original_moved = False
+        previous_manifests = {assoc.folder_id: assoc.integrity_manifest for assoc in self.snapshot.directories}
         try:
             staging_path.mkdir()
 
@@ -117,12 +119,15 @@ class SnapshotManager:
                         overall_pct = ((i + dir_pct) / total_dirs) * 100
                         progress_callback(int(overall_pct))
 
+                manifest = {}
                 snap_dir.copy_install_to(
                     staging_path,
                     progress_callback=dir_progress,
                     message_callback=message_callback,
                     copy_strategy=self.settings.copy_strategy,
+                    manifest=manifest,
                 )
+                snap_dir.integrity_manifest = manifest
 
             # Write json to staging BEFORE making it the final destination
             json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
@@ -135,6 +140,8 @@ class SnapshotManager:
                 original_moved = True
             staging_path.rename(self.path_snapshot)
         except Exception:
+            for assoc in self.snapshot.directories:
+                assoc.integrity_manifest = previous_manifests[assoc.folder_id]
             if original_moved:
                 # If rollback itself fails, preserve both copies in the
                 # transaction directory instead of deleting recoverable data.
@@ -193,7 +200,13 @@ class SnapshotManager:
             original_path=destination_path.as_posix(),
             folder_id=gen_random_string(self.settings.folder_id_length),
         )
-        new_dir.copy_install_to(self._snapshot_root_path(), copy_strategy=self.settings.copy_strategy)
+        manifest = {}
+        new_dir.copy_install_to(
+            self._snapshot_root_path(),
+            copy_strategy=self.settings.copy_strategy,
+            manifest=manifest,
+        )
+        new_dir.integrity_manifest = manifest
         self.snapshot.directories.append(new_dir)
         self.__save_json()
 
@@ -285,6 +298,9 @@ class SnapshotManager:
         publications = []
         published = []
         saving_json = False
+        previous_manifests = {
+            assoc.folder_id: assoc.integrity_manifest for assoc in self.snapshot.directories
+        }
         try:
             for i, (source, target) in enumerate(moves):
                 staged = staging_path / f"original_{i}"
@@ -293,11 +309,14 @@ class SnapshotManager:
                 if target is not None:
                     publications.append((staged, target))
             for assoc in additions:
+                manifest = {}
                 assoc.copy_install_to(
                     staging_path / "additions",
                     message_callback=message_callback,
                     copy_strategy=self.settings.copy_strategy,
+                    manifest=manifest,
                 )
+                assoc.integrity_manifest = manifest
                 publications.append((staging_path / "additions" / assoc.directory_name, self._snapshot_child_path(assoc.directory_name)))
 
             for staged, target in publications:
@@ -319,6 +338,8 @@ class SnapshotManager:
                 staged.rename(source)
             if saving_json:
                 SnapshotSerializer.write_bytes(self._snapshot_child_path(self.settings.json_filename), old_json)
+            for assoc in self.snapshot.directories:
+                assoc.integrity_manifest = previous_manifests[assoc.folder_id]
             shutil.rmtree(staging_path)
             raise
 
@@ -369,6 +390,11 @@ class SnapshotManager:
                 raise FileNotFoundError(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist or is not a directory. Update aborted.")
 
         rollbacks = []
+        updated_manifests = {}
+        original_metadata = {
+            assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.snapshot.directories
+        }
+        original_date_last_modified = self.snapshot.date_last_modified
         try:
             for dir_assoc in self.snapshot.directories:
                 system_path = Path(dir_assoc.original_path)
@@ -381,7 +407,13 @@ class SnapshotManager:
                 logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
 
                 try:
-                    self.settings.copy_strategy.copy_directory(system_path, staging_dir, message_callback=message_callback)
+                    updated_manifests[dir_assoc.folder_id] = {}
+                    self.settings.copy_strategy.copy_directory(
+                        system_path,
+                        staging_dir,
+                        message_callback=message_callback,
+                        manifest=updated_manifests[dir_assoc.folder_id],
+                    )
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
@@ -412,6 +444,10 @@ class SnapshotManager:
             for rb in rollbacks:
                 dir_assoc = rb["dir_assoc"]
                 dir_assoc.mb_size = get_folder_size_mb(rb["system_path"])
+                dir_assoc.integrity_manifest = updated_manifests[dir_assoc.folder_id]
+
+            self.snapshot.date_last_modified = datetime.now()
+            self.__save_json()
 
         except Exception as e:
             logger.error(f"Update from system failed during transaction. Rolling back. Reason: {e}")
@@ -427,10 +463,11 @@ class SnapshotManager:
                     if snap_path.exists():
                         shutil.rmtree(snap_path)
                     backup_dir.rename(snap_path)
+            for assoc in self.snapshot.directories:
+                assoc.integrity_manifest, assoc.mb_size = original_metadata[assoc.folder_id]
+            self.snapshot.date_last_modified = original_date_last_modified
             raise
 
-        self.snapshot.date_last_modified = datetime.now()
-        self.__save_json()
         SnapshotUtils.cleanup_after_commit((rb["backup_dir"] for rb in rollbacks), "Update from system")
 
     def remove_installed_copies(self, message_callback=None):
@@ -505,6 +542,11 @@ class SnapshotManager:
             if not source_dir.exists() or not source_dir.is_dir():
                 raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
             SnapshotUtils.assert_no_symlinks(source_dir)
+            if dir_assoc.integrity_manifest is None:
+                logger.warning(
+                    "Snapshot association '%s' has no integrity manifest; content verification is unavailable.",
+                    dir_assoc.folder_id,
+                )
             install_location = Path(dir_assoc.original_path)
             if is_critical_system_path(install_location):
                 raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
@@ -533,14 +575,19 @@ class SnapshotManager:
                         staging_dir,
                         progress_callback=copy_progress if progress_callback else None,
                         message_callback=message_callback,
+                        expected_manifest=dir_assoc.integrity_manifest,
                     )
                     SnapshotUtils.assert_no_symlinks(staging_dir)
+                except SnapshotIntegrityError:
+                    if staging_dir.exists():
+                        shutil.rmtree(staging_dir)
+                    raise
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
                     raise RuntimeError(f"Failed to copy to staging '{staging_dir}': {e}") from e
 
-                # 3. Se copytree termina senza eccezioni, l'operazione è integra (non catturiamo errori per singoli file)
+                # 3. La strategia ha verificato il manifest prima di pubblicare lo staging.
 
                 rollbacks.append({"install_loc": install_location, "staging_dir": staging_dir, "backup_dir": backup_dir})
 
