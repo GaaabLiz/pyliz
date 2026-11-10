@@ -40,6 +40,19 @@ class NetResponseTestCase(unittest.TestCase):
         self.assertFalse(wrapped.hasResponse)
         self.assertIn("timeout", wrapped.get_error())
 
+    def test_no_content_response_is_successful_without_a_body(self):
+        response = MagicMock()
+        response.status_code = 204
+        response.text = ""
+        response.headers = {}
+
+        wrapped = NetResponse(response, NetResponseType.NO_CONTENT204)
+
+        self.assertEqual(wrapped.code, 204)
+        self.assertEqual(wrapped.text, "")
+        self.assertTrue(wrapped.is_successful())
+        self.assertFalse(wrapped.is_error())
+
 
 class RequestHelpersTestCase(unittest.TestCase):
     @patch("pylizlib.core.network.req.requests.head")
@@ -88,6 +101,25 @@ class RequestHelpersTestCase(unittest.TestCase):
         result = exec_get("https://example.com")
         self.assertEqual(result.type, NetResponseType.ERROR)
 
+    @patch("pylizlib.core.network.req.requests.get")
+    def test_exec_get_classifies_201_and_204_as_success(self, mock_get):
+        response = MagicMock()
+        response.text = ""
+        response.headers = {}
+        mock_get.return_value = response
+
+        for status_code, expected_type in (
+            (201, NetResponseType.OK201),
+            (204, NetResponseType.NO_CONTENT204),
+            (206, NetResponseType.SUCCESS),
+        ):
+            with self.subTest(status_code=status_code):
+                response.status_code = status_code
+                result = exec_get("https://example.com")
+                self.assertEqual(result.type, expected_type)
+                self.assertTrue(result.is_successful())
+                self.assertFalse(result.is_error())
+
     @patch("pylizlib.core.network.req.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_exec_get_connection_error(self, _):
         result = exec_get("https://example.com")
@@ -106,6 +138,24 @@ class RequestHelpersTestCase(unittest.TestCase):
         response.status_code = 400
         result = exec_post("https://example.com", payload={"x": 1})
         self.assertEqual(result.type, NetResponseType.ERROR)
+
+    @patch("pylizlib.core.network.req.requests.post")
+    def test_exec_post_classifies_201_and_204_as_success(self, mock_post):
+        response = MagicMock()
+        response.text = ""
+        response.headers = {}
+        mock_post.return_value = response
+
+        for status_code, expected_type in (
+            (201, NetResponseType.OK201),
+            (204, NetResponseType.NO_CONTENT204),
+        ):
+            with self.subTest(status_code=status_code):
+                response.status_code = status_code
+                result = exec_post("https://example.com", payload={})
+                self.assertEqual(result.type, expected_type)
+                self.assertTrue(result.is_successful())
+                self.assertFalse(result.is_error())
 
     @patch("pylizlib.core.network.req.requests.post")
     def test_exec_post_verifies_tls_and_passes_configured_timeout(self, mock_post):

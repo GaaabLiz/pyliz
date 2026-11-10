@@ -14,6 +14,9 @@ class NetResponseType(Enum):
     """Result classification for network requests."""
 
     OK200 = "ok200"
+    OK201 = "ok201"
+    NO_CONTENT204 = "no_content204"
+    SUCCESS = "success"
     ERROR = "error"
     CONNECTION_ERROR = "connection_error"
     TIMEOUT = "timeout"
@@ -60,14 +63,14 @@ class NetResponse:
         return f"NetResponse(code={self.code}, type={self.type.value})"
 
     def is_successful(self) -> bool:
-        """Return ``True`` if HTTP status code is 200."""
+        """Return ``True`` for any successful 2xx HTTP response."""
 
-        return self.code == 200
+        return self.code is not None and 200 <= self.code < 300
 
     def is_error(self) -> bool:
-        """Return ``True`` if HTTP status code is not 200."""
+        """Return ``True`` when no successful 2xx HTTP response was received."""
 
-        return self.code != 200
+        return not self.is_successful()
 
     def get_error(self) -> str:
         """Return a human-readable error description."""
@@ -82,6 +85,19 @@ class NetResponse:
 
 
 HEADER_ONLY_CONTENT_JSON = {"Content-Type": "application/json"}
+
+
+def _classify_http_status(status_code: int) -> NetResponseType:
+    """Classify successful HTTP statuses while retaining special common codes."""
+    if status_code == 200:
+        return NetResponseType.OK200
+    if status_code == 201:
+        return NetResponseType.OK201
+    if status_code == 204:
+        return NetResponseType.NO_CONTENT204
+    if 200 <= status_code < 300:
+        return NetResponseType.SUCCESS
+    return NetResponseType.ERROR
 
 
 def test_with_head(url: str) -> bool:
@@ -133,10 +149,7 @@ def exec_get(
     try:
         getattr(logger, "trace", logger.debug)("Executing GET request on URL: " + url)
         response = requests.get(url, allow_redirects=True, headers=headers, timeout=sec_timeout)
-        if response.status_code == 200:
-            return NetResponse(response, NetResponseType.OK200)
-        else:
-            return NetResponse(response, NetResponseType.ERROR)
+        return NetResponse(response, _classify_http_status(response.status_code))
     except requests.ConnectionError as e:
         return NetResponse(None, NetResponseType.CONNECTION_ERROR, e)
     except requests.Timeout as e:
@@ -164,10 +177,7 @@ def exec_post(
             headers=headers,
             timeout=sec_timeout,
         )
-        if response.status_code == 200:
-            return NetResponse(response, NetResponseType.OK200)
-        else:
-            return NetResponse(response, NetResponseType.ERROR)
+        return NetResponse(response, _classify_http_status(response.status_code))
     except requests.ConnectionError as e:
         return NetResponse(None, NetResponseType.CONNECTION_ERROR, e)
     except requests.Timeout as e:
