@@ -21,7 +21,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import duplicate_directory, remove_directory_or_move_to_temp
+from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -221,7 +221,7 @@ class SnapshotManager:
         for edit in edits:
             edit.validate()
         snapshot_json_path = self._snapshot_child_path(self.settings.json_filename)
-        old_json = snapshot_json_path.read_bytes()
+        old_json = SnapshotSerializer.read_bytes(snapshot_json_path)
         old = SnapshotSerializer.from_json(snapshot_json_path)
         expected_edits = SnapshotUtils.get_edits_between_snapshots(old, self.snapshot)
         old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
@@ -309,7 +309,7 @@ class SnapshotManager:
             for staged, source in reversed(staged_originals):
                 staged.rename(source)
             if saving_json:
-                self._snapshot_child_path(self.settings.json_filename).write_bytes(old_json)
+                SnapshotSerializer.write_bytes(self._snapshot_child_path(self.settings.json_filename), old_json)
             shutil.rmtree(staging_path)
             raise
 
@@ -331,10 +331,19 @@ class SnapshotManager:
         new_snap.id = gen_random_string(self.settings.snap_id_length)
         new_snap.name = self.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
-        new_snap_path = SnapshotUtils.get_snapshot_path(new_snap.folder_name, self.path_catalogue)
-        new_snap_json_path = SnapshotUtils.get_snapshot_json_path(new_snap.folder_name, self.path_catalogue, self.settings.json_filename)
-        duplicate_directory(self.path_snapshot, new_snap_path, "", message_callback=message_callback)
-        SnapshotSerializer.to_json(new_snap, new_snap_json_path)
+
+        def prepare_duplicate(staging_path: Path) -> None:
+            json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
+            SnapshotSerializer.to_json(new_snap, json_path)
+
+        SnapshotUtils.publish_snapshot_tree(
+            self._snapshot_root_path(),
+            new_snap.folder_name,
+            self.path_catalogue,
+            prepare_staging=prepare_duplicate,
+            message_callback=message_callback,
+            operation="Snapshot duplication",
+        )
 
     def update_associated_dirs_from_system(self, message_callback=None):
         """
@@ -491,6 +500,7 @@ class SnapshotManager:
             source_dir = self._snapshot_child_path(dir_assoc.directory_name)
             if not source_dir.exists() or not source_dir.is_dir():
                 raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
+            SnapshotUtils.assert_no_symlinks(source_dir)
             install_location = Path(dir_assoc.original_path)
             if is_critical_system_path(install_location):
                 raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
@@ -522,7 +532,9 @@ class SnapshotManager:
 
                 logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
                 try:
-                    shutil.copytree(source_dir, staging_dir, copy_function=copy_with_prog)
+                    SnapshotUtils.assert_no_symlinks(source_dir)
+                    shutil.copytree(source_dir, staging_dir, copy_function=copy_with_prog, symlinks=True)
+                    SnapshotUtils.assert_no_symlinks(staging_dir)
                 except Exception as e:
                     if staging_dir.exists():
                         shutil.rmtree(staging_dir)
@@ -653,7 +665,9 @@ class SnapshotManager:
                         for file_path in SnapshotUtils.iter_files_strict(folder):
                             yield file_path, Path(d.directory_name) / file_path.relative_to(folder)
                 else:
-                    for file_path in SnapshotUtils.iter_files_strict(self._snapshot_root_path()):
+                    snapshot_root = self._snapshot_root_path()
+                    SnapshotUtils.assert_no_symlinks(snapshot_root)
+                    for file_path in SnapshotUtils.iter_files_strict(snapshot_root):
                         yield file_path, file_path.relative_to(self.path_snapshot)
 
             return SnapshotUtils.write_verified_zip(zip_path, files_to_archive(), message_callback)

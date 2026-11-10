@@ -170,11 +170,22 @@ class SnapDirAssociation:
         import os
 
         source = Path(self.original_path)
-        destination = catalogue_target_path.joinpath(self.directory_name)
+        directory_name = self.directory_name
+        target_is_junction = getattr(catalogue_target_path, "is_junction", None)
+        if catalogue_target_path.is_symlink() or (target_is_junction is not None and target_is_junction()):
+            raise ValueError(f"Snapshot storage root '{catalogue_target_path}' cannot be a symbolic link.")
+        destination = catalogue_target_path.joinpath(directory_name)
         target_root = catalogue_target_path.resolve(strict=False)
-        if not destination.resolve(strict=False).is_relative_to(target_root):
+        resolved_destination = destination.resolve(strict=False)
+        expected_destination = target_root / directory_name
+        if resolved_destination != expected_destination or not resolved_destination.is_relative_to(target_root):
             raise ValueError(f"Snapshot directory destination '{destination}' escapes '{catalogue_target_path}'.")
-        destination.mkdir(parents=True, exist_ok=True)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if catalogue_target_path.is_symlink() or catalogue_target_path.resolve(strict=False) != target_root:
+            raise ValueError(f"Snapshot storage root '{catalogue_target_path}' changed during copy.")
+        destination.mkdir(exist_ok=False)
+        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination:
+            raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
 
         total_bytes = 0
         if progress_callback:
@@ -186,6 +197,11 @@ class SnapDirAssociation:
         copied_bytes = [0]
 
         def copy_with_prog(src, dst, *, follow_symlinks=True):
+            if catalogue_target_path.is_symlink() or destination.is_symlink():
+                raise ValueError(f"Snapshot storage path '{destination}' was replaced by a symbolic link.")
+            current_destination = destination.resolve(strict=False)
+            if current_destination != resolved_destination:
+                raise ValueError(f"Snapshot storage path '{destination}' changed during copy.")
             if message_callback:
                 message_callback(f"Elaborazione: {Path(src).name}")
             shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
@@ -199,6 +215,9 @@ class SnapDirAssociation:
                 shutil.copytree(src_path, dst_path, copy_function=copy_with_prog)
             else:
                 copy_with_prog(src_path, dst_path)
+
+        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination:
+            raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
 
 
 class SnapEditType(Enum):
