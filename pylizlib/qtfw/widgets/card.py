@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 
 from PySide6.QtCore import Qt, Signal
@@ -206,12 +207,14 @@ class SoftwareListStatusGroupCard(GroupHeaderCardWidget):
     def add_software_data(self, data: SoftwareData):
         widget = SoftwareListStatusGroupCard.SoftwareDataWidget(self, data)
         self.addGroup(data.icon, data.path.name, data.path.__str__(), widget)
-        self.groups[data.path.name] = widget
+        key = os.path.normcase(os.path.abspath(os.fspath(data.path)))
+        self.groups[key] = widget
         self.software_data.append(data)
 
     def update_all(self):
         for data in self.software_data:
-            self.groups[data.path.name].update_data()
+            key = os.path.normcase(os.path.abspath(os.fspath(data.path)))
+            self.groups[key].update_data()
 
     def clear_all_data(self):
         # Rimuove tutti i widget dei gruppi salvati e pulisce la struttura dati
