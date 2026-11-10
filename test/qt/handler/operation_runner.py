@@ -3,6 +3,7 @@ import time
 import unittest
 
 from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QThreadPool
 
 from pylizlib.qt.handler.operation_core import GenericTask, Operation
 from pylizlib.qt.handler.operation_domain import OperationInfo, OperationStatus
@@ -90,6 +91,31 @@ class OperationRunnerTestCase(unittest.TestCase):
 
         self.assertTrue(self.wait_until(finished.is_set))
         self.assertEqual(callback_threads, [main_thread_id])
+
+    def test_fast_worker_is_counted_before_pool_submission(self):
+        finished = threading.Event()
+        runner = OperationRunner(on_runner_finished=finished.set)
+        delegate_pool = QThreadPool()
+        delegate_pool.setMaxThreadCount(1)
+        observed_counts = []
+
+        class WaitForWorkerPool:
+            def maxThreadCount(self):
+                return delegate_pool.maxThreadCount()
+
+            def start(self, runnable):
+                observed_counts.append(runner.active_operations)
+                delegate_pool.start(runnable)
+                self.finished = delegate_pool.waitForDone(2000)
+
+        runner.thread_pool = WaitForWorkerPool()
+        runner.add(Operation([GenericTask("quick", lambda: None)], OperationInfo("quick", "quick")))
+
+        runner.start()
+
+        self.assertEqual(observed_counts, [1])
+        self.assertTrue(self.wait_until(finished.is_set))
+        self.assertEqual(runner.active_operations, 0)
 
 
 if __name__ == "__main__":

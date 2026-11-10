@@ -147,8 +147,13 @@ class OperationRunner(QObject):
             op = self.operation_pool.pop(0)
             op.set_finished_callback(lambda completed=op: self._operation_completed.emit(completed))
             op.set_op_progress_callback(self.on_op_progress_update)
-            self.thread_pool.start(op)
             self.active_operations += 1
+            try:
+                self.thread_pool.start(op)
+            except Exception:
+                self.active_operations -= 1
+                self.operation_pool.insert(0, op)
+                raise
 
     def on_operation_finished(self, operation: Operation):
         self.active_operations -= 1
