@@ -76,6 +76,8 @@ class OperationRunner(QObject):
         self.abort_all_on_error = abort_all_on_error
         self.on_runner_finished = on_runner_finished
         self._all_operations: list[Operation] = []
+        self._stopping = False
+        self._finished_emitted = False
 
     def add(self, operation: Operation):
         self.operation_pool.append(operation)
@@ -111,6 +113,8 @@ class OperationRunner(QObject):
         self.progress_obj = None
 
     def start(self):
+        self._stopping = False
+        self._finished_emitted = False
         self.runner_start.emit()
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
         for op in self.operation_pool:
@@ -120,18 +124,20 @@ class OperationRunner(QObject):
 
     def stop(self):
         self.runner_stop.emit()
+        self._stopping = True
         # Cancel all known operations so running ones can gracefully exit
         for op in self._all_operations:
             op.stop()
-        self.thread_pool.clear()
-        # We don't want to block the UI waiting for threads to finish if they take a while.
-        # But we do want to reset state. The threads will finish shortly since they were cancelled.
-        # Removing waitForDone prevents UI freeze on stop click.
-        self.active_operations = 0
+        for op in self.operation_pool:
+            op.update_op_status(OperationStatus.Cancelled)
+            for task in op.tasks:
+                task.update_task_status(OperationStatus.Cancelled)
         self.operation_pool.clear()
+        if self.active_operations == 0:
+            self.__set_runner_finished()
 
     def __start_next_operation(self):
-        can_start = self.active_operations < self.thread_pool.maxThreadCount()
+        can_start = not self._stopping and self.active_operations < self.thread_pool.maxThreadCount()
         if can_start and self.operation_pool:
             op = self.operation_pool.pop(0)
             op.set_finished_callback(lambda: self.on_operation_finished(op))
@@ -157,6 +163,9 @@ class OperationRunner(QObject):
             self.__set_runner_finished()
 
     def __set_runner_finished(self):
+        if self._finished_emitted:
+            return
+        self._finished_emitted = True
         time.sleep(0.1)
         statistics = RunnerStatistics(self._all_operations)
         self.runner_finish.emit(statistics)
