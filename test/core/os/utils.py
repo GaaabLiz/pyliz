@@ -15,6 +15,7 @@ from pylizlib.core.os.utils import (
     get_system_username,
     has_disk_free_space,
     is_command_available,
+    is_command_available_with_run,
     is_critical_system_path,
     is_os_unix,
     is_os_windows,
@@ -89,6 +90,18 @@ class IsCommandAvailableTestCase(unittest.TestCase):
 
     def test_unknown_command(self):
         self.assertFalse(is_command_available("__nonexistent_command_xyz__"))
+
+    def test_availability_check_does_not_execute_program(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "executed.txt"
+            command = Path(td) / "dangerous-command"
+            command.write_text(f"#!/bin/sh\nprintf executed > '{marker}'\nexit 2\n", encoding="utf-8")
+            command.chmod(0o755)
+
+            with patch.dict(os.environ, {"PATH": td}):
+                self.assertTrue(is_command_available_with_run(command.name))
+
+            self.assertFalse(marker.exists())
 
 
 class IsOsTestCase(unittest.TestCase):

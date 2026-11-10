@@ -150,15 +150,11 @@ def check_move_dirs_free_space(src_path, dst_path) -> bool:
 
 def is_command_available_with_run(command: str) -> bool:
     """
-    Check if a command is available in the system
+    Check if a command is available without executing it.
     :param command: The command to check
     :return: True if the command is available, False otherwise
     """
-    try:
-        subprocess.run([command], check=True)
-        return True
-    except FileNotFoundError:
-        return False
+    return shutil.which(command) is not None
 
 
 def is_command_available(command: str) -> bool:
