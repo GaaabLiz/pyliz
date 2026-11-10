@@ -14,6 +14,11 @@ from pylizlib.core.log.pylizLogger import logger
 _ini_write_lock = threading.RLock()
 
 
+def _new_config_parser() -> configparser.ConfigParser:
+    """Create a parser that treats percent signs as literal INI data."""
+    return configparser.ConfigParser(interpolation=None)
+
+
 @dataclass(slots=True)
 class IniItem:
     """Represent a single INI entry to create or update."""
@@ -47,7 +52,7 @@ class IniManager:
     def create(self, items: list[IniItem] | None = None) -> None:
         """Create the INI file and optionally write initial items."""
 
-        self.config = configparser.ConfigParser()
+        self.config = _new_config_parser()
         items = items or []
         list_of_sections = {item.section for item in items}
 
@@ -76,7 +81,7 @@ class IniManager:
             logger.warning(f"INI file '{self.path}' does not exist.")
             return None
 
-        self.config = configparser.ConfigParser()
+        self.config = _new_config_parser()
         try:
             self.config.read(self.path, encoding="utf-8")
         except (OSError, configparser.Error) as exc:
@@ -105,7 +110,7 @@ class IniManager:
         """Write or update a value in the INI file."""
 
         with _ini_write_lock:
-            config = configparser.ConfigParser()
+            config = _new_config_parser()
             if self.exists():
                 config.read(self.path, encoding="utf-8")
             if not config.has_section(section):
@@ -152,7 +157,7 @@ class CfgPath:
     ) -> None:
         """Print sections and keys found in a single INI file."""
 
-        config = configparser.ConfigParser()
+        config = _new_config_parser()
         config.read(path, encoding="utf-8")
         if sections:
             rich.print(f"Sections in {path}:")

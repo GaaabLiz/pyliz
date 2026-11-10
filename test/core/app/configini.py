@@ -88,6 +88,20 @@ class IniManagerTestCase(unittest.TestCase):
 
             self.assertIsNone(IniManager(ini_path).read("general", "theme"))
 
+    def test_percent_values_round_trip_without_interpolation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            manager = IniManager(ini_path)
+            values = {"single": "%", "escaped": "%20", "reference": "%(other)s"}
+
+            manager.create([IniItem("general", key, value) for key, value in values.items()])
+            for key, expected in values.items():
+                with self.subTest(key=key):
+                    self.assertEqual(manager.read("general", key), expected)
+
+            manager.write("general", "written", "%25")
+            self.assertEqual(manager.read("general", "written"), "%25")
+
 
 class CfgPathTestCase(unittest.TestCase):
     def test_check_duplicates_prints_sections_and_keys(self):
