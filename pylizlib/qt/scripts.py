@@ -115,11 +115,15 @@ def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesI
             prefix_resources[prefix] = []
 
         for file_elem in qresource.findall("file"):
-            file_path = file_elem.text or ""
-            resource_path = f":{prefix}/{file_path}"
+            file_path = (file_elem.text or "").strip()
+            public_path = file_elem.get("alias") or file_path
+            public_path = public_path.replace("\\", "/").strip("/")
+            prefix_path = prefix.replace("\\", "/").strip("/")
+            path_parts = [part for part in (prefix_path, public_path) if part]
+            resource_path = ":/" + "/".join(path_parts)
 
             # Crea un nome di variabile adatto
-            base_name = Path(file_path).stem
+            base_name = Path(public_path).stem
             used_names = {line.split(" = ", 1)[0].strip() for line in prefix_resources[prefix]}
             var_name = _python_identifier(base_name.upper(), "RESOURCE", used_names)
 
@@ -129,17 +133,16 @@ def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesI
     # Genera classi per ogni prefix
     used_class_names = set()
     for prefix, resources in prefix_resources.items():
-        if prefix:
-            class_name = _python_identifier(prefix, "Resources", used_class_names)
+        class_name = _python_identifier(prefix or "Root", "Resources", used_class_names)
 
-            # Aggiungi la definizione della classe
-            content.append("")
-            content.append(f"    class {class_name}:")
-            content.append(f'        """Resource with prefix \'{prefix}\'"""')
-            content.append("")
+        # Aggiungi la definizione della classe
+        content.append("")
+        content.append(f"    class {class_name}:")
+        content.append(f'        """Resource with prefix \'{prefix}\'"""')
+        content.append("")
 
-            # Aggiungi tutte le risorse per questo prefix
-            content.extend(resources)
+        # Aggiungi tutte le risorse per questo prefix
+        content.extend(resources)
 
     _write_python_atomically(Path(output_file_path), "\n".join(content) + "\n")
 

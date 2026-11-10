@@ -1,3 +1,7 @@
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,6 +64,52 @@ class GenerateQrcTestCase(unittest.TestCase):
             self.assertIn("DARK_THEME =", source)
             self.assertIn("DARK_THEME_2 =", source)
             self.assertIn("_1_LOGO =", source)
+
+    def test_resource_ids_match_qt_aliases_and_empty_prefix(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            assets = root / "assets"
+            assets.mkdir()
+            (assets / "physical-logo.svg").write_text("<svg />", encoding="utf-8")
+            (assets / "physical-root.svg").write_text("<svg />", encoding="utf-8")
+            qrc_path = root / "resources.qrc"
+            qrc_path.write_text(
+                '<RCC><qresource prefix="/icons">'
+                '<file alias="logo.svg">assets/physical-logo.svg</file>'
+                "</qresource><qresource>"
+                '<file alias="root.svg">assets/physical-root.svg</file>'
+                "</qresource></RCC>",
+                encoding="utf-8",
+            )
+            output_path = root / "resource_ids.py"
+            exec_gen_res_py(qrc_path, output_path)
+            namespace = {}
+            exec(compile(output_path.read_text(encoding="utf-8"), str(output_path), "exec"), namespace)
+            resource_ids = namespace["ResourcesIds"]
+            logo_id = resource_ids.icons.LOGO
+            root_id = resource_ids.Root.ROOT
+
+            rcc_command = Path(sys.executable).parent / "pyside6-rcc"
+            if not rcc_command.exists():
+                rcc_command = Path(shutil.which("pyside6-rcc") or "")
+            if not rcc_command.is_file():
+                self.skipTest("pyside6-rcc is not installed")
+            binary_path = root / "resources.rcc"
+            subprocess.run(
+                [str(rcc_command), "--binary", "-o", str(binary_path), str(qrc_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            from PySide6.QtCore import QFile, QResource
+
+            self.assertTrue(QResource.registerResource(str(binary_path)))
+            try:
+                self.assertTrue(QFile.exists(logo_id))
+                self.assertTrue(QFile.exists(root_id))
+            finally:
+                QResource.unregisterResource(str(binary_path))
 
     def test_css_module_safely_quotes_content_and_resolves_name_collisions(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
