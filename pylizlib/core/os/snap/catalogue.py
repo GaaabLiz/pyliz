@@ -32,6 +32,7 @@ from pylizlib.core.os.snap.domain import (
     Snapshot,
     SnapshotBackupInfo,
     SnapshotSettings,
+    validate_directory_component,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -49,6 +50,7 @@ class SnapshotCatalogue:
         """
         self.path_catalogue = path_catalogue
         self.settings = settings
+        validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
         self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
