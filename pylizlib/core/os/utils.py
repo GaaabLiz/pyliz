@@ -113,10 +113,7 @@ def get_free_space_mb(directory) -> float:
     :param directory: path to the directory
     :return: free space in megabytes
     """
-    statvfs = os.statvfs(directory)
-    # Calculate the free space in bytes and convert to megabytes
-    free_space = statvfs.f_frsize * statvfs.f_bavail / (1024 * 1024)
-    return free_space
+    return shutil.disk_usage(directory).free / (1024 * 1024)
 
 
 def get_directory_size(path) -> float:

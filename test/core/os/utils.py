@@ -77,6 +77,20 @@ class GetFreeSpaceMbTestCase(unittest.TestCase):
         free = get_free_space_mb(tempfile.gettempdir())
         self.assertGreater(free, 0)
 
+    @patch("pylizlib.core.os.utils.shutil.disk_usage")
+    def test_uses_cross_platform_disk_usage_in_megabytes(self, mock_disk_usage):
+        mock_disk_usage.return_value.free = 5 * 1024 * 1024
+
+        free = get_free_space_mb("C:/")
+
+        self.assertEqual(free, 5.0)
+        mock_disk_usage.assert_called_once_with("C:/")
+
+    @patch("pylizlib.core.os.utils.shutil.disk_usage", side_effect=PermissionError("volume denied"))
+    def test_preserves_volume_access_errors(self, _mock_disk_usage):
+        with self.assertRaisesRegex(PermissionError, "volume denied"):
+            get_free_space_mb("C:/")
+
 
 class CheckMoveDirsFreeSpaceTestCase(unittest.TestCase):
     def test_small_source_large_dest(self):
