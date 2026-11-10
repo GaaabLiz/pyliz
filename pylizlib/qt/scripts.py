@@ -1,4 +1,5 @@
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -6,24 +7,42 @@ import rich
 
 
 def exec_gen_qrc(qrc_path: Path, dir_list: list[Path]) -> None:
-    with open(qrc_path, "w", encoding="utf-8") as f:
-        f.write("<RCC>\n")
+    qrc_path = Path(qrc_path)
+    qrc_parent = qrc_path.parent.resolve()
+    root = ET.Element("RCC")
 
-        for directory in dir_list:
-            if not directory.is_dir():
-                continue
+    for directory in dir_list:
+        directory = Path(directory).resolve()
+        if not directory.is_dir():
+            continue
 
-            prefix = f"{directory.name}"
-            f.write(f'  <qresource prefix="{prefix}">\n')
+        resource = ET.SubElement(root, "qresource", {"prefix": directory.name})
+        for file in sorted(directory.rglob("*")):
+            if file.is_file():
+                relative_path = Path(os.path.relpath(file, qrc_parent)).as_posix()
+                ET.SubElement(resource, "file").text = relative_path
 
-            for file in directory.rglob("*"):
-                if file.is_file():
-                    relative_path = file.relative_to(directory.parent)
-                    f.write(f"    <file>{relative_path.as_posix()}</file>\n")
+    ET.indent(root, space="  ")
+    xml_data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    ET.fromstring(xml_data)
 
-            f.write("  </qresource>\n")
-
-        f.write("</RCC>\n")
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=qrc_parent,
+            prefix=f".{qrc_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(xml_data)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, qrc_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesIds"):
