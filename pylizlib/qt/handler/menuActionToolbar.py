@@ -72,12 +72,24 @@ class ToolbarHandler:
                 self.item.id,
             )
 
-    def add_action_button(self, button: QPushButton):
+    def add_action_button(self, button: QPushButton) -> QAction | None:
         if self.is_created():
-            self.toolbar.addWidget(button)
+            action = self.toolbar.addWidget(button)
             logger.debug("Added button %s to toolbar %s", button.objectName(), self.item.id) if self.enable_logs else None
+            return action
         else:
             logger.error("Cannot add button to toolbar %s. Toolbar is not created.", self.item.id)
+            return None
+
+    def remove_action_button(self, button: QPushButton, action: QAction):
+        if self.is_created():
+            self.toolbar.removeAction(action)
+            button.setParent(None)
+            button.deleteLater()
+            action.deleteLater()
+            logger.debug("Removed button %s from toolbar %s", button.objectName(), self.item.id) if self.enable_logs else None
+        else:
+            logger.error("Cannot remove button from toolbar %s. Toolbar is not created.", self.item.id)
 
     def add_button_dropdown(self, button: QToolButton):
         if self.is_created():

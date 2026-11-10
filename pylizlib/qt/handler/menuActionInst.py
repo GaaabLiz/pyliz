@@ -19,6 +19,7 @@ from pylizlib.qt.handler.menuActionToolbar import ToolbarHandler
 from pylizlib.qt.handler.resource import ResHandler
 from pylizlib.qt.util.menuActionTool import (
     create_action,
+    create_action_btn_push,
     create_action_group,
     create_menu_action_drop_button,
 )
@@ -61,7 +62,7 @@ class Instance(ABC):
         action: QAction | None = None,
         button: QPushButton | None = None,
         drop_button: QToolButton | None = None,
-    ):
+    ) -> QAction | None:
         if self.settings.toolbar_widget_type == ToolbarWidgetType.ACTION:
             if action is None:
                 logger.error(
@@ -69,7 +70,7 @@ class Instance(ABC):
                     toolbar_handler.item.id,
                 )
                 return
-            toolbar_handler.add_action(action)
+            return toolbar_handler.add_action(action)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
             if button is None:
                 logger.error(
@@ -77,7 +78,7 @@ class Instance(ABC):
                     toolbar_handler.item.id,
                 )
                 return
-            toolbar_handler.add_action_button(button)
+            return toolbar_handler.add_action_button(button)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON_DROP_DOWN:
             if drop_button is None:
                 logger.error(
@@ -85,7 +86,7 @@ class Instance(ABC):
                     toolbar_handler.item.id,
                 )
                 return
-            toolbar_handler.add_button_dropdown(drop_button)
+            return toolbar_handler.add_button_dropdown(drop_button)
 
     def handle_tlb_action_removal(
         self,
@@ -93,6 +94,7 @@ class Instance(ABC):
         action: QAction | None = None,
         button: QPushButton | None = None,
         drop_button: QToolButton | None = None,
+        widget_action: QAction | None = None,
     ):
         if self.settings.toolbar_widget_type == ToolbarWidgetType.ACTION:
             if action is None:
@@ -103,14 +105,10 @@ class Instance(ABC):
                 return
             toolbar_handler.toolbar.removeAction(action)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
-            # if button is None:
-            #     logger.error("Cannot remove button from toolbar %s. Button is None.", toolbar_handler.item.id)
-            #     return
-            # for btn_action in toolbar_handler.toolbar.actions():
-            #     if btn_action.text() == button.text():
-            #         toolbar_handler.toolbar.removeAction(btn_action)
-            print("Not implemented yet")
-            pass
+            if button is None or widget_action is None:
+                logger.error("Cannot remove button from toolbar %s. Button or widget action is None.", toolbar_handler.item.id)
+                return
+            toolbar_handler.remove_action_button(button, widget_action)
         elif self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON_DROP_DOWN:
             if drop_button is None:
                 logger.error(
@@ -144,6 +142,8 @@ class InstanceAction(Instance):
             toolbar_icon_size=handler_data.toolbar_icon_size,
         )
         self.enable_logs = handler_data.enable_logs
+        self.toolbar_button: QPushButton | None = None
+        self.toolbar_button_action: QAction | None = None
 
     def menu_install(self, menu: QMenu):
         if self.settings.menu_add:
@@ -172,11 +172,31 @@ class InstanceAction(Instance):
                 self.action.objectName(),
                 toolbar_handler.item.id,
             ) if self.enable_logs else None
-            self.handle_tlb_action_adding(toolbar_handler, action=self.action)
+            if self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
+                if not toolbar_handler.is_created():
+                    self.handle_tlb_action_adding(toolbar_handler, button=None)
+                    return
+                self.toolbar_button = create_action_btn_push(self.item, self.action, toolbar_handler.toolbar)
+                self.toolbar_button_action = self.handle_tlb_action_adding(
+                    toolbar_handler,
+                    button=self.toolbar_button,
+                )
+            else:
+                self.handle_tlb_action_adding(toolbar_handler, action=self.action)
 
     def toolbar_uninstall(self, toolbar_handler: Optional[ToolbarHandler]):
         if self.settings.toolbar_add and toolbar_handler:
-            self.handle_tlb_action_removal(toolbar_handler, action=self.action)
+            if self.settings.toolbar_widget_type == ToolbarWidgetType.BUTTON:
+                if self.toolbar_button is not None and self.toolbar_button_action is not None:
+                    self.handle_tlb_action_removal(
+                        toolbar_handler,
+                        button=self.toolbar_button,
+                        widget_action=self.toolbar_button_action,
+                    )
+                    self.toolbar_button = None
+                    self.toolbar_button_action = None
+            else:
+                self.handle_tlb_action_removal(toolbar_handler, action=self.action)
 
 
 class InstanceActionGroup(Instance):
@@ -207,6 +227,7 @@ class InstanceActionGroup(Instance):
         self.enable_logs = handler_data.enable_logs
         self.theme = handler_data.theme
         self.widgets_dropdown: list[QToolButton] = []
+        self.widgets_buttons: list[tuple[QPushButton, QAction]] = []
 
     def get_action_from_group(self, action_id: str) -> QAction | None:
         for action in self.action_group.actions():
@@ -298,16 +319,18 @@ class InstanceActionGroup(Instance):
                     for action in self.action_group.actions():
                         self.handle_tlb_action_adding(toolbar_handler, action=action)
                 case ToolbarWidgetType.BUTTON:
-                    # action_item = self.item.get_action_item(action.objectName())
-                    # if action_item is None:
-                    #     raise RuntimeError(f"Action item {action.objectName()} not found during toolbar installation of type BUTTON")
-                    # btn = create_action_btn_push(
-                    #     item=self.item.get_action_item(action.objectName()),
-                    #     action=action,
-                    #     parent=toolbar_handler.toolbar,
-                    # )
-                    # self.handle_tlb_action_adding(toolbar_handler, button=btn)
-                    pass
+                    if not toolbar_handler.is_created():
+                        self.handle_tlb_action_adding(toolbar_handler, button=None)
+                        return
+                    for action in self.action_group.actions():
+                        action_item = self.item.get_action_item(action.objectName())
+                        if action_item is None:
+                            logger.error("Cannot find action item %s in group %s", action.objectName(), self.item.id)
+                            continue
+                        button = create_action_btn_push(action_item, action, toolbar_handler.toolbar)
+                        widget_action = self.handle_tlb_action_adding(toolbar_handler, button=button)
+                        if widget_action is not None:
+                            self.widgets_buttons.append((button, widget_action))
                 case ToolbarWidgetType.BUTTON_DROP_DOWN:
                     if self.is_inner:
                         drop_button = create_menu_action_drop_button(menu=self.inner_menu, icon=self.__get_group_icon())
@@ -333,3 +356,11 @@ class InstanceActionGroup(Instance):
                 case ToolbarWidgetType.BUTTON_DROP_DOWN:
                     for btn in self.widgets_dropdown:
                         self.handle_tlb_action_removal(toolbar_handler, drop_button=btn)
+                case ToolbarWidgetType.BUTTON:
+                    for button, widget_action in self.widgets_buttons:
+                        self.handle_tlb_action_removal(
+                            toolbar_handler,
+                            button=button,
+                            widget_action=widget_action,
+                        )
+                    self.widgets_buttons.clear()
