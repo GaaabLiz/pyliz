@@ -195,6 +195,23 @@ class GetFileCDateTestCase(unittest.TestCase):
             result = get_file_c_date(tmp.name)
             self.assertIsInstance(result, datetime)
 
+    def test_returns_datetime_windows(self):
+        with tempfile.NamedTemporaryFile() as tmp:
+            with patch("pylizlib.core.os.file.platform.system", return_value="Windows"):
+                with patch("pylizlib.core.os.file.os.path.getctime", return_value=1700000000.0) as mock_ctime:
+                    result = get_file_c_date(tmp.name)
+                    self.assertIsInstance(result, datetime)
+                    mock_ctime.assert_called_once_with(tmp.name)
+
+    def test_returns_datetime_linux_without_birthtime(self):
+        with tempfile.NamedTemporaryFile() as tmp:
+            with patch("pylizlib.core.os.file.platform.system", return_value="Linux"):
+                mock_stat = MagicMock(spec=["st_mtime"])
+                mock_stat.st_mtime = 1700000000.0
+                with patch("pylizlib.core.os.file.os.stat", return_value=mock_stat):
+                    result = get_file_c_date(tmp.name)
+                    self.assertIsInstance(result, datetime)
+
 
 class DownloadFileTestCase(unittest.TestCase):
     @patch("pylizlib.core.os.file.requests.get")
