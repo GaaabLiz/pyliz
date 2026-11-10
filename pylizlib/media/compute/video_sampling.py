@@ -54,11 +54,15 @@ def _build_frame_indices(*, total_frames: int, max_frames: int) -> list[int]:
     Calculates frame indices that are evenly spaced across the video.
     Ensures the first and last frames are included if possible.
     """
+    if max_frames <= 0:
+        raise ValueError("max_frames must be greater than zero")
+    if total_frames <= 0:
+        return []
     if total_frames <= max_frames:
         return list(range(total_frames))
+    if max_frames == 1:
+        return [0]
 
-    step = max(total_frames // max_frames, 1)
-    indices = list(range(0, total_frames, step))[:max_frames]
-    if (total_frames - 1) not in indices:
-        indices[-1] = total_frames - 1
-    return indices
+    last_index = total_frames - 1
+    denominator = max_frames - 1
+    return [int(index * last_index / denominator + 0.5) for index in range(max_frames)]
