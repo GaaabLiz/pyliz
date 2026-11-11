@@ -30,12 +30,12 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     validate_directory_component,
 )
-from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.edits import SnapshotEditor
+from pylizlib.core.os.snap.operations.install import SnapshotInstaller
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.utils import SnapshotUtils
-from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
+from pylizlib.core.os.utils import get_folder_size_mb
 
 
 class SnapshotManager:
@@ -360,29 +360,7 @@ class SnapshotManager:
             ExceptionGroup: If any target could not be removed. Other targets
                             are still attempted, and metadata is left unchanged.
         """
-        failures = []
-        for dir_assoc in self.snapshot.directories:
-            install_path = Path(dir_assoc.original_path)
-
-            if is_critical_system_path(install_path):
-                raise ValueError(f"Cannot remove installed copy at '{install_path}': it is a critical system path.")
-
-            try:
-                try:
-                    mode = install_path.lstat().st_mode
-                except FileNotFoundError:
-                    logger.debug(f"Install path '{install_path}' does not exist. Skipping.")
-                    continue
-                if not (stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
-                    raise NotADirectoryError(f"Install path '{install_path}' is not a directory.")
-                logger.info(f"Removing installed copy at '{install_path}'")
-                remove_directory_or_move_to_temp(install_path, message_callback=message_callback)
-            except Exception as e:
-                logger.error(f"Failed to remove directory '{install_path}': {e}")
-                e.add_note(f"Installed copy: {install_path}")
-                failures.append(e)
-        if failures:
-            raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
+        SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
 
     def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """
@@ -395,151 +373,7 @@ class SnapshotManager:
                 installed directories. Defaults to False; ACL changes require explicit opt-in.
             clear_destination (bool): If True, clears the destination directories before copying.
         """
-        self.snapshot.validate()
-        self._snapshot_root_path()
-        import platform
-        import sys
-
-        if self.snapshot.os_created and self.snapshot.os_created != platform.system():
-            raise RuntimeError(f"Cannot install snapshot: created on {self.snapshot.os_created}, but current OS is {platform.system()}.")
-
-        if enable_everyone_full_control and sys.platform == "win32":
-            try:
-                import ntsecuritycon as con
-                import win32security
-            except ImportError:
-                logger.error("pywin32 not installed, cannot set file permissions.")
-                win32security = None
-        else:
-            win32security = None
-
-        total_dirs = len(self.snapshot.directories)
-
-        # 1. Preflight
-        for dir_assoc in self.snapshot.directories:
-            source_dir = self._snapshot_child_path(dir_assoc.directory_name)
-            if not source_dir.exists() or not source_dir.is_dir():
-                raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
-            SnapshotUtils.assert_no_symlinks(source_dir)
-            install_location = Path(dir_assoc.original_path)
-            if is_critical_system_path(install_location):
-                raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
-            if dir_assoc.integrity_manifest is None:
-                if not self.settings.allow_unverified_legacy_snapshots:
-                    raise SnapshotIntegrityError(f"Snapshot association '{dir_assoc.folder_id}' has no integrity manifest; refusing unverified installation.")
-                logger.warning(
-                    "Snapshot association '%s' has no integrity manifest; content verification is unavailable.",
-                    dir_assoc.folder_id,
-                )
-
-        rollbacks = []
-        try:
-            for i, dir_assoc in enumerate(self.snapshot.directories):
-                source_dir = self._snapshot_child_path(dir_assoc.directory_name)
-                install_location = Path(dir_assoc.original_path)
-
-                # 2. Copiare in una directory temporanea (Staging)
-                staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
-                backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
-
-                def copy_progress(copied_bytes: int, total_bytes: int) -> None:
-                    if progress_callback:
-                        dir_pct = (copied_bytes / total_bytes) if total_bytes > 0 else 1.0
-                        overall_pct = ((i + dir_pct) / total_dirs) * 100
-                        progress_callback(int(overall_pct))
-
-                logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
-                try:
-                    SnapshotUtils.assert_no_symlinks(source_dir)
-                    self.settings.copy_strategy.copy_directory(
-                        source_dir,
-                        staging_dir,
-                        progress_callback=copy_progress if progress_callback else None,
-                        message_callback=message_callback,
-                        expected_manifest=dir_assoc.integrity_manifest,
-                    )
-                    SnapshotUtils.assert_no_symlinks(staging_dir)
-                except SnapshotIntegrityError:
-                    if staging_dir.exists():
-                        shutil.rmtree(staging_dir)
-                    raise
-                except Exception as e:
-                    if staging_dir.exists():
-                        shutil.rmtree(staging_dir)
-                    raise RuntimeError(f"Failed to copy to staging '{staging_dir}': {e}") from e
-
-                # 3. La strategia ha verificato il manifest prima di pubblicare lo staging.
-
-                rollbacks.append({"install_loc": install_location, "staging_dir": staging_dir, "backup_dir": backup_dir})
-
-            # 4. Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
-            for rb in rollbacks:
-                install_loc = rb["install_loc"]
-                staging_dir = rb["staging_dir"]
-                backup_dir = rb["backup_dir"]
-
-                install_loc.parent.mkdir(parents=True, exist_ok=True)
-
-                if clear_destination:
-                    if install_loc.exists():
-                        install_loc.rename(backup_dir)
-                    staging_dir.rename(install_loc)
-                else:
-                    if not install_loc.exists():
-                        install_loc.mkdir(parents=True, exist_ok=True)
-                    # Spostamento manuale per merge
-                    for item in staging_dir.iterdir():
-                        dst = install_loc / item.name
-                        if dst.exists():
-                            if dst.is_dir():
-                                shutil.rmtree(dst)
-                            else:
-                                dst.unlink()
-                        shutil.move(str(item), str(dst))
-
-            if enable_everyone_full_control and win32security:
-                for rb in rollbacks:
-                    install_loc = rb["install_loc"]
-                    try:
-                        everyone, domain, type = win32security.LookupAccountName("", "Everyone")
-                        sd = win32security.GetFileSecurity(str(install_loc), win32security.DACL_SECURITY_INFORMATION)
-                        dacl = sd.GetSecurityDescriptorDacl()
-                        dacl.AddAccessAllowedAceEx(
-                            win32security.ACL_REVISION,
-                            con.OBJECT_INHERIT_ACE | con.CONTAINER_INHERIT_ACE,
-                            con.GENERIC_ALL,
-                            everyone,
-                        )
-                        sd.SetSecurityDescriptorDacl(1, dacl, 0)
-                        win32security.SetFileSecurity(str(install_loc), win32security.DACL_SECURITY_INFORMATION, sd)
-                    except Exception as e:
-                        logger.error(f"Failed to set permissions on '{install_loc}': {e}")
-
-        except Exception as e:
-            # 5. Ripristinare la vecchia directory se lo swap fallisce
-            logger.error(f"Installation failed during transaction. Rolling back. Reason: {e}")
-            for rb in rollbacks:
-                install_loc = rb["install_loc"]
-                staging_dir = rb["staging_dir"]
-                backup_dir = rb["backup_dir"]
-
-                if staging_dir.exists():
-                    shutil.rmtree(staging_dir)
-
-                if clear_destination and backup_dir.exists():
-                    if install_loc.exists():
-                        shutil.rmtree(install_loc)
-                    backup_dir.rename(install_loc)
-            raise
-
-        # 7. Aggiornare `date_last_used` soltanto dopo commit riuscito
-        self.snapshot.date_last_used = datetime.now()
-        SnapshotSerializer.update_field(
-            self._snapshot_child_path(self.settings.json_filename),
-            "date_last_used",
-            self.snapshot.date_last_used.isoformat(),
-        )
-        SnapshotUtils.cleanup_after_commit((path for rb in rollbacks for path in (rb["backup_dir"], rb["staging_dir"])), "Installation")
+        SnapshotInstaller(self._storage()).install(enable_everyone_full_control, clear_destination, progress_callback, message_callback)
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
         """
