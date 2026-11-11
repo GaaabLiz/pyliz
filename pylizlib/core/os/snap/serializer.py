@@ -1,14 +1,4 @@
-"""
-JSON serialization and deserialization for the Snapshot model.
-
-Responsibilities (Single Responsibility Principle):
-    - Converting a Snapshot object to a JSON file on disk.
-    - Reconstructing a Snapshot object from a JSON file.
-    - Updating a single field in an existing JSON file without a full round-trip.
-
-Classes:
-    SnapshotSerializer – Static helpers for snapshot JSON I/O.
-"""
+"""Compatibility facade over JSON conversion and protected metadata file access."""
 
 from pathlib import Path
 
@@ -18,8 +8,14 @@ from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
 class SnapshotSerializer:
+    """Compatible JSON facade preserving class hooks and protected metadata I/O.
+
+    The codec owns conversion, MetadataFile owns descriptor safety, and this
+    facade keeps hook resolution and file access in their original order."""
+
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:
+        """Retain the legacy entry point for the shared symlink/junction check."""
         return is_link_or_junction(path)
 
     @staticmethod
@@ -34,6 +30,7 @@ class SnapshotSerializer:
 
     @classmethod
     def read_text(cls, path: Path) -> str:
+        """Decode protected metadata bytes as UTF-8 using the class read hook."""
         return cls.read_bytes(path).decode("utf-8")
 
     @classmethod
@@ -43,6 +40,7 @@ class SnapshotSerializer:
 
     @classmethod
     def write_text(cls, path: Path, contents: str) -> None:
+        """Encode UTF-8 and invoke the class byte-write hook without adding a newline."""
         cls.write_bytes(path, contents.encode("utf-8"))
 
     @staticmethod

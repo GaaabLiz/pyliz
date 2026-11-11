@@ -1,17 +1,7 @@
-"""
-Lifecycle manager for a single Snapshot instance.
+"""Public facade for one snapshot lifecycle and its mutable storage context.
 
-Responsibilities (Single Responsibility Principle):
-    - Creating, deleting, and duplicating a snapshot on the filesystem.
-    - Installing a snapshot's contents to their original target locations.
-    - Adding and removing individual directory associations.
-    - Applying diff-based edit actions to a snapshot's contents.
-    - Synchronising the snapshot's internal copy from live system directories.
-    - Creating backup archives of a snapshot's data.
-
-Classes:
-    SnapshotManager – Manages all filesystem operations for one Snapshot.
-"""
+Filesystem workflows live in operations; this module retains public methods,
+legacy metadata-update ordering and the small association add/remove API."""
 
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +27,11 @@ from pylizlib.core.os.snap.utils import SnapshotUtils
 
 
 class SnapshotManager:
+    """Public single-snapshot facade composing independently testable operations.
+
+    The facade retains legacy signatures, shared default settings, public paths
+    and return values. Each invocation builds dependencies from current state."""
+
     def __init__(
         self,
         snapshot: Snapshot,

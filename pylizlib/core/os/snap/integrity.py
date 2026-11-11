@@ -59,9 +59,7 @@ def assert_manifest_matches(expected: IntegrityManifest, observed: IntegrityMani
 
     missing = sorted(expected.keys() - observed.keys())
     unexpected = sorted(observed.keys() - expected.keys())
-    changed = sorted(
-        path for path in expected.keys() & observed.keys() if expected[path] != observed[path]
-    )
+    changed = sorted(path for path in expected.keys() & observed.keys() if expected[path] != observed[path])
     details = []
     if missing:
         details.append(f"missing: {', '.join(missing[:5])}")

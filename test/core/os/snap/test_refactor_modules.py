@@ -315,7 +315,7 @@ def test_partial_update_resolves_writer_after_read_hook():
         def read_text(cls, path):
             """Install the final writer before returning the metadata object."""
             cls.write_text = staticmethod(lambda path, contents: calls.append(contents))
-            return '{}'
+            return "{}"
 
         @classmethod
         def write_text(cls, path, contents):

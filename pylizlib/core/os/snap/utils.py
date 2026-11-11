@@ -1,28 +1,16 @@
-"""
-Stateless utility functions for working with Snapshot objects.
-
-Responsibilities (Single Responsibility Principle):
-    - Generating random Snapshot instances for testing.
-    - Loading a Snapshot from a filesystem path.
-    - Building filesystem paths for snapshots and their JSON files.
-    - Computing the diff (edit actions) between two Snapshot versions.
-    - Sorting lists of Snapshot objects.
-
-Classes:
-    SnapshotUtils – Static helper methods for Snapshot operations.
-"""
+"""Legacy static entry points delegating to cohesive snapshot helper modules."""
 
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
+import pylizlib.core.os.snap.diff as _diff
 import pylizlib.core.os.snap.factories as _factories
+import pylizlib.core.os.snap.sorting as _sorting
 import pylizlib.core.os.snap.storage.archives as _storage_archives
 import pylizlib.core.os.snap.storage.metadata as _storage_metadata
 import pylizlib.core.os.snap.storage.paths as _storage_paths
 import pylizlib.core.os.snap.storage.publication as _storage_publication
 import pylizlib.core.os.snap.storage.tree as _storage_tree
-from pylizlib.core.os.snap import diff as _diff
-from pylizlib.core.os.snap import sorting as _sorting
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy
 from pylizlib.core.os.snap.domain import (
     SnapEditAction,
@@ -33,8 +21,14 @@ from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
 class SnapshotUtils:
+    """Compatibility facade for helpers now grouped by their actual responsibility.
+
+    Use storage modules, diff, sorting and factories for internal implementation.
+    Existing callers can retain these static entry points and signatures."""
+
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:
+        """Retain the legacy entry point for the shared symlink/junction check."""
         return is_link_or_junction(path)
 
     @staticmethod

@@ -32,6 +32,7 @@ def sort_snapshots(
             snaps_with_value.append(snap)
 
     def get_key(snapshot: Snapshot):
+        """Use lowercase strings for comparison and retain native non-string values."""
         value = getattr(snapshot, key_attr)
         if isinstance(value, str):
             return value.lower()

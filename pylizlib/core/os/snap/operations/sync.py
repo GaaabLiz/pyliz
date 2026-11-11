@@ -65,7 +65,7 @@ class SnapshotSynchronizer:
 
     def _validate_sources(self) -> None:
         """Validate every source before preparing or replacing any stored copy."""
-        # 1 & 2. Validate all sources before deleting anything
+        # Validate all sources before deleting anything
         for dir_assoc in self.storage.snapshot.directories:
             system_path = Path(dir_assoc.original_path)
             if not system_path.exists() or not system_path.is_dir():
@@ -77,7 +77,7 @@ class SnapshotSynchronizer:
             system_path = Path(dir_assoc.original_path)
             snapshot_copy_path = self.storage.child_path(dir_assoc.directory_name)
 
-            # 4. Copy each source to staging
+            # Copy each source to staging
             staging_dir = self.storage.child_path(f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}")
             backup_dir = self.storage.child_path(f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}")
 

@@ -396,3 +396,15 @@ def test_shared_search_matcher_keeps_case_sensitive_names_and_extensions(tmp_pat
     assert searcher.search(snapshot, api.SnapshotSearchParams("stored", extensions=[".TXT"])) == []
     params = api.SnapshotSearchParams("VALUE", search_target=api.SearchTarget.FILE_NAME)
     assert searcher.search(snapshot, params) == []
+
+
+def test_default_settings_still_share_identity_per_public_constructor(tmp_path):
+    """The refactor deliberately retains the legacy shared-default behavior."""
+    snapshot = Snapshot("defaults", "defaults", "")
+    first = SnapshotManager(snapshot, tmp_path / "catalogue")
+    second = SnapshotManager(snapshot, tmp_path / "catalogue")
+    assert first.settings is second.settings is SnapshotManager.__init__.__defaults__[0]
+    first_catalogue = api.SnapshotCatalogue(tmp_path / "catalogue")
+    second_catalogue = api.SnapshotCatalogue(tmp_path / "catalogue")
+    assert first_catalogue.settings is second_catalogue.settings is api.SnapshotCatalogue.__init__.__defaults__[0]
+    assert first.settings is not first_catalogue.settings

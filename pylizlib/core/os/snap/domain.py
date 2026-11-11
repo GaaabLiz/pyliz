@@ -50,6 +50,9 @@ class SnapDirAssociation:
     _current_index: ClassVar[int] = 0
 
     def __post_init__(self):
+        """Validate and normalize the association, measuring its size only when absent.
+
+        Size errors keep the existing zero-size fallback and logging behavior."""
         self.validate()
         if self.mb_size is None:
             try:
@@ -152,12 +155,16 @@ class SnapDirAssociation:
 
 
 class SnapEditType(Enum):
+    """Supported directory-association changes: add, remove or rename by identity."""
+
     ADD_DIR = "Add"
     REMOVE_DIR = "Remove"
     RENAME_DIR = "Rename"
 
 
 class BackupType(Enum):
+    """Select live associated directories or the complete stored snapshot tree."""
+
     ASSOCIATED_DIRECTORIES = 1
     SNAPSHOT_DIRECTORY = 2
 
@@ -176,6 +183,8 @@ class SnapshotBackupInfo:
 
 
 class SnapshotSortKey(Enum):
+    """Snapshot attribute names accepted by the stable sorting helper."""
+
     ID = "id"
     NAME = "name"
     DESCRIPTION = "desc"
@@ -212,6 +221,7 @@ class SnapEditAction:
     folder_id: str = ""
 
     def __post_init__(self):
+        """Validate a newly constructed edit before it can be used in a filesystem plan."""
         self.validate()
 
     def validate(self) -> None:
@@ -259,6 +269,7 @@ class SnapshotSettings:
     allow_unverified_legacy_snapshots: bool = False
 
     def __post_init__(self):
+        """Enforce strategy and legacy-install flag types without copying dependencies."""
         if not isinstance(self.copy_strategy, DirectoryCopyStrategy):
             raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
         if type(self.allow_unverified_legacy_snapshots) is not bool:
@@ -315,6 +326,7 @@ class Snapshot:
     data: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
+        """Validate a new mutable snapshot and every contained association."""
         self.validate()
 
     def validate(self) -> None:
