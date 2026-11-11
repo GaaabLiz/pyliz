@@ -38,6 +38,81 @@ def test_diff_orders_additions_and_removals_without_renaming_stable_storage_path
     assert old.directories[1].directory_name == new.directories[0].directory_name
 
 
+def test_diff_uses_folder_id_when_path_spelling_changes_through_an_alias(tmp_path):
+    """A path alias does not change the identity of an existing association."""
+    source = tmp_path / "source"
+    source.mkdir()
+    alias = tmp_path / "source-alias"
+    try:
+        alias.symlink_to(source, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    old = Snapshot("id", "name", "", directories=[SnapDirAssociation(1, str(source), "stable-id", 0)])
+    new = Snapshot("id", "name", "", directories=[SnapDirAssociation(1, str(alias), "stable-id", 0)])
+
+    assert get_edits_between_snapshots(old, new) == []
+
+
+def test_diff_keeps_distinct_ids_separate_when_paths_are_aliases(tmp_path):
+    """Path equivalence cannot collapse two different association identities."""
+    source = tmp_path / "source"
+    source.mkdir()
+    alias = tmp_path / "source-alias"
+    try:
+        alias.symlink_to(source, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    old = Snapshot("id", "name", "", directories=[SnapDirAssociation(1, str(source), "old-id", 0)])
+    new = Snapshot("id", "name", "", directories=[SnapDirAssociation(1, str(alias), "new-id", 0)])
+
+    edits = get_edits_between_snapshots(old, new)
+
+    assert [(edit.folder_id, edit.action_type) for edit in edits] == [
+        ("new-id", SnapEditType.ADD_DIR),
+        ("old-id", SnapEditType.REMOVE_DIR),
+    ]
+
+
+def test_legacy_add_action_requires_id_when_multiple_associations_share_an_aliased_target(tmp_path):
+    """Legacy path matching reports ambiguity, while a stable ID selects one association."""
+    from pylizlib.core.os.snap.domain import SnapEditAction
+    from pylizlib.core.os.snap.operations.edits import SnapshotEditPlanner
+
+    source = tmp_path / "source"
+    source.mkdir()
+    alias = tmp_path / "source-alias"
+    try:
+        alias.symlink_to(source, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    old = Snapshot("id", "name", "")
+    requested = Snapshot(
+        "id",
+        "name",
+        "",
+        directories=[
+            SnapDirAssociation(1, str(source), "source-id", 0),
+            SnapDirAssociation(2, str(alias), "alias-id", 0),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="pass its folder_id"):
+        SnapshotEditPlanner._resolve_legacy_actions(
+            [SnapEditAction(SnapEditType.ADD_DIR, new_path=str(source))],
+            old,
+            requested,
+        )
+
+    assert SnapshotEditPlanner._resolve_legacy_actions(
+        [SnapEditAction(SnapEditType.ADD_DIR, new_path=str(source), folder_id="alias-id")],
+        old,
+        requested,
+    ) == {"alias-id": SnapEditType.ADD_DIR}
+
+
 def test_sort_keeps_none_last_even_in_reverse_and_does_not_mutate():
     """Missing dates trail descending values without rearranging the input."""
     missing = Snapshot("none", "none", "")

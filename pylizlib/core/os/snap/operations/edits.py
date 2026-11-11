@@ -8,6 +8,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 from pylizlib.core.os.snap.storage.transactions import (
     SnapshotTransactionJournal,
     TransactionRecoveryError,
@@ -92,12 +93,12 @@ class SnapshotEditPlanner:
             folder_id = edit.folder_id or edit.folder_id_to_remove
             if not folder_id:
                 if edit.action_type == SnapEditType.ADD_DIR:
-                    matches = [assoc for assoc in requested.directories if assoc.original_path == edit.new_path]
+                    matches = [assoc for assoc in requested.directories if same_filesystem_entry(assoc.original_path, edit.new_path)]
                 else:
                     name = edit.old_directory_name or edit.directory_name_to_remove
                     matches = [assoc for assoc in old.directories if assoc.directory_name == name]
                 if len(matches) != 1:
-                    raise ValueError("Edit action does not identify a unique association.")
+                    raise ValueError("Edit action does not identify a unique association; pass its folder_id.")
                 folder_id = matches[0].folder_id
             if folder_id in actions_by_id:
                 raise ValueError(f"Multiple edit actions for association '{folder_id}'.")
