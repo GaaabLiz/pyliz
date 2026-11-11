@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import tempfile
+import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,14 @@ from typing import Protocol
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInfo, SnapshotSettings, validate_directory_component
+from pylizlib.core.os.snap.operations.backup_manifest import (
+    BACKUP_MANIFEST_NAME,
+    LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST,
+    LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT,
+    ArchivedAssociation,
+    build_backup_manifest,
+    parse_backup_manifest,
+)
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -23,19 +32,17 @@ from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
-ASSOCIATED_DIRECTORIES_MANIFEST = ".pyliz_ad_manifest.json"
-ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT = "pyliz-associated-directories"
-ASSOCIATED_DIRECTORIES_MANIFEST_VERSION = 2
+ASSOCIATED_DIRECTORIES_MANIFEST = LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST
 
 
 @dataclass(frozen=True)
-class ArchivedAssociation:
-    """Association identity and origin path captured when an AD archive is made."""
+class _ArchiveMetadata:
+    """Interpretation of one backup ZIP, from its manifest or legacy markers."""
 
-    folder_id: str
-    index: int
-    directory_name: str
-    original_path: str
+    info: SnapshotBackupInfo
+    associations: tuple[ArchivedAssociation, ...] | None = None
+    os_created: str | None = None
+    manifest_name: str | None = None
 
 
 class SnapshotIncompleteError(ValueError):
@@ -106,10 +113,10 @@ class SnapshotArchiveService:
             backup_path.mkdir(parents=True, exist_ok=True)
 
             entries = list(self._files_to_archive(backup_type))
-            manifest_path = None
-            if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-                manifest_path = self._write_associations_manifest(backup_path)
-                entries.append((manifest_path, Path(ASSOCIATED_DIRECTORIES_MANIFEST)))
+            if any(archive_name == Path(BACKUP_MANIFEST_NAME) for _, archive_name in entries):
+                raise ValueError(f"Snapshot content conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
+            manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp)
+            entries.append((manifest_path, Path(BACKUP_MANIFEST_NAME)))
             try:
                 collision_index = 0
                 while True:
@@ -148,36 +155,16 @@ class SnapshotArchiveService:
             if resolved_destination.is_relative_to(resolved_root):
                 raise ValueError(f"Backup destination '{destination}' is inside archived source '{source_root}'.")
 
-    def _write_associations_manifest(self, directory: Path) -> Path:
-        """Write a temporary manifest with the association metadata embedded in an AD ZIP."""
-        associations = []
-        for association in self.storage.snapshot.directories:
-            if association.directory_name == ASSOCIATED_DIRECTORIES_MANIFEST:
-                raise ValueError(f"Association storage name conflicts with reserved AD manifest '{ASSOCIATED_DIRECTORIES_MANIFEST}'.")
-            associations.append(
-                {
-                    "folder_id": association.folder_id,
-                    "index": association.index,
-                    "directory_name": association.directory_name,
-                    "original_path": Path(association.original_path).absolute().as_posix(),
-                }
-            )
-        data = {
-            "format": ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT,
-            "version": ASSOCIATED_DIRECTORIES_MANIFEST_VERSION,
-            "snapshot_id": self.storage.snapshot.id,
-            "snapshot_name": self.storage.snapshot.name,
-            "snapshot_description": self.storage.snapshot.desc,
-            "os_created": self.storage.snapshot.os_created,
-            "associations": associations,
-        }
+    def _write_backup_manifest(self, directory: Path, backup_type: BackupType, prefix: str, is_export: bool, timestamp: str) -> Path:
+        """Write a temporary typed manifest with identity and associations for either backup type."""
+        data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp)
         temporary_path = None
         try:
             temporary_file_context = tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
                 dir=directory,
-                prefix=".backup_manifest_",
+                prefix=".backup_metadata_",
                 suffix=".partial",
                 delete=False,
             )
@@ -190,7 +177,7 @@ class SnapshotArchiveService:
                 try:
                     temporary_path.unlink(missing_ok=True)
                 except OSError as error:
-                    logger.warning(f"Could not remove unfinished associated-directories manifest '{temporary_path}': {error}")
+                    logger.warning(f"Could not remove unfinished backup manifest '{temporary_path}': {error}")
             raise
 
     def _files_to_archive(self, backup_type: BackupType):
@@ -265,20 +252,26 @@ class CatalogueBackupService:
 
     def list_backups(self, backup_dir: Path) -> list[SnapshotBackupInfo]:
         """
-        Returns metadata for every .zip backup in the provided folder.
+        Returns metadata for every valid ZIP archive in the provided folder.
 
         Args:
             backup_dir: Folder containing backup archives.
 
         Returns:
-            A list of parsed backup metadata entries sorted by date (newest first).
+            A list of archive metadata entries sorted by date (newest first).
         """
         if not backup_dir.exists() or not backup_dir.is_dir():
             raise ValueError(f"Provided backup directory '{backup_dir}' is not a valid folder.")
 
         backups: list[SnapshotBackupInfo] = []
-        for zip_path in backup_dir.glob("*.zip"):
-            backups.append(self.parse_info(zip_path))
+        for zip_path in backup_dir.iterdir():
+            if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
+                continue
+            try:
+                backups.append(self._read_archive_metadata(zip_path).info)
+            except Exception as error:
+                logger.warning(f"Could not read embedded backup metadata from '{zip_path}': {error}")
+                backups.append(SnapshotBackupInfo(zip_path, zip_path.name, None, None, "", None, False))
 
         return sorted(
             backups,
@@ -288,19 +281,17 @@ class CatalogueBackupService:
 
     def restore_backup(self, backup_zip_path: Path):
         """
-        Restores a backup archive, auto-detecting the backup type from its filename.
+        Restores a backup using the archive manifest, with filename fallback for legacy ZIPs.
 
-        - `_sd` backups restore the whole snapshot directory into the catalogue.
-        - New `_ad` backups carry their own association manifest and restore to
-          the origin paths captured at backup time. Legacy `_ad` backups still
-          require the associated snapshot metadata to be present.
+        Snapshot-directory archives restore the stored tree into the catalogue.
+        Associated-directory archives restore their captured association paths.
 
         Args:
             backup_zip_path: Path of the backup .zip archive.
 
         Raises:
-            ValueError: If the archive path is invalid, backup naming is not recognized,
-                        or the restore cannot be performed.
+            ValueError: If the archive is invalid, its embedded metadata is not
+                        supported, or the restore cannot be performed.
             SnapshotIncompleteError: If any expected associated directory is missing
                 from an associated-directories archive. Inspect ``missing_folders``.
             IOError: If extraction fails.
@@ -313,8 +304,8 @@ class CatalogueBackupService:
         The mapping is keyed by the persistent ``folder_id`` recorded in the
         archive manifest. Unmapped associations retain their archived origin
         path. Legacy AD archives can be mapped when their snapshot metadata is
-        still present in the catalogue. Mapping is not supported for `_sd`
-        archives.
+        still present in the catalogue. Mapping is not supported for snapshot-
+        directory archives, regardless of their filename.
         """
         if not isinstance(destination_mapping, Mapping):
             raise TypeError("Destination mapping must be a mapping of folder IDs to paths.")
@@ -323,12 +314,13 @@ class CatalogueBackupService:
     def _restore_backup(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path] | None) -> None:
         """Validate, extract and dispatch one archive, with optional AD remapping."""
         recover_pending_transactions(self.path_catalogue)
-        if not backup_zip_path.is_file() or backup_zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{backup_zip_path}' is not a valid .zip file.")
+        if not backup_zip_path.is_file():
+            raise ValueError(f"Provided path '{backup_zip_path}' is not a file.")
 
-        info = self.parse_info(backup_zip_path)
+        metadata = self._read_archive_metadata(backup_zip_path)
+        info = metadata.info
         if info.backup_type is None:
-            raise ValueError("Could not recognize backup type from filename. Expected suffix '_ad' or '_sd' before timestamp.")
+            raise ValueError("Could not recognize backup type from archive metadata or legacy filename.")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
@@ -337,10 +329,10 @@ class CatalogueBackupService:
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
                 if destination_mapping is not None:
                     raise ValueError("Destination remapping is only supported for associated-directories backups.")
-                self._restore_snapshot_directory(temp_dir_path)
+                self._restore_snapshot_directory(temp_dir_path, metadata)
                 return
 
-            self._restore_associated_directories(info, temp_dir_path, destination_mapping)
+            self._restore_associated_directories(metadata, temp_dir_path, destination_mapping)
 
     def delete_backup(self, backup_zip_path: Path):
         """
@@ -352,57 +344,98 @@ class CatalogueBackupService:
         Raises:
             ValueError: If the path is not a valid .zip file or does not exist.
         """
-        if not backup_zip_path.is_file() or backup_zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{backup_zip_path}' is not a valid .zip file.")
+        if not backup_zip_path.is_file() or not zipfile.is_zipfile(backup_zip_path):
+            raise ValueError(f"Provided path '{backup_zip_path}' is not a valid backup file.")
         backup_zip_path.unlink()
 
-    def _restore_snapshot_directory(self, temp_dir_path: Path) -> None:
-        """Replace a complete snapshot root, preserving the existing restore errors."""
-        json_path = temp_dir_path / self.settings.json_filename
-        if not json_path.is_file():
-            raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
-
-        restored_snapshot = SnapshotSerializer.from_json(json_path)
+    def _read_archive_metadata(self, backup_zip_path: Path) -> _ArchiveMetadata:
+        """Read archive identity and type from embedded metadata, falling back for legacy ZIPs."""
         try:
-            publish_snapshot_tree(
-                temp_dir_path,
-                restored_snapshot.id,
-                self.path_catalogue,
-                replace_existing=True,
-                copy_strategy=self.settings.copy_strategy,
-                operation="Snapshot-directory restore",
-            )
-        except Exception as e:
-            logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
-            raise IOError(f"Failed to restore snapshot directory: {e}") from e
+            with zipfile.ZipFile(backup_zip_path, "r") as archive:
+                names = archive.namelist()
+                if BACKUP_MANIFEST_NAME in names:
+                    if names.count(BACKUP_MANIFEST_NAME) != 1:
+                        raise ValueError("Snapshot backup archive contains duplicate backup manifests.")
+                    try:
+                        manifest_data = json.loads(archive.read(BACKUP_MANIFEST_NAME).decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise ValueError(f"Snapshot backup manifest is invalid: {error}") from error
+                    manifest = parse_backup_manifest(manifest_data)
+                    info = SnapshotBackupInfo(
+                        backup_zip_path,
+                        backup_zip_path.name,
+                        manifest.snapshot_id,
+                        manifest.backup_type,
+                        manifest.prefix,
+                        manifest.created_at,
+                        manifest.is_export,
+                    )
+                    return _ArchiveMetadata(info, manifest.associations, manifest.os_created, BACKUP_MANIFEST_NAME)
 
-    def _read_associations_manifest(
+                if ASSOCIATED_DIRECTORIES_MANIFEST in names:
+                    if names.count(ASSOCIATED_DIRECTORIES_MANIFEST) != 1:
+                        raise ValueError("Associated-directories archive contains duplicate legacy manifests.")
+                    try:
+                        legacy_data = json.loads(archive.read(ASSOCIATED_DIRECTORIES_MANIFEST).decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise ValueError(f"Associated-directories manifest is invalid: {error}") from error
+                    snapshot_id, origin_os, associations = self._parse_legacy_associations_manifest(legacy_data)
+                    filename_info = self.parse_info(backup_zip_path)
+                    info = self._replace_info_identity(filename_info, snapshot_id, BackupType.ASSOCIATED_DIRECTORIES)
+                    return _ArchiveMetadata(info, tuple(associations), origin_os, ASSOCIATED_DIRECTORIES_MANIFEST)
+
+                if self.settings.json_filename in names:
+                    if names.count(self.settings.json_filename) != 1:
+                        raise ValueError("Snapshot-directory archive contains duplicate snapshot metadata files.")
+                    try:
+                        snapshot_data = json.loads(archive.read(self.settings.json_filename).decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise ValueError(f"Snapshot-directory metadata is invalid: {error}") from error
+                    if not isinstance(snapshot_data, dict) or not isinstance(snapshot_data.get("id"), str) or not snapshot_data["id"]:
+                        raise ValueError("Snapshot-directory metadata has no snapshot ID.")
+                    validate_directory_component(snapshot_data["id"], "backup snapshot ID")
+                    origin_os = snapshot_data.get("os_created")
+                    if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
+                        raise ValueError("Snapshot-directory metadata contains an invalid originating OS.")
+                    filename_info = self.parse_info(backup_zip_path)
+                    info = self._replace_info_identity(filename_info, snapshot_data["id"], BackupType.SNAPSHOT_DIRECTORY)
+                    return _ArchiveMetadata(info, None, origin_os)
+        except zipfile.BadZipFile:
+            # Preserve the legacy error mapping: extraction reports malformed ZIPs.
+            return _ArchiveMetadata(self.parse_info(backup_zip_path))
+        except ValueError:
+            raise
+        except Exception as error:
+            raise IOError(f"Failed to inspect backup archive '{backup_zip_path}': {error}") from error
+
+        return _ArchiveMetadata(self.parse_info(backup_zip_path))
+
+    @staticmethod
+    def _replace_info_identity(info: SnapshotBackupInfo, snapshot_id: str, backup_type: BackupType) -> SnapshotBackupInfo:
+        """Retain filename-only convenience fields while replacing ID and type from archive data."""
+        return SnapshotBackupInfo(info.path, info.file_name, snapshot_id, backup_type, info.prefix, info.created_at, info.is_export)
+
+    def _parse_legacy_associations_manifest(
         self,
-        manifest_path: Path,
-        expected_snapshot_id: str | None,
-    ) -> tuple[str | None, list[ArchivedAssociation]]:
-        """Read and validate the versioned association manifest embedded in an AD ZIP."""
-        try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ValueError(f"Associated-directories manifest '{manifest_path.name}' is invalid: {error}") from error
+        data: object,
+    ) -> tuple[str, str | None, list[ArchivedAssociation]]:
+        """Read a version 1 or 2 AD manifest written before the unified backup format."""
         if (
             not isinstance(data, dict)
-            or data.get("format") != ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT
+            or data.get("format") != LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT
             or type(data.get("version")) is not int
-            or data["version"] not in {1, ASSOCIATED_DIRECTORIES_MANIFEST_VERSION}
+            or data["version"] not in {1, 2}
         ):
             raise ValueError("Unsupported or invalid associated-directories manifest format.")
         origin_os = data.get("os_created")
         if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
             raise ValueError("Associated-directories manifest contains an invalid originating OS.")
-        if data["version"] == ASSOCIATED_DIRECTORIES_MANIFEST_VERSION and origin_os is None:
+        if data["version"] == 2 and origin_os is None:
             raise ValueError("Associated-directories manifest does not record its originating OS.")
         snapshot_id = data.get("snapshot_id")
         if not isinstance(snapshot_id, str) or not snapshot_id:
             raise ValueError("Associated-directories manifest has no snapshot ID.")
-        if expected_snapshot_id is None or snapshot_id != expected_snapshot_id:
-            raise ValueError("Associated-directories manifest snapshot ID does not match the archive filename.")
+        validate_directory_component(snapshot_id, "backup snapshot ID")
         raw_associations = data.get("associations")
         if not isinstance(raw_associations, list):
             raise ValueError("Associated-directories manifest has no association list.")
@@ -422,7 +455,7 @@ class CatalogueBackupService:
             if type(index) is not int or index < 0:
                 raise ValueError(f"Associated-directories manifest contains an invalid index for '{folder_id}'.")
             validate_directory_component(directory_name, "archive association directory name")
-            if directory_name == ASSOCIATED_DIRECTORIES_MANIFEST:
+            if directory_name in {BACKUP_MANIFEST_NAME, ASSOCIATED_DIRECTORIES_MANIFEST}:
                 raise ValueError("Associated-directories manifest name conflicts with an archived association.")
             if not isinstance(original_path, str) or not original_path or "\x00" in original_path:
                 raise ValueError(f"Associated-directories manifest contains an invalid original path for '{folder_id}'.")
@@ -433,31 +466,60 @@ class CatalogueBackupService:
             seen_ids.add(folder_id)
             seen_names.add(directory_name)
             associations.append(ArchivedAssociation(folder_id, index, directory_name, original_path))
-        return origin_os, associations
+        return snapshot_id, origin_os, associations
+
+    def _restore_snapshot_directory(self, temp_dir_path: Path, metadata: _ArchiveMetadata) -> None:
+        """Replace a complete snapshot root after checking its embedded identity and associations."""
+        json_path = temp_dir_path / self.settings.json_filename
+        if not json_path.is_file():
+            raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
+
+        restored_snapshot = SnapshotSerializer.from_json(json_path)
+        if metadata.info.snapshot_id is not None and restored_snapshot.id != metadata.info.snapshot_id:
+            raise ValueError("Snapshot-directory JSON ID does not match the archive metadata.")
+        if metadata.associations is not None:
+            archived_associations = {(item.folder_id, item.index, item.directory_name) for item in metadata.associations}
+            snapshot_associations = {(item.folder_id, item.index, item.directory_name) for item in restored_snapshot.directories}
+            if archived_associations != snapshot_associations:
+                raise ValueError("Snapshot-directory associations do not match the archive metadata.")
+        if metadata.manifest_name is not None:
+            (temp_dir_path / metadata.manifest_name).unlink(missing_ok=True)
+        try:
+            publish_snapshot_tree(
+                temp_dir_path,
+                restored_snapshot.id,
+                self.path_catalogue,
+                replace_existing=True,
+                copy_strategy=self.settings.copy_strategy,
+                operation="Snapshot-directory restore",
+            )
+        except Exception as e:
+            logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
+            raise IOError(f"Failed to restore snapshot directory: {e}") from e
 
     def _restore_associated_directories(
         self,
-        info: SnapshotBackupInfo,
+        metadata: _ArchiveMetadata,
         temp_dir_path: Path,
         destination_mapping: Mapping[str, str | Path] | None = None,
     ) -> None:
-        """Restore AD contents using the archive manifest, or legacy catalogue metadata."""
+        """Restore AD contents using embedded associations, or legacy catalogue metadata."""
+        info = metadata.info
         if not info.snapshot_id:
-            raise ValueError("Could not determine snapshot ID from associated-directories backup filename.")
+            raise ValueError("Could not determine snapshot ID from associated-directories archive metadata.")
 
-        manifest_path = temp_dir_path / ASSOCIATED_DIRECTORIES_MANIFEST
-        if manifest_path.is_file():
-            origin_os, associations = self._read_associations_manifest(manifest_path, info.snapshot_id)
+        if metadata.associations is not None:
+            origin_os = metadata.os_created
+            associations = list(metadata.associations)
             if origin_os is None:
                 snapshot = self.lookup.get_by_id(info.snapshot_id)
                 if not snapshot:
-                    raise ValueError("Legacy AD manifest does not record the originating OS and the snapshot metadata is unavailable.")
+                    raise ValueError("The archive does not record its originating OS and the snapshot metadata is unavailable.")
                 origin_os = snapshot.os_created
-            manifest_present = True
         else:
             snapshot = self.lookup.get_by_id(info.snapshot_id)
             if not snapshot:
-                raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Legacy associated-directories backups require an existing snapshot metadata entry.")
+                raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Legacy associated-directories archives require an existing snapshot metadata entry.")
             snapshot_root = get_snapshot_path(snapshot.folder_name, self.path_catalogue)
             storage = SnapshotStorage(
                 snapshot,
@@ -472,16 +534,15 @@ class CatalogueBackupService:
                 ArchivedAssociation(association.folder_id, association.index, association.directory_name, association.original_path)
                 for association in snapshot.directories
             ]
-            manifest_present = False
 
-        self._restore_archived_associations(temp_dir_path, associations, destination_mapping, manifest_present, origin_os)
+        self._restore_archived_associations(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
 
     def _restore_archived_associations(
         self,
         temp_dir_path: Path,
         associations: list[ArchivedAssociation],
         destination_mapping: Mapping[str, str | Path] | None,
-        manifest_present: bool,
+        manifest_name: str | None,
         origin_os: str | None,
     ) -> None:
         """Preflight and transactionally restore every association to its captured or mapped path."""
@@ -494,7 +555,7 @@ class CatalogueBackupService:
             raise ValueError(f"Destination mapping contains unknown association IDs: {', '.join(sorted(unknown_ids))}.")
 
         extracted_entries = sorted(
-            (entry for entry in temp_dir_path.iterdir() if not manifest_present or entry.name != ASSOCIATED_DIRECTORIES_MANIFEST),
+            (entry for entry in temp_dir_path.iterdir() if entry.name != manifest_name),
             key=lambda entry: entry.name,
         )
         extracted_by_name = {entry.name: entry for entry in extracted_entries}

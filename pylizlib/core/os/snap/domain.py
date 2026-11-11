@@ -190,7 +190,7 @@ class BackupType(Enum):
 
 @dataclass
 class SnapshotBackupInfo:
-    """Metadata parsed from a backup archive filename."""
+    """Metadata read from a backup archive, with filename fallback for legacy ZIPs."""
 
     path: Path
     file_name: str
