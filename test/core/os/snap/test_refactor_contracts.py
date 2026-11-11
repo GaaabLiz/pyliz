@@ -365,3 +365,34 @@ def test_create_and_install_keep_distinct_scan_behavior_without_observer(tmp_pat
         assert scan.call_count == 1
         manager.install()
         assert scan.call_count == 1
+
+
+@pytest.mark.parametrize("callback_result,expected_count", [(False, 0), (0, 1), (None, 1)])
+def test_search_only_requires_path_lookup_and_cancels_on_false_identity(tmp_path, callback_result, expected_count):
+    """A path-only collaborator works; false-like values do not all cancel."""
+    _, snapshot, manager = stored_snapshot(tmp_path)
+
+    class PathsOnly:
+        """Minimal structural implementation with no catalogue CRUD methods."""
+
+        def get_snap_directory_path(self, snap):
+            """Return the one stored snapshot root used by this test."""
+            assert snap is snapshot
+            return manager.path_snapshot
+
+    results = api.SnapshotSearcher(PathsOnly()).search(
+        snapshot,
+        api.SnapshotSearchParams("stored"),
+        lambda *_: callback_result,
+    )
+    assert len(results) == expected_count
+
+
+def test_shared_search_matcher_keeps_case_sensitive_names_and_extensions(tmp_path):
+    """Extracting matching does not normalize query text or file suffixes."""
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    searcher = api.SnapshotSearcher(api.SnapshotCatalogue(manager.path_catalogue))
+    assert searcher.search(snapshot, api.SnapshotSearchParams("STORED")) == []
+    assert searcher.search(snapshot, api.SnapshotSearchParams("stored", extensions=[".TXT"])) == []
+    params = api.SnapshotSearchParams("VALUE", search_target=api.SearchTarget.FILE_NAME)
+    assert searcher.search(snapshot, params) == []
