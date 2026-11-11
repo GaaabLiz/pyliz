@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
 from pylizlib.core.log.pylizLogger import logger
 
@@ -68,6 +68,14 @@ class SnapshotSearchParams:
     extensions: list[str] = field(default_factory=list)
 
 
+class SnapshotPathLookup(Protocol):
+    """The only catalogue capability required by snapshot searching."""
+
+    def get_snap_directory_path(self, snap: Snapshot) -> Path | None:
+        """Resolve a stored snapshot using the catalogue's current lookup policy."""
+        ...
+
+
 class SnapshotSearcher:
     """
     Searches for textual content within the files of one or more snapshots.
@@ -80,7 +88,7 @@ class SnapshotSearcher:
         Args:
             catalogue: The SnapshotCatalogue to search in.
         """
-        self.catalogue = catalogue
+        self.catalogue: SnapshotPathLookup = catalogue
 
     def search(
         self,
@@ -160,15 +168,7 @@ class SnapshotSearcher:
             logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
             return results
 
-        # 1. Collect all files to be searched
-        files_to_search: list[Path] = []
-        for dir_assoc in snapshot.directories:
-            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
-            if not copied_dir_path.is_dir():
-                continue
-            for file_path in copied_dir_path.rglob("*"):
-                if self._should_search_file(file_path, params.extensions):
-                    files_to_search.append(file_path)
+        files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions)
 
         # 2. Iterate and report progress
         total_files = len(files_to_search)
@@ -178,14 +178,7 @@ class SnapshotSearcher:
                     break
 
             if params.search_target == SearchTarget.FILE_NAME:
-                found = False
-                if params.query_type == QueryType.TEXT:
-                    if params.query in file_path.name:
-                        found = True
-                elif compiled_regex and compiled_regex.search(file_path.name):
-                    found = True
-
-                if found:
+                if self._matches(file_path.name, params, compiled_regex):
                     results.append(
                         SnapshotSearchResult(
                             file_path=file_path,
@@ -239,14 +232,7 @@ class SnapshotSearcher:
         try:
             with file_path.open("r", encoding="utf-8") as f:
                 for i, line in enumerate(f, 1):
-                    found = False
-                    if params.query_type == QueryType.TEXT:
-                        if params.query in line:
-                            found = True
-                    elif compiled_regex and compiled_regex.search(line):
-                        found = True
-
-                    if found:
+                    if self._matches(line, params, compiled_regex):
                         results.append(
                             SnapshotSearchResult(
                                 file_path=file_path,
@@ -261,3 +247,28 @@ class SnapshotSearcher:
         except Exception as e:
             logger.warning(f"Error reading file {file_path} during search: {e}")
         return results
+
+    def _collect_files(self, snapshot: Snapshot, snapshot_path: Path, extensions: list[str]) -> list[Path]:
+        """Collect all candidates before notifying progress, preserving scan order.
+
+        Keep the search traversal/filter policy distinct from strict backup
+        enumeration: unreadable entries and file links retain legacy behavior.
+        """
+        # 1. Collect all files to be searched
+        files_to_search: list[Path] = []
+        for dir_assoc in snapshot.directories:
+            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
+            if not copied_dir_path.is_dir():
+                continue
+            for file_path in copied_dir_path.rglob("*"):
+                if self._should_search_file(file_path, extensions):
+                    files_to_search.append(file_path)
+
+        return files_to_search
+
+    @staticmethod
+    def _matches(text: str, params: SnapshotSearchParams, compiled_regex: Optional[re.Pattern]) -> bool:
+        """Match names or lines with the same case-sensitive text/regex rules."""
+        if params.query_type == QueryType.TEXT:
+            return params.query in text
+        return bool(compiled_regex and compiled_regex.search(text))
