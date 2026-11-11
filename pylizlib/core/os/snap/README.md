@@ -56,6 +56,10 @@ originali mancanti e `unexpected_entries` le voci dell'archivio senza
 corrispondenza. Il ripristino controlla l'insieme completo prima di modificare
 le destinazioni.
 
+La destinazione di un backup deve risolversi fuori dagli alberi che verranno
+archiviati. Questo evita di includere ZIP precedenti e viene controllato anche
+quando la destinazione usa un alias o un link simbolico.
+
 I nuovi backup AD includono `.pyliz_ad_manifest.json` con ID, indice, nome
 interno, percorso originario e sistema operativo di provenienza. Prima di
 installare, ripristinare o rimuovere copie, la libreria verifica che le

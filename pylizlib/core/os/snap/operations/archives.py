@@ -96,6 +96,12 @@ class SnapshotArchiveService:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             base_zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
+            archived_roots = (
+                [Path(association.original_path) for association in self.storage.snapshot.directories]
+                if backup_type == BackupType.ASSOCIATED_DIRECTORIES
+                else [self.storage.root_path()]
+            )
+            self._validate_archive_destination(backup_path / base_zip_name, archived_roots)
 
             backup_path.mkdir(parents=True, exist_ok=True)
 
@@ -128,6 +134,19 @@ class SnapshotArchiveService:
         except Exception as e:
             logger.error(f"Failed to create backup for snapshot '{self.storage.snapshot.id}': {e}")
             raise
+
+    @staticmethod
+    def _validate_archive_destination(destination: Path, archived_roots: list[Path]) -> None:
+        """Reject a ZIP destination inside any tree that the archive enumerates."""
+        try:
+            resolved_destination = destination.resolve(strict=False)
+            resolved_roots = [(root, root.resolve(strict=False)) for root in archived_roots]
+        except Exception as error:
+            raise ValueError(f"Cannot verify backup destination '{destination}': {error}") from error
+
+        for source_root, resolved_root in resolved_roots:
+            if resolved_destination.is_relative_to(resolved_root):
+                raise ValueError(f"Backup destination '{destination}' is inside archived source '{source_root}'.")
 
     def _write_associations_manifest(self, directory: Path) -> Path:
         """Write a temporary manifest with the association metadata embedded in an AD ZIP."""
