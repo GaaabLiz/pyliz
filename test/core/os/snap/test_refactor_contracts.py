@@ -294,3 +294,22 @@ def test_lifecycle_metadata_failure_preserves_old_root_and_manifest_identity(tmp
     assert {p.relative_to(manager.path_snapshot): p.read_bytes() for p in manager.path_snapshot.rglob("*") if p.is_file()} == before
     assert snapshot.directories[0].integrity_manifest is manifest
     assert list(manager.path_catalogue.iterdir()) == [manager.path_snapshot]
+
+
+def test_catalogue_import_keeps_id_only_entries_and_continues_after_bad_json(tmp_path):
+    """Batch import keeps its raw-ID policy instead of adding model validation."""
+    import zipfile
+
+    from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
+
+    archive = tmp_path / "catalogue.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("bad/snapshot.json", "broken JSON")
+        handle.writestr("minimal/snapshot.json", '{"id": "minimal"}')
+        handle.writestr("minimal/payload", "kept")
+    catalogue = api.SnapshotCatalogue(tmp_path / "imported")
+    service = CatalogueTransferService(catalogue.path_catalogue, catalogue.settings, catalogue)
+    assert service.import_catalogue(archive) is None
+    assert (catalogue.path_catalogue / "minimal" / "payload").read_text() == "kept"
+    assert not (catalogue.path_catalogue / "bad").exists()
+    assert catalogue.get_by_id("minimal") is None  # its incomplete model is still unreadable

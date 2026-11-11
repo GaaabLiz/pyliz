@@ -217,3 +217,22 @@ def test_extraction_helper_preserves_bad_zip_and_io_error_mapping(tmp_path):
     with patch.object(zipfile.ZipFile, "extractall", side_effect=OSError("disk failed")):
         with pytest.raises(OSError, match="Failed to extract zip file.*disk failed"):
             extract_zip(archive, tmp_path / "output")
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_catalogue_scanner_skips_validation_errors_in_both_modes(tmp_path, strict):
+    """Strict mode propagates filesystem failures, not malformed domain metadata."""
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.domain import SnapshotSettings
+    from pylizlib.core.os.snap.storage.catalogue import read_catalogue
+
+    (tmp_path / "entry").mkdir()
+    with patch("pylizlib.core.os.snap.storage.catalogue.get_snapshot_from_path", side_effect=ValueError("invalid metadata")):
+        assert read_catalogue(tmp_path, SnapshotSettings(), strict=strict) == []
+    with patch("pylizlib.core.os.snap.storage.catalogue.get_snapshot_from_path", side_effect=OSError("unreadable")):
+        if strict:
+            with pytest.raises(OSError, match="unreadable"):
+                read_catalogue(tmp_path, SnapshotSettings(), strict=True)
+        else:
+            assert read_catalogue(tmp_path, SnapshotSettings()) == []
