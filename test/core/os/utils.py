@@ -43,9 +43,9 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
         self.assertFalse(is_critical_system_path(Path.home() / "Documents" / "MyProject"))
         self.assertFalse(is_critical_system_path("/tmp/test_dir"))
 
-    def test_path_resolve_exception_returns_false(self):
+    def test_path_resolve_exception_returns_true(self):
         with patch.object(Path, "resolve", side_effect=RuntimeError("resolve error")):
-            self.assertFalse(is_critical_system_path("/some/path"))
+            self.assertTrue(is_critical_system_path("/some/path"))
 
     def test_windows_critical_paths(self):
         critical_dir = Path("/mock/windows")
@@ -55,9 +55,13 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
                 self.assertTrue(is_critical_system_path("/mock/programs/App"))
                 self.assertFalse(is_critical_system_path("/mock/other/folder"))
 
-    def test_relative_to_value_error_handled(self):
+    def test_relative_to_value_error_fails_closed(self):
         with patch.object(Path, "is_relative_to", side_effect=ValueError("different drive")):
-            self.assertFalse(is_critical_system_path("/non/critical/path"))
+            self.assertTrue(is_critical_system_path("/non/critical/path"))
+
+    def test_path_resolution_failure_is_treated_as_critical(self):
+        with patch.object(Path, "resolve", side_effect=OSError("cannot resolve path")):
+            self.assertTrue(is_critical_system_path("/tmp/unverified"))
 
     def test_invalid_path_returns_false(self):
         with patch.object(Path, "resolve", side_effect=ValueError("Invalid path")):
