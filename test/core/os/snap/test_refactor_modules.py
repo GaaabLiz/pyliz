@@ -179,7 +179,7 @@ def test_backup_naming_and_parsing_keep_existing_grammar(export, kind, suffix):
     from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
 
     name = build_backup_filename("identity", "some_prefix", BackupType(kind), "20261111_123456", export)
-    assert name == f'{"" if export else "backup_"}some_prefix_identity_{suffix}_20261111_123456.zip'
+    assert name == f"{'' if export else 'backup_'}some_prefix_identity_{suffix}_20261111_123456.zip"
     info = parse_backup_filename(Path(name))
     assert info.snapshot_id == "identity"
     assert info.prefix == "some_prefix"
@@ -246,3 +246,55 @@ def test_directory_progress_keeps_equal_weights_and_integer_truncation(index, co
     percentages = []
     report_directory_progress(percentages.append, index, 2, copied, total)
     assert percentages == [expected]
+
+
+def test_reused_sequential_strategy_keeps_copy_state_per_destination(tmp_path):
+    """Byte counters and captured manifests cannot leak across strategy calls."""
+    from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "value").write_bytes(b"12345")
+    (source / "empty").mkdir()
+    strategy = SequentialFileCopyStrategy()
+    for name in ["first", "second"]:
+        progress = []
+        manifest = {}
+        strategy.copy_directory(source, tmp_path / name, lambda copied, total: progress.append((copied, total)), manifest=manifest)
+        assert progress == [(5, 5)]
+        assert manifest["empty"] == {"type": "directory", "size": 0, "sha256": None}
+        assert manifest["value"]["size"] == 5
+
+
+@pytest.mark.parametrize("kind", ["sequential", "verified", "provider"])
+def test_strategy_contract_rejects_wrong_manifest_without_publishing_or_mutating_output(tmp_path, kind):
+    """Every shipped strategy must verify before publishing its output manifest."""
+    from contextlib import contextmanager
+
+    from pylizlib.core.os.snap.copy_strategy import ProviderSnapshotCopyStrategy, SequentialFileCopyStrategy, SourceSnapshotProvider, VerifiedFileCopyStrategy
+    from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
+
+    class StableProvider(SourceSnapshotProvider):
+        """Hold a test source stable for the provider's full context lifetime."""
+
+        @contextmanager
+        def create_snapshot(self, source):
+            """Yield the unchanged test tree as the stable provider result."""
+            yield source
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "value").write_text("old")
+    expected = {}
+    SequentialFileCopyStrategy().copy_directory(source, tmp_path / "reference", manifest=expected)
+    (source / "value").write_text("new")
+    strategies = {
+        "sequential": SequentialFileCopyStrategy(),
+        "verified": VerifiedFileCopyStrategy(),
+        "provider": ProviderSnapshotCopyStrategy(StableProvider()),
+    }
+    output = {"unchanged": {"marker": True}}
+    with pytest.raises(SnapshotIntegrityError):
+        strategies[kind].copy_directory(source, tmp_path / "rejected", manifest=output, expected_manifest=expected)
+    assert output == {"unchanged": {"marker": True}}
+    assert not (tmp_path / "rejected").exists()
