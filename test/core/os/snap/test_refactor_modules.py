@@ -167,3 +167,53 @@ def test_serializer_keeps_subclass_text_and_converter_hooks():
 
     InMemorySerializer.update_field(Path("unused"), "new", object())
     assert InMemorySerializer.result == '{\n    "extension": 1,\n    "new": "custom"\n}'
+
+
+@pytest.mark.parametrize("export", [False, True])
+@pytest.mark.parametrize("kind,suffix", [(1, "ad"), (2, "sd")])
+def test_backup_naming_and_parsing_keep_existing_grammar(export, kind, suffix):
+    """Both backup types and export modes share their unchanged filename codec."""
+    from pathlib import Path
+
+    from pylizlib.core.os.snap.domain import BackupType
+    from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
+
+    name = build_backup_filename("identity", "some_prefix", BackupType(kind), "20261111_123456", export)
+    assert name == f'{"" if export else "backup_"}some_prefix_identity_{suffix}_20261111_123456.zip'
+    info = parse_backup_filename(Path(name))
+    assert info.snapshot_id == "identity"
+    assert info.prefix == "some_prefix"
+    assert info.backup_type == BackupType(kind)
+    assert info.is_export is export
+    assert info.created_at == datetime(2026, 11, 11, 12, 34, 56)
+
+
+def test_backup_parser_retains_permissive_invalid_timestamp():
+    """An invalid date still permits type and ID recovery from the filename."""
+    from pathlib import Path
+
+    from pylizlib.core.os.snap.domain import BackupType
+    from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+
+    info = parse_backup_filename(Path("backup_prefix_id_sd_20269999_999999.zip"))
+    assert info.created_at is None
+    assert info.backup_type is BackupType.SNAPSHOT_DIRECTORY
+    assert info.snapshot_id == "id"
+
+
+def test_extraction_helper_preserves_bad_zip_and_io_error_mapping(tmp_path):
+    """The shared ZIP helper maps only errors in extraction, as before."""
+    import zipfile
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.storage.archives import extract_zip
+
+    archive = tmp_path / "archive.zip"
+    archive.write_bytes(b"invalid")
+    with pytest.raises(ValueError, match="not a valid zip file"):
+        extract_zip(archive, tmp_path / "output")
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("value", "value")
+    with patch.object(zipfile.ZipFile, "extractall", side_effect=OSError("disk failed")):
+        with pytest.raises(OSError, match="Failed to extract zip file.*disk failed"):
+            extract_zip(archive, tmp_path / "output")

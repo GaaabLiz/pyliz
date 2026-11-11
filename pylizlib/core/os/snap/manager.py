@@ -13,12 +13,10 @@ Classes:
     SnapshotManager – Manages all filesystem operations for one Snapshot.
 """
 
-import stat
 from datetime import datetime
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
@@ -28,6 +26,7 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     validate_directory_component,
 )
+from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
 from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 from pylizlib.core.os.snap.operations.install import SnapshotInstaller
 from pylizlib.core.os.snap.operations.lifecycle import SnapshotLifecycle
@@ -227,53 +226,7 @@ class SnapshotManager:
         Returns:
             The path of the verified, published archive.
         """
-        try:
-            if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
-                raise ValueError(f"Unsupported backup type: {backup_type}")
-            self.snapshot.validate()
-            self._snapshot_root_path()
-            snapshot_json_path = self._snapshot_child_path(self.settings.json_filename)
-            if backup_type == BackupType.SNAPSHOT_DIRECTORY and not snapshot_json_path.is_file():
-                raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-            backup_type_suffix = ""
-            if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-                backup_type_suffix = "_ad"
-            elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
-                backup_type_suffix = "_sd"
-
-            if is_export:
-                zip_name = f"{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
-            else:
-                zip_name = f"backup_{prefix}_{self.snapshot.id}{backup_type_suffix}_{timestamp}.zip"
-
-            backup_path.mkdir(parents=True, exist_ok=True)
-            zip_path = backup_path.joinpath(zip_name)
-
-            def files_to_archive():
-                if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-                    for d in self.snapshot.directories:
-                        folder = Path(d.original_path)
-                        try:
-                            mode = folder.stat().st_mode
-                        except FileNotFoundError:
-                            # A missing installation target has no data to protect.
-                            continue
-                        if not stat.S_ISDIR(mode):
-                            raise NotADirectoryError(f"Backup source '{folder}' is not a directory.")
-                        for file_path in SnapshotUtils.iter_files_strict(folder):
-                            yield file_path, Path(d.directory_name) / file_path.relative_to(folder)
-                else:
-                    snapshot_root = self._snapshot_root_path()
-                    SnapshotUtils.assert_no_symlinks(snapshot_root)
-                    for file_path in SnapshotUtils.iter_files_strict(snapshot_root):
-                        yield file_path, file_path.relative_to(self.path_snapshot)
-
-            return SnapshotUtils.write_verified_zip(zip_path, files_to_archive(), message_callback)
-        except Exception as e:
-            logger.error(f"Failed to create backup for snapshot '{self.snapshot.id}': {e}")
-            raise
+        return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
 
     def _storage(self) -> SnapshotStorage:
         """Build operation dependencies from the facade's current public state."""

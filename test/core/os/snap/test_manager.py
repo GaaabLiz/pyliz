@@ -799,7 +799,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             real_write(archive, *args, **kwargs)
             raise OSError("backup write interrupted")
 
-        with patch("pylizlib.core.os.snap.manager.datetime") as mock_datetime:
+        with patch("pylizlib.core.os.snap.operations.archives.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "20261105_120000"
             mgr.create_backup(BACKUP_PATH, "atomic", BackupType.SNAPSHOT_DIRECTORY)
             published = next(BACKUP_PATH.glob("*.zip"))
