@@ -17,8 +17,8 @@ FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "public_api.json").re
 
 
 def test_original_exports_and_class_locations_are_preserved():
-    """Re-exports retain the original objects and modules used by old imports."""
-    assert snap.__all__ == FIXTURE["exports"]
+    """Old exports remain stable while new documented errors can be added."""
+    assert snap.__all__ == [*FIXTURE["exports"], "SnapshotInstallMetadataError"]
     for qualified_name in FIXTURE["classes"]:
         module_name, class_name = qualified_name.split(".")
         module = importlib.import_module(f"pylizlib.core.os.snap.{module_name}")

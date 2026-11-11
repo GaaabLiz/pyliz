@@ -204,6 +204,11 @@ class SnapshotManager:
                 to set full control permissions for the 'Everyone' group on the
                 installed directories. Defaults to False; ACL changes require explicit opt-in.
             clear_destination (bool): If True, clears the destination directories before copying.
+
+        Raises:
+            SnapshotInstallMetadataError: The directory contents were installed, but
+                updating ``date_last_used`` failed. Inspect ``metadata_published`` to
+                determine whether the JSON update became visible.
         """
         SnapshotInstaller(self._storage()).install(enable_everyone_full_control, clear_destination, progress_callback, message_callback)
 

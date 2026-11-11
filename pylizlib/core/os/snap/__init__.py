@@ -26,6 +26,7 @@ from pylizlib.core.os.snap.domain import (
 )
 from pylizlib.core.os.snap.integrity import IntegrityManifest, SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
+from pylizlib.core.os.snap.operations.install import SnapshotInstallMetadataError
 from pylizlib.core.os.snap.searcher import (
     QueryType,
     SearchTarget,
@@ -72,4 +73,5 @@ __all__ = [
     "SnapshotSearcher",
     "SnapshotSearchParams",
     "SnapshotSearchResult",
+    "SnapshotInstallMetadataError",
 ]

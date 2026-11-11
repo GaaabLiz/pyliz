@@ -79,14 +79,50 @@ def test_install_merge_replaces_colliding_top_level_directory(tmp_path):
 
 
 def test_install_metadata_failure_leaves_published_contents(tmp_path):
-    """Last-used persistence happens after publication and cannot roll it back."""
+    """A post-commit metadata failure is typed and leaves a recovery copy."""
     source, snapshot, manager = stored_snapshot(tmp_path)
     (source / "value.txt").write_text("live")
+    from pylizlib.core.os.snap import SnapshotInstallMetadataError
+
     with patch.object(SnapshotSerializer, "update_field", side_effect=OSError("metadata failed")):
-        with pytest.raises(OSError, match="metadata failed"):
+        with pytest.raises(SnapshotInstallMetadataError, match="contents were installed") as raised:
             manager.install()
     assert (source / "value.txt").read_text() == "stored"
+    assert raised.value.installation_completed is True
+    assert raised.value.metadata_field == "date_last_used"
+    assert raised.value.metadata_published is None
+    assert isinstance(raised.value.__cause__, OSError)
+    assert snapshot.date_last_used is None
+    assert list(tmp_path.glob(f"{source.name}_bck_*"))
+
+
+def test_install_metadata_durability_failure_records_published_timestamp(tmp_path):
+    """A post-rename flush error reports visible metadata and committed contents."""
+    from pylizlib.core.os.snap import SnapshotInstallMetadataError
+    from pylizlib.core.os.snap.storage.metadata import MetadataDurabilityError
+
+    source, snapshot, manager = stored_snapshot(tmp_path)
+    before = manager.path_snapshot_json.read_bytes()
+    error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
+    update_field = SnapshotSerializer.update_field
+
+    def publish_then_fail(path, field_name, value):
+        """Persist the field, then simulate failure flushing its directory entry."""
+        update_field(path, field_name, value)
+        raise error
+
+    with patch.object(SnapshotSerializer, "update_field", side_effect=publish_then_fail):
+        with pytest.raises(SnapshotInstallMetadataError) as raised:
+            manager.install()
+
+    assert (source / "value.txt").read_text() == "stored"
     assert snapshot.date_last_used is not None
+    assert raised.value.installation_completed is True
+    assert raised.value.metadata_published is True
+    assert raised.value.durability_confirmed is False
+    stored = SnapshotSerializer.from_json(manager.path_snapshot_json)
+    assert stored.date_last_used == snapshot.date_last_used
+    assert manager.path_snapshot_json.read_bytes() != before
     assert list(tmp_path.glob(f"{source.name}_bck_*"))
 
 
@@ -194,9 +230,12 @@ def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path
     manager.path_snapshot_json.write_bytes(before)
     original = snapshot.clone()
     snapshot.directories[0].index = 2
+    requested_name = snapshot.directories[0].directory_name
 
     def fail_save(_snapshot, path):
         """Simulate an interrupted metadata rewrite after content publication."""
+        assert not (manager.path_snapshot / original.directories[0].directory_name).exists()
+        assert (manager.path_snapshot / requested_name).is_dir()
         path.write_bytes(b"partial")
         raise OSError("save failed")
 
@@ -205,7 +244,69 @@ def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
     assert manager.path_snapshot_json.read_bytes() == before
     assert (manager.path_snapshot / original.directories[0].directory_name).is_dir()
-    assert not (manager.path_snapshot / snapshot.directories[0].directory_name).exists()
+    assert not (manager.path_snapshot / requested_name).exists()
+    assert snapshot.directories[0].index == original.directories[0].index
+
+
+def test_editor_keeps_published_edit_when_metadata_durability_is_uncertain(tmp_path):
+    """A published edit remains aligned with its renamed directory."""
+    from pylizlib.core.os.snap.diff import get_edits_between_snapshots
+    from pylizlib.core.os.snap.operations.edits import SnapshotEditor
+    from pylizlib.core.os.snap.storage.metadata import MetadataDurabilityError
+
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    original = snapshot.clone()
+    old_name = snapshot.directories[0].directory_name
+    snapshot.directories[0].index = 2
+    new_name = snapshot.directories[0].directory_name
+    to_json = SnapshotSerializer.to_json
+    error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
+
+    def publish_then_fail(live_snapshot, path):
+        """Publish the complete JSON, then report an uncertain directory flush."""
+        to_json(live_snapshot, path)
+        raise error
+
+    with patch.object(SnapshotSerializer, "to_json", side_effect=publish_then_fail):
+        with pytest.raises(MetadataDurabilityError) as raised:
+            SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
+
+    assert raised.value.published is True
+    assert not (manager.path_snapshot / old_name).exists()
+    assert (manager.path_snapshot / new_name).is_dir()
+    assert SnapshotSerializer.from_json(manager.path_snapshot_json).directories[0].directory_name == new_name
+    assert snapshot.directories[0].directory_name == new_name
+    assert list(manager.path_snapshot.glob("_staging_update_*")) == []
+
+
+def test_editor_retains_removed_directory_after_published_metadata_error(tmp_path):
+    """A removed copy remains recoverable when published metadata cannot be flushed."""
+    from pylizlib.core.os.snap.diff import get_edits_between_snapshots
+    from pylizlib.core.os.snap.operations.edits import SnapshotEditor
+    from pylizlib.core.os.snap.storage.metadata import MetadataDurabilityError
+
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    original = snapshot.clone()
+    removed_name = snapshot.directories[0].directory_name
+    snapshot.directories.clear()
+    to_json = SnapshotSerializer.to_json
+    error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
+
+    def publish_then_fail(live_snapshot, path):
+        """Publish the removal, then report an uncertain directory flush."""
+        to_json(live_snapshot, path)
+        raise error
+
+    with patch.object(SnapshotSerializer, "to_json", side_effect=publish_then_fail):
+        with pytest.raises(MetadataDurabilityError):
+            SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
+
+    assert SnapshotSerializer.from_json(manager.path_snapshot_json).directories == []
+    assert snapshot.directories == []
+    assert not (manager.path_snapshot / removed_name).exists()
+    staged = list(manager.path_snapshot.glob("_staging_update_*"))
+    assert len(staged) == 1
+    assert (staged[0] / "original_0" / "value.txt").read_text() == "stored"
 
 
 def test_storage_context_rejects_mutated_snapshot_identity_and_json_filename(tmp_path):

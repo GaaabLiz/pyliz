@@ -2,9 +2,11 @@
 
 import shutil
 import tempfile
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, fields
 from pathlib import Path
 
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
@@ -24,10 +26,13 @@ class EditPlan:
     """Validated association operations and exact metadata to restore on failure.
 
     Association objects remain live: freezing this record does not freeze or
-    copy the mutable snapshot model used by the existing public API.
+    copy the mutable snapshot model used by the existing public API. The
+    persisted model is retained separately so a failed edit can restore the
+    caller's live model along with the stored bytes and directory names.
     """
 
     old_json: bytes
+    old_snapshot: Snapshot
     moves: list[EditMove]
     additions: list[SnapDirAssociation]
 
@@ -71,7 +76,7 @@ class SnapshotEditPlanner:
                 moves.append(EditMove(source, target))
 
         self._validate_filesystem_plan(old, moves, additions)
-        return EditPlan(old_json, moves, additions)
+        return EditPlan(old_json, old, moves, additions)
 
     @staticmethod
     def _resolve_legacy_actions(edits: list[SnapEditAction], old: Snapshot, requested: Snapshot) -> dict[str, SnapEditType]:
@@ -131,7 +136,6 @@ class SnapshotEditor:
         publications = []
         published = []
         saving_json = False
-        previous_manifests = {assoc.folder_id: assoc.integrity_manifest for assoc in self.storage.snapshot.directories}
         try:
             for i, move in enumerate(plan.moves):
                 source, target = move.source, move.target
@@ -163,17 +167,45 @@ class SnapshotEditor:
                     raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
             saving_json = True
             self.storage.save_json()
-        except Exception:
+        except Exception as error:
+            if saving_json and getattr(error, "published", False) is True:
+                if any(staged.exists() for staged, _source in staged_originals):
+                    logger.warning(
+                        "Snapshot edit metadata was published but its durability is uncertain; "
+                        f"staged removed directories were retained at '{staging_path}'."
+                    )
+                else:
+                    cleanup_after_commit([staging_path], "Snapshot update")
+                raise
             for staged, target in reversed(published):
                 target.rename(staged)
             for staged, source in reversed(staged_originals):
                 staged.rename(source)
             if saving_json:
                 self.storage.metadata.write_bytes(self.storage.child_path(self.storage.settings.json_filename), plan.old_json)
-            for assoc in self.storage.snapshot.directories:
-                assoc.integrity_manifest = previous_manifests[assoc.folder_id]
+            self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
             shutil.rmtree(staging_path)
             raise
 
         # Deletions only affect staged originals after the new state is committed.
         cleanup_after_commit([staging_path], "Snapshot update")
+
+    @staticmethod
+    def _restore_snapshot_model(snapshot: Snapshot, previous: Snapshot) -> None:
+        """Restore a failed edit's model while preserving existing association objects."""
+        live_by_id = {association.folder_id: association for association in snapshot.directories}
+        restored_directories = []
+        association_fields = ("index", "original_path", "folder_id", "mb_size", "integrity_manifest")
+        for old_association in previous.directories:
+            association = live_by_id.get(old_association.folder_id)
+            if association is None:
+                association = deepcopy(old_association)
+            else:
+                for name in association_fields:
+                    setattr(association, name, deepcopy(getattr(old_association, name)))
+            restored_directories.append(association)
+
+        for model_field in fields(Snapshot):
+            if model_field.name != "directories":
+                setattr(snapshot, model_field.name, deepcopy(getattr(previous, model_field.name)))
+        snapshot.directories[:] = restored_directories

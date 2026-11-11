@@ -17,6 +17,23 @@ from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 from pylizlib.core.os.utils import is_critical_system_path
 
 
+class SnapshotInstallMetadataError(RuntimeError):
+    """Report that installation committed but its last-used metadata update failed.
+
+    ``metadata_published`` is True when the metadata adapter confirms that the
+    new JSON was published, False when it confirms publication did not happen,
+    and None when the adapter cannot report the publication state.
+    """
+
+    def __init__(self, metadata_published: bool | None, durability_confirmed: bool | None):
+        """Create an explicit post-commit failure for callers to handle."""
+        super().__init__("Snapshot contents were installed, but completion of the date_last_used update could not be confirmed.")
+        self.installation_completed = True
+        self.metadata_field = "date_last_used"
+        self.metadata_published = metadata_published
+        self.durability_confirmed = durability_confirmed
+
+
 @dataclass(frozen=True)
 class InstallReplacement:
     """Prepared installation paths, recorded only after the copy succeeds.
@@ -51,6 +68,13 @@ class SnapshotInstaller:
                 to set full control permissions for the 'Everyone' group on the
                 installed directories. Defaults to False; ACL changes require explicit opt-in.
             clear_destination (bool): If True, clears the destination directories before copying.
+
+        Raises:
+            SnapshotInstallMetadataError: If the directory installation committed but
+                updating ``date_last_used`` failed. Temporary old copies are retained
+                for recovery when replacement mode staged them, and
+                ``metadata_published`` describes the JSON outcome when the metadata
+                adapter can report it.
         """
         self.storage.snapshot.validate()
         self.storage.root_path()
@@ -246,11 +270,26 @@ class SnapshotInstaller:
                 backup_dir.rename(install_loc)
 
     def _record_last_used(self) -> None:
-        """Save usage metadata after publication; failures do not roll back contents."""
-        # Aggiornare `date_last_used` soltanto dopo commit riuscito
-        self.storage.snapshot.date_last_used = datetime.now()
-        self.storage.metadata.update_field(
-            self.storage.child_path(self.storage.settings.json_filename),
-            "date_last_used",
-            self.storage.snapshot.date_last_used.isoformat(),
-        )
+        """Save usage metadata after publication without obscuring the commit result."""
+        previous_date = self.storage.snapshot.date_last_used
+        last_used = datetime.now()
+        try:
+            self.storage.metadata.update_field(
+                self.storage.child_path(self.storage.settings.json_filename),
+                "date_last_used",
+                last_used.isoformat(),
+            )
+        except Exception as error:
+            metadata_published = getattr(error, "published", None)
+            durability_confirmed = getattr(error, "durability_confirmed", None)
+            if type(metadata_published) is not bool:
+                metadata_published = None
+            if type(durability_confirmed) is not bool:
+                durability_confirmed = None
+
+            # Keep the model aligned with the visible JSON when an atomic rename
+            # succeeded but the directory flush failed afterward.
+            self.storage.snapshot.date_last_used = last_used if metadata_published is True else previous_date
+            raise SnapshotInstallMetadataError(metadata_published, durability_confirmed) from error
+
+        self.storage.snapshot.date_last_used = last_used
