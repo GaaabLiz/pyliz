@@ -76,6 +76,24 @@ class TestSnapshotManagerCreate(unittest.TestCase):
             self.assertIsNotNone(assoc.integrity_manifest)
             self.assertIn(".", assoc.integrity_manifest)
 
+    def test_create_rejects_linked_sources_before_publishing_a_snapshot(self):
+        snap = make_snapshot("CreateWithSymlink", self._src, n=1)
+        mgr = self._mgr(snap)
+        outside = TEST_LOCAL_ROOT / "create_link_target"
+        outside.mkdir()
+        (outside / "important.txt").write_text("keep me", encoding="utf-8")
+        link = self._src[0] / "linked-directory"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"Directory symlinks are unavailable: {error}")
+
+        with self.assertRaisesRegex(ValueError, "symbolic link"):
+            mgr.create()
+
+        self.assertFalse(mgr.path_snapshot.exists())
+        self.assertEqual((outside / "important.txt").read_text(encoding="utf-8"), "keep me")
+
     def test_create_uses_strategy_from_snapshot_settings(self):
         class RecordingStrategy(SequentialFileCopyStrategy):
             def __init__(self):
@@ -932,6 +950,27 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         association_root = snap.directories[0].directory_name
         self.assertIn(f"{association_root}/", names)
         self.assertIn(f"{association_root}/nested_empty/", names)
+
+    def test_associated_directory_backup_rejects_links_instead_of_skipping_or_following_them(self):
+        snap = make_snapshot("AssociatedBackupLinks", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        outside = TEST_LOCAL_ROOT / "associated_backup_link_target"
+        outside.mkdir()
+        important = outside / "important.txt"
+        important.write_text("keep me", encoding="utf-8")
+        link = self._src[0] / "linked-directory"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"Directory symlinks are unavailable: {error}")
+
+        with self.assertRaisesRegex(ValueError, "symbolic link"):
+            mgr.create_backup(BACKUP_PATH, "associated_links", BackupType.ASSOCIATED_DIRECTORIES)
+
+        self.assertEqual(important.read_text(encoding="utf-8"), "keep me")
+        self.assertEqual(list(BACKUP_PATH.glob("*.zip")), [])
 
     def test_associated_directory_backup_reports_missing_or_non_directory_sources_without_publishing(self):
         snap = make_snapshot("MissingAssocBackup", self._src[:2], n=2)

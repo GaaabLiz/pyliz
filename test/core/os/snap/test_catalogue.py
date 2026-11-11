@@ -525,6 +525,29 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
                 self.assertEqual(existing.read_bytes(), before)
                 self.assertEqual(list(self._export_dir.iterdir()), [existing])
 
+    def test_export_catalogue_rejects_symlinked_tree_entries(self):
+        snap = make_snapshot("ExportSymlink", self._src, n=1)
+        self.cat.add(snap)
+
+        outside = TEST_LOCAL_ROOT / "catalogue_export_link_target"
+        outside.mkdir()
+        important = outside / "important.txt"
+        important.write_text("keep me", encoding="utf-8")
+        stored_copy = CATALOGUE_PATH / snap.id / snap.directories[0].directory_name
+        link = stored_copy / "linked-directory"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"Directory symlinks are unavailable: {error}")
+
+        archive_path = self._export_dir / "linked-catalogue.zip"
+        with self.assertRaisesRegex(ValueError, "symbolic link"):
+            self.cat.export_catalogue(self._export_dir, archive_path.name)
+
+        self.assertFalse(archive_path.exists())
+        self.assertEqual(list(self._export_dir.iterdir()), [])
+        self.assertEqual(important.read_text(encoding="utf-8"), "keep me")
+
     def test_export_catalogue_propagates_metadata_read_errors(self):
         snap = make_snapshot("UnreadableExportMetadata", self._src, n=1)
         self.cat.add(snap)

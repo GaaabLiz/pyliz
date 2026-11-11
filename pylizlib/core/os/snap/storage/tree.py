@@ -27,12 +27,10 @@ def assert_destination_outside_source(source: Path, destination: Path) -> None:
 
 
 def iter_files_strict(root: Path) -> Iterator[Path]:
-    """Enumerate files without suppressing scan or metadata errors.
-
-    Directory symlinks are not traversed, matching the previous rglob
-    policy. File symlinks are read; failures resolving them propagate.
-    """
-    if not stat.S_ISDIR(root.stat().st_mode):
+    """Enumerate regular files, rejecting links and propagating scan errors."""
+    root = Path(root)
+    root_mode = root.lstat().st_mode
+    if is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
         raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
     pending = [root]
     while pending:
@@ -40,22 +38,25 @@ def iter_files_strict(root: Path) -> Iterator[Path]:
             for entry in entries:
                 mode = entry.stat(follow_symlinks=False).st_mode
                 path = Path(entry.path)
+                if stat.S_ISLNK(mode) or is_link_or_junction(path):
+                    raise ValueError(f"Directory tree contains symbolic link '{path}'.")
                 if stat.S_ISDIR(mode):
                     pending.append(path)
                 elif stat.S_ISREG(mode):
-                    yield path
-                elif stat.S_ISLNK(mode) and stat.S_ISREG(entry.stat().st_mode):
                     yield path
 
 
 def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
-    """Yield files and child directories, preserving empty directories.
+    """Yield regular files and child directories, rejecting all links.
 
-    The root itself is omitted. Directory entries are yielded before descent;
-    file symlinks are yielded but directory symlinks are not traversed.
+    The root itself is omitted. Directory entries are yielded before descent,
+    preserving empty directories. Links are rejected instead of followed or
+    silently skipped so archive and copy callers share one tree policy.
     Filesystem scan errors propagate to the caller.
     """
-    if not stat.S_ISDIR(root.stat().st_mode):
+    root = Path(root)
+    root_mode = root.lstat().st_mode
+    if is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
         raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
     pending = [root]
     while pending:
@@ -63,34 +64,34 @@ def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
             for entry in entries:
                 mode = entry.stat(follow_symlinks=False).st_mode
                 path = Path(entry.path)
+                if stat.S_ISLNK(mode) or is_link_or_junction(path):
+                    raise ValueError(f"Directory tree contains symbolic link '{path}'.")
                 if stat.S_ISDIR(mode):
                     yield path
                     pending.append(path)
                 elif stat.S_ISREG(mode):
                     yield path
-                elif stat.S_ISLNK(mode) and stat.S_ISREG(entry.stat().st_mode):
-                    yield path
 
 
 def assert_no_symlinks(root: Path) -> None:
-    """Reject symlinks anywhere in snapshot storage before traversing it."""
+    """Reject symlinks and junctions anywhere in a tree before traversing it."""
     try:
         root_mode = root.lstat().st_mode
     except FileNotFoundError:
         raise
     if not stat.S_ISDIR(root_mode) or is_link_or_junction(root):
-        raise NotADirectoryError(f"Snapshot storage '{root}' is not a real directory.")
+        raise NotADirectoryError(f"Directory tree '{root}' is not a real directory.")
 
     pending = [root]
     while pending:
         current = pending.pop()
         if is_link_or_junction(current):
-            raise ValueError(f"Snapshot storage contains symbolic link '{current}'.")
+            raise ValueError(f"Directory tree contains symbolic link '{current}'.")
         with os.scandir(current) as entries:
             for entry in entries:
                 mode = entry.stat(follow_symlinks=False).st_mode
                 entry_path = Path(entry.path)
                 if stat.S_ISLNK(mode) or is_link_or_junction(entry_path):
-                    raise ValueError(f"Snapshot storage contains symbolic link '{entry.path}'.")
+                    raise ValueError(f"Directory tree contains symbolic link '{entry.path}'.")
                 if stat.S_ISDIR(mode):
                     pending.append(Path(entry.path))

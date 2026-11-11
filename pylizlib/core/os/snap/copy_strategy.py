@@ -19,7 +19,7 @@ from pylizlib.core.os.snap.integrity import (
     assert_manifest_matches,
     validate_integrity_manifest,
 )
-from pylizlib.core.os.snap.storage.tree import is_link_or_junction
+from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, is_link_or_junction
 
 
 class SourceChangedError(RuntimeError):
@@ -34,6 +34,8 @@ class DirectoryCopyStrategy(ABC):
     the method starts. When ``manifest`` is supplied, implementations record
     files as they copy them; when ``expected_manifest`` is supplied, they must
     reject the copy before publishing if any path, type, size, or hash differs.
+    Snapshot trees use one link policy: symlinks and junctions are rejected,
+    never followed or silently omitted.
     """
 
     @abstractmethod
@@ -159,6 +161,9 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
             raise NotADirectoryError(f"Copy source '{source}' is not a directory.")
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
+        # Fail before creating staging if any link, including a dangling one,
+        # could be followed by the copy operation.
+        assert_no_symlinks(source)
         destination.parent.mkdir(parents=True, exist_ok=True)
 
         capture_integrity = manifest is not None or expected_manifest is not None
@@ -170,12 +175,22 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
 
         try:
             destination.mkdir()
-            for source_item in source.iterdir():
-                destination_item = destination / source_item.name
-                if source_item.is_dir():
-                    shutil.copytree(source_item, destination_item, copy_function=session.copy_file)
-                else:
-                    session.copy_file(str(source_item), str(destination_item))
+            with os.scandir(source) as entries:
+                for entry in entries:
+                    source_item = Path(entry.path)
+                    mode = entry.stat(follow_symlinks=False).st_mode
+                    if stat.S_ISLNK(mode) or _is_link_or_junction(source_item):
+                        raise ValueError(f"Directory copy does not accept symbolic links: '{source_item}'.")
+                    destination_item = destination / entry.name
+                    if stat.S_ISDIR(mode):
+                        # Preserve a newly introduced link in staging rather
+                        # than following it; the post-copy tree check rejects it.
+                        shutil.copytree(source_item, destination_item, symlinks=True, copy_function=session.copy_file)
+                    elif stat.S_ISREG(mode):
+                        session.copy_file(str(source_item), str(destination_item))
+                    else:
+                        raise ValueError(f"Directory copy does not accept special file '{source_item}'.")
+            assert_no_symlinks(destination)
             if capture_integrity:
                 assert observed is not None
 
@@ -214,6 +229,7 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
         """Fingerprint source files and directories, rejecting links and special files.
 
         This scan representation is distinct from the persisted integrity manifest."""
+        assert_no_symlinks(root)
         root_mode = root.lstat().st_mode
         if _is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
             raise NotADirectoryError(f"Copy source '{root}' is not a real directory.")
@@ -276,6 +292,7 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
                         assert_manifest_matches(dict(expected_manifest), attempt_manifest or {})
                     if destination.exists() or destination.is_symlink():
                         raise FileExistsError(f"Copy destination '{destination}' was created during copying.")
+                    assert_no_symlinks(staged)
                     staged.rename(destination)
                     if manifest is not None:
                         manifest.clear()
@@ -326,6 +343,7 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
+        assert_no_symlinks(Path(source))
         destination.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".provider_copy_", dir=destination.parent) as temporary_directory:
             staged = Path(temporary_directory) / "copy"
@@ -354,12 +372,16 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
             stable_source = Path(stable_source)
             if _is_link_or_junction(stable_source) or not stable_source.is_dir():
                 raise NotADirectoryError(f"Snapshot provider returned invalid source '{stable_source}'.")
+            assert_no_symlinks(stable_source)
             if observed_manifest is None:
-                return self.delegate.copy_directory(stable_source, destination, progress_callback, message_callback)
-            return self.delegate.copy_directory(
-                stable_source,
-                destination,
-                progress_callback,
-                message_callback,
-                manifest=observed_manifest,
-            )
+                copied = self.delegate.copy_directory(stable_source, destination, progress_callback, message_callback)
+            else:
+                copied = self.delegate.copy_directory(
+                    stable_source,
+                    destination,
+                    progress_callback,
+                    message_callback,
+                    manifest=observed_manifest,
+                )
+            assert_no_symlinks(copied)
+            return copied
