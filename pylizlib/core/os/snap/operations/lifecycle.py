@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.path import remove_directory_or_move_to_temp
+from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.publication import cleanup_after_commit, publish_snapshot_tree
@@ -116,11 +117,8 @@ class SnapshotLifecycle:
         for i, snap_dir in enumerate(self.storage.snapshot.directories):
 
             def dir_progress(copied, total):
-                if progress_callback:
-                    # Calculate overall percentage based on dir index and dir progress
-                    dir_pct = (copied / total) if total > 0 else 1.0
-                    overall_pct = ((i + dir_pct) / total_dirs) * 100
-                    progress_callback(int(overall_pct))
+                """Adapt copy byte counts to the current directory position."""
+                report_directory_progress(progress_callback, i, total_dirs, copied, total)
 
             manifest = {}
             snap_dir.copy_install_to(
