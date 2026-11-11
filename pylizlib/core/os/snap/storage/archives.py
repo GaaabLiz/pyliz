@@ -14,7 +14,7 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
     try:
         zip_path.parent.mkdir(parents=True, exist_ok=True)
         # Complete enumeration before creating any archive in the source tree.
-        entries = list(files)
+        entries = files if isinstance(files, list) else list(files)
         with tempfile.NamedTemporaryFile(dir=zip_path.parent, prefix=".backup_", suffix=".partial", delete=False) as temporary_file:
             temporary_path = Path(temporary_file.name)
         with zipfile.ZipFile(temporary_path, "w", zipfile.ZIP_DEFLATED) as archive:

@@ -17,6 +17,7 @@ Covers every public method of SnapshotCatalogue:
 """
 
 import errno
+import json
 import os
 import shutil
 import unittest
@@ -33,7 +34,9 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
-from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
+from pylizlib.core.os.snap.operations.archives import ASSOCIATED_DIRECTORIES_MANIFEST, SnapshotIncompleteError
+from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from test.core.os.snap.conftest import (
     BACKUP_PATH,
     CATALOGUE_PATH,
@@ -682,6 +685,56 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         self.cat.restore_backup(backup_zip)
         self.assertEqual(target_file.read_text(), original_content)
 
+    def test_associated_backup_contains_identity_path_and_index_manifest(self):
+        snap = make_snapshot("RestoreADManifest", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        archive_path = mgr.create_backup(BACKUP_PATH, "manifest", BackupType.ASSOCIATED_DIRECTORIES)
+
+        with zipfile.ZipFile(archive_path) as archive:
+            manifest = json.loads(archive.read(ASSOCIATED_DIRECTORIES_MANIFEST))
+
+        association = snap.directories[0]
+        self.assertEqual(manifest["format"], "pyliz-associated-directories")
+        self.assertEqual(manifest["version"], 1)
+        self.assertEqual(manifest["snapshot_id"], snap.id)
+        self.assertEqual(
+            manifest["associations"],
+            [
+                {
+                    "folder_id": association.folder_id,
+                    "index": association.index,
+                    "directory_name": association.directory_name,
+                    "original_path": Path(association.original_path).absolute().as_posix(),
+                }
+            ],
+        )
+
+    def test_associated_restore_uses_archived_mapping_after_current_metadata_changes(self):
+        snap = make_snapshot("RestoreADMetadataChanged", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        archive_path = mgr.create_backup(BACKUP_PATH, "captured", BackupType.ASSOCIATED_DIRECTORIES)
+        association = snap.directories[0]
+        original_path = Path(association.original_path)
+        archived_file = original_path / "br1_file.txt"
+        archived_content = archived_file.read_text()
+
+        changed_path = TEST_LOCAL_ROOT / "association_moved_after_backup"
+        changed_path.mkdir()
+        (changed_path / "current.txt").write_text("current metadata destination")
+        association.index = 8
+        association.original_path = str(changed_path)
+        association._set_storage_name("renamed_storage_after_backup")
+        SnapshotSerializer.to_json(snap, mgr.path_snapshot_json)
+        archived_file.write_text("live directory changed")
+
+        self.cat.restore_backup(archive_path)
+
+        self.assertEqual(archived_file.read_text(), archived_content)
+        self.assertEqual((changed_path / "current.txt").read_text(), "current metadata destination")
+        self.assertFalse((changed_path / "br1_file.txt").exists())
+
     def test_restore_backup_raises_on_unknown_type(self):
         unknown_zip = BACKUP_PATH / "unknown_backup.zip"
         with zipfile.ZipFile(unknown_zip, "w") as zf:
@@ -689,15 +742,72 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cat.restore_backup(unknown_zip)
 
-    def test_restore_backup_ad_raises_when_snapshot_missing(self):
+    def test_restore_backup_ad_is_self_contained_when_snapshot_missing(self):
         snap = make_snapshot("RestoreADMissing", self._src, n=1)
         self.cat.add(snap)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
         mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
         backup_zip = sorted(BACKUP_PATH.glob("*_*_ad_*.zip"))[-1]
+        target_file = Path(snap.directories[0].original_path) / "br1_file.txt"
+        original_content = target_file.read_text()
         shutil.rmtree(CATALOGUE_PATH / snap.id)
-        with self.assertRaises(ValueError):
-            self.cat.restore_backup(backup_zip)
+        target_file.write_text("changed after backup")
+
+        self.cat.restore_backup(backup_zip)
+
+        self.assertEqual(target_file.read_text(), original_content)
+        self.assertFalse((CATALOGUE_PATH / snap.id).exists())
+        self.assertFalse((CATALOGUE_PATH / ".pyliz_transactions").exists())
+
+    def test_restore_backup_ad_can_remap_destinations_by_association_id(self):
+        snap = make_snapshot("RestoreADMapped", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        backup_zip = mgr.create_backup(BACKUP_PATH, "mapped", BackupType.ASSOCIATED_DIRECTORIES)
+        source = Path(snap.directories[0].original_path)
+        source_file = source / "br1_file.txt"
+        archived_content = source_file.read_text()
+        source_file.write_text("keep the moved source unchanged")
+        shutil.rmtree(CATALOGUE_PATH / snap.id)
+
+        destination = TEST_LOCAL_ROOT / "mapped_associated_directory"
+        destination.mkdir()
+        (destination / "old.txt").write_text("replace this directory")
+        self.cat.restore_backup_with_mapping(backup_zip, {snap.directories[0].folder_id: destination})
+
+        self.assertEqual((destination / "br1_file.txt").read_text(), archived_content)
+        self.assertFalse((destination / "old.txt").exists())
+        self.assertEqual(source_file.read_text(), "keep the moved source unchanged")
+        self.assertFalse((CATALOGUE_PATH / snap.id).exists())
+
+    def test_standalone_associated_restore_journal_recovers_an_interrupted_swap(self):
+        destination = TEST_LOCAL_ROOT / "standalone_restore_recovery"
+        destination.mkdir()
+        (destination / "old.txt").write_text("old data")
+        journal = SnapshotTransactionJournal.begin(CATALOGUE_PATH, "restore_associations_manifest", {"entries": []})
+        staged = destination.with_name(f"{destination.name}_staging_crash")
+        staged.mkdir()
+        (staged / "new.txt").write_text("new data")
+        backup = destination.with_name(f"{destination.name}_bck_crash")
+        journal.update_payload(
+            entries=[
+                {
+                    "folder_id": "crash-association",
+                    "stage": staged.as_posix(),
+                    "destination": destination.as_posix(),
+                    "backup": backup.as_posix(),
+                    "had_original": True,
+                }
+            ]
+        )
+        rename_and_sync(destination, backup)
+
+        recovered = recover_pending_transactions(CATALOGUE_PATH)
+
+        self.assertEqual(recovered, ["restore_associations_manifest"])
+        self.assertEqual((destination / "old.txt").read_text(), "old data")
+        self.assertFalse((destination / "new.txt").exists())
+        self.assertFalse((CATALOGUE_PATH / ".pyliz_transactions").exists())
 
 
 class TestSnapshotCatalogueCoverage(unittest.TestCase):

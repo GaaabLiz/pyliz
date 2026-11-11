@@ -56,6 +56,14 @@ originali mancanti e `unexpected_entries` le voci dell'archivio senza
 corrispondenza. Il ripristino controlla l'insieme completo prima di modificare
 le destinazioni.
 
+I nuovi backup AD includono `.pyliz_ad_manifest.json` con ID, indice, nome
+interno e percorso originario di ogni associazione. Possono essere ripristinati
+anche dopo aver eliminato lo snapshot dal catalogo. Per cambiare destinazione,
+`SnapshotCatalogue.restore_backup_with_mapping(zip_path, {folder_id: path})`
+accetta una mappa dagli ID persistenti delle associazioni ai nuovi percorsi; le
+associazioni non indicate mantengono il percorso salvato nell'archivio. I vecchi
+backup AD senza manifest continuano a richiedere i metadati dello snapshot.
+
 `utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
 implementazioni interne usano direttamente i moduli responsabili, evitando di
 passare dall'esportazione aggregata di `snap.__init__`.
