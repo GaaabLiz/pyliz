@@ -239,6 +239,10 @@ class SnapshotManager:
 
         Returns:
             The path of the verified, published archive.
+
+        Raises:
+            SnapshotIncompleteError: If an associated-directory backup is missing
+                one or more source folders. Inspect ``missing_folders``.
         """
         return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
 

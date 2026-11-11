@@ -37,6 +37,7 @@ from pylizlib.core.os.snap.domain import (
 )
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
+from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.utils import SnapshotUtils
 from test.core.os.snap.conftest import (
@@ -860,6 +861,22 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         association_root = snap.directories[0].directory_name
         self.assertIn(f"{association_root}/", names)
         self.assertIn(f"{association_root}/nested_empty/", names)
+
+    def test_associated_directory_backup_reports_missing_or_non_directory_sources_without_publishing(self):
+        snap = make_snapshot("MissingAssocBackup", self._src[:2], n=2)
+        mgr = self._mgr(snap)
+        mgr.create()
+        expected_missing = [association.original_path for association in snap.directories]
+        shutil.rmtree(self._src[0])
+        self._src[0].write_text("not a directory")
+        shutil.rmtree(self._src[1])
+
+        with self.assertRaises(SnapshotIncompleteError) as ctx:
+            mgr.create_backup(BACKUP_PATH, "missing_association", BackupType.ASSOCIATED_DIRECTORIES)
+
+        self.assertEqual(ctx.exception.missing_folders, expected_missing)
+        self.assertEqual(ctx.exception.unexpected_entries, [])
+        self.assertEqual(list(BACKUP_PATH.glob("*.zip")), [])
 
     def test_failed_backup_preserves_existing_archive_and_removes_partial_file(self):
         snap = make_snapshot("AtomicBackup", self._src, n=1)

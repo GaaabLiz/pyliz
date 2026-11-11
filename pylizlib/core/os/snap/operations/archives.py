@@ -22,6 +22,27 @@ from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJourna
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
 
+class SnapshotIncompleteError(ValueError):
+    """Raised when an associated-directory backup or restore is incomplete.
+
+    ``missing_folders`` contains original paths that could not be backed up or
+    restored. ``unexpected_entries`` contains top-level archive entries that
+    do not match any association in the snapshot metadata.
+    """
+
+    def __init__(self, operation: str, missing_folders=(), unexpected_entries=()):
+        """Store precise missing and unexpected entries for programmatic callers."""
+        self.operation = operation
+        self.missing_folders = list(missing_folders)
+        self.unexpected_entries = list(unexpected_entries)
+        details = []
+        if self.missing_folders:
+            details.append("missing folders: " + ", ".join(self.missing_folders))
+        if self.unexpected_entries:
+            details.append("unexpected entries: " + ", ".join(self.unexpected_entries))
+        super().__init__(f"{operation} is incomplete ({'; '.join(details)}).")
+
+
 class SnapshotArchiveService:
     """Build and verify ZIP backups of one stored snapshot or its live copies."""
 
@@ -42,6 +63,10 @@ class SnapshotArchiveService:
 
         Returns:
             The path of the verified, published archive.
+
+        Raises:
+            SnapshotIncompleteError: If any associated source folder is missing or
+                ceases to be readable as a directory during enumeration.
         """
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
@@ -67,18 +92,37 @@ class SnapshotArchiveService:
     def _files_to_archive(self, backup_type: BackupType):
         """Enumerate stored or live files using their distinct existing link policies."""
         if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-            for d in self.storage.snapshot.directories:
-                folder = Path(d.original_path)
+            sources = []
+            missing_folders = []
+            for association in self.storage.snapshot.directories:
+                folder = Path(association.original_path)
                 try:
                     mode = folder.stat().st_mode
-                except FileNotFoundError:
-                    # A missing installation target has no data to protect.
+                except (FileNotFoundError, NotADirectoryError):
+                    missing_folders.append(association.original_path)
                     continue
                 if not stat.S_ISDIR(mode):
-                    raise NotADirectoryError(f"Backup source '{folder}' is not a directory.")
-                yield folder, Path(d.directory_name)
-                for tree_entry in iter_tree_entries_strict(folder):
-                    yield tree_entry, Path(d.directory_name) / tree_entry.relative_to(folder)
+                    missing_folders.append(association.original_path)
+                    continue
+                sources.append((association, folder))
+
+            if missing_folders:
+                raise SnapshotIncompleteError("Associated-directory backup", missing_folders)
+
+            # Enumerate every source before yielding any member to the ZIP writer.
+            entries = []
+            for association, folder in sources:
+                entries.append((folder, Path(association.directory_name)))
+                try:
+                    for tree_entry in iter_tree_entries_strict(folder):
+                        entries.append((tree_entry, Path(association.directory_name) / tree_entry.relative_to(folder)))
+                except (FileNotFoundError, NotADirectoryError):
+                    missing_folders.append(association.original_path)
+
+            if missing_folders:
+                raise SnapshotIncompleteError("Associated-directory backup", missing_folders)
+
+            yield from entries
         else:
             snapshot_root = self.storage.root_path()
             assert_no_symlinks(snapshot_root)
@@ -151,6 +195,8 @@ class CatalogueBackupService:
         Raises:
             ValueError: If the archive path is invalid, backup naming is not recognized,
                         or the restore cannot be performed.
+            SnapshotIncompleteError: If any expected associated directory is missing
+                from an associated-directories archive. Inspect ``missing_folders``.
             IOError: If extraction fails.
         """
         recover_pending_transactions(self.path_catalogue)
@@ -230,18 +276,24 @@ class CatalogueBackupService:
         recover_storage_transactions(storage)
 
         dir_name_to_assoc: dict[str, SnapDirAssociation] = {assoc.directory_name: assoc for assoc in snapshot.directories}
+        extracted_entries = sorted(temp_dir_path.iterdir(), key=lambda entry: entry.name)
+        extracted_by_name = {entry.name: entry for entry in extracted_entries}
+        missing_folders = [
+            association.original_path
+            for association in snapshot.directories
+            if association.directory_name not in extracted_by_name or not extracted_by_name[association.directory_name].is_dir()
+        ]
+        unexpected_entries = [entry.name for entry in extracted_entries if entry.name not in dir_name_to_assoc or not entry.is_dir()]
 
-        # Preflight: collect all targets and validate unambiguously
+        if not snapshot.directories and not extracted_entries:
+            raise ValueError("No associated directories were restored from the backup archive.")
+        if missing_folders or unexpected_entries:
+            raise SnapshotIncompleteError("Associated-directories restore", missing_folders, unexpected_entries)
+
+        # Preflight the complete set before creating a journal or staging files.
         tasks = []
-        for extracted_dir in temp_dir_path.iterdir():
-            if not extracted_dir.is_dir():
-                continue
-
-            candidate = dir_name_to_assoc.get(extracted_dir.name)
-            if not candidate:
-                logger.warning(f"No matching associated directory found for backup folder '{extracted_dir.name}'. Skipping.")
-                continue
-
+        for candidate in snapshot.directories:
+            extracted_dir = extracted_by_name[candidate.directory_name]
             destination = Path(os.path.abspath(candidate.original_path))
             backup_dest = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
             try:
@@ -250,9 +302,6 @@ class CatalogueBackupService:
             except FileNotFoundError:
                 had_original = False
             tasks.append(RestoreReplacement(candidate.folder_id, extracted_dir, destination, backup_dest, had_original))
-
-        if not tasks:
-            raise ValueError("No associated directories were restored from the backup archive.")
 
         journal = SnapshotTransactionJournal.begin(snapshot_root, "restore_associations", {"entries": []})
         try:

@@ -33,6 +33,7 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
+from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
 from test.core.os.snap.conftest import (
     BACKUP_PATH,
     CATALOGUE_PATH,
@@ -845,8 +846,10 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("dummy.txt", "x")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SnapshotIncompleteError) as ctx:
             self.cat.restore_backup(zip_path)
+        self.assertEqual(ctx.exception.missing_folders, [snap.directories[0].original_path])
+        self.assertEqual(ctx.exception.unexpected_entries, ["dummy.txt"])
 
     def test_restore_backup_ad_unmatched_dir(self):
         # coverage for 191-194
@@ -857,9 +860,33 @@ class TestSnapshotCatalogueCoverage(unittest.TestCase):
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("unmatched_dir/file.txt", "x")
 
-        with self.assertRaises(ValueError) as ctx:
+        with self.assertRaises(SnapshotIncompleteError) as ctx:
             self.cat.restore_backup(zip_path)
-        self.assertIn("No associated directories were restored", str(ctx.exception))
+        self.assertEqual(ctx.exception.missing_folders, [snap.directories[0].original_path])
+        self.assertEqual(ctx.exception.unexpected_entries, ["unmatched_dir"])
+
+    def test_restore_backup_ad_reports_missing_associations_before_modifying_destinations(self):
+        sources = create_source_dirs(SOURCE_DATA_PATH, ["partial_restore_one", "partial_restore_two"])
+        snap = make_snapshot("RestoreADIncomplete", sources, n=2)
+        self.cat.add(snap)
+        destinations = [Path(association.original_path) for association in snap.directories]
+        for index, destination in enumerate(destinations):
+            (destination / "keep.txt").write_text(f"original {index}")
+
+        zip_path = BACKUP_PATH / f"backup_pref_{snap.id}_ad_20230101_120000.zip"
+        present_association = snap.directories[0]
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr(f"{present_association.directory_name}/", "")
+            archive.writestr(f"{present_association.directory_name}/replacement.txt", "archive data")
+
+        with self.assertRaises(SnapshotIncompleteError) as ctx:
+            self.cat.restore_backup(zip_path)
+
+        self.assertEqual(ctx.exception.missing_folders, [snap.directories[1].original_path])
+        self.assertEqual(ctx.exception.unexpected_entries, [])
+        for index, destination in enumerate(destinations):
+            self.assertEqual((destination / "keep.txt").read_text(), f"original {index}")
+            self.assertFalse((destination / "replacement.txt").exists())
 
     def test_restore_backup_ad_restore_items(self):
         # coverage for 206, 213, 220
