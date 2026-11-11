@@ -298,3 +298,76 @@ def test_strategy_contract_rejects_wrong_manifest_without_publishing_or_mutating
         strategies[kind].copy_directory(source, tmp_path / "rejected", manifest=output, expected_manifest=expected)
     assert output == {"unchanged": {"marker": True}}
     assert not (tmp_path / "rejected").exists()
+
+
+def test_partial_update_resolves_writer_after_read_hook():
+    """An inherited read hook may select the writer used for its subsequent update."""
+    from pathlib import Path
+
+    from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+    calls = []
+
+    class SwitchingSerializer(SnapshotSerializer):
+        """Select an in-memory writer while reading, as the public hooks allow."""
+
+        @classmethod
+        def read_text(cls, path):
+            """Install the final writer before returning the metadata object."""
+            cls.write_text = staticmethod(lambda path, contents: calls.append(contents))
+            return '{}'
+
+        @classmethod
+        def write_text(cls, path, contents):
+            """Record incorrect early writer resolution as an observable failure."""
+            raise AssertionError("writer resolved before read")
+
+    SwitchingSerializer.update_field(Path("unused"), "field", "value")
+    assert calls == ['{\n    "field": "value"\n}']
+
+
+def test_full_serialization_resolves_writer_after_validation_hook():
+    """Validation runs before resolving the public writer used for full saves."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+    snapshot = Snapshot("id", "name", "")
+    validate = snapshot.validate
+    written = []
+
+    def validate_and_select_writer():
+        """Choose a writer while validating without altering the snapshot data."""
+        validate()
+        SnapshotSerializer.write_text = lambda path, contents: written.append(contents)
+
+    with patch.object(SnapshotSerializer, "write_text") as original_writer:
+        with patch.object(snapshot, "validate", side_effect=validate_and_select_writer):
+            SnapshotSerializer.to_json(snapshot, Path("unused"))
+        original_writer.assert_not_called()
+    assert len(written) == 1
+    assert '"id": "id"' in written[0]
+
+
+def test_full_serialization_resolves_converter_after_validation_hook():
+    """A validation hook can replace the fallback converter before JSON encoding."""
+    import json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+    snapshot = Snapshot("id", "name", "")
+    validate = snapshot.validate
+
+    def select_converter():
+        """Select a custom conversion after the normal domain checks."""
+        validate()
+        SnapshotSerializer._converter = lambda value: "selected-after-validation"
+
+    with patch.object(SnapshotSerializer, "_converter"):
+        with patch.object(snapshot, "validate", side_effect=select_converter):
+            with patch.object(SnapshotSerializer, "write_text") as write:
+                SnapshotSerializer.to_json(snapshot, Path("unused"))
+    assert json.loads(write.call_args.args[1])["date_created"] == "selected-after-validation"

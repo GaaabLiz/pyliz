@@ -70,7 +70,9 @@ class SnapshotSerializer:
             snapshot: The Snapshot object to serialize.
             path: The file path where the JSON data will be saved.
         """
-        SnapshotSerializer.write_text(path, SnapshotJsonCodec.encode(snapshot, SnapshotSerializer._converter))
+        data_dict = SnapshotJsonCodec.snapshot_data(snapshot)
+        json_str = SnapshotJsonCodec.encode_data(data_dict, SnapshotSerializer._converter)
+        SnapshotSerializer.write_text(path, json_str)
 
     @classmethod
     def from_json(cls, filepath: Path) -> Snapshot:
@@ -93,4 +95,6 @@ class SnapshotSerializer:
             new_value: The new value for the field.
         """
         # Read existing data from the JSON file
-        cls.write_text(filepath, SnapshotJsonCodec.update_field(cls.read_text(filepath), field_name, new_value, cls._converter))
+        data = SnapshotJsonCodec.updated_data(cls.read_text(filepath), field_name, new_value)
+        json_str = SnapshotJsonCodec.encode_data(data, cls._converter)
+        cls.write_text(filepath, json_str)
