@@ -13,19 +13,23 @@ PATH_DEFAULT_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 def is_critical_system_path(path: str | Path) -> bool:
     """
-    Check if a path is a critical system directory to prevent accidental recursive deletion.
+    Check whether a path is critical, failing closed when it cannot be resolved.
     """
     try:
         p = Path(path).resolve(strict=False)
     except Exception:
-        return False
+        return True
 
     # Block root directories (e.g., /, C:\)
     if p == p.parent:
         return True
 
     # Block the home directory itself
-    if p == Path.home().resolve(strict=False):
+    try:
+        home = Path.home().resolve(strict=False)
+    except Exception:
+        return True
+    if p == home:
         return True
 
     # Block critical system paths and everything inside them
@@ -45,10 +49,11 @@ def is_critical_system_path(path: str | Path) -> bool:
 
     for cp in critical_bases:
         try:
-            if p == cp.resolve(strict=False) or p.is_relative_to(cp.resolve(strict=False)):
+            resolved_base = cp.resolve(strict=False)
+            if p == resolved_base or p.is_relative_to(resolved_base):
                 return True
-        except ValueError:
-            pass
+        except Exception:
+            return True
 
     return False
 

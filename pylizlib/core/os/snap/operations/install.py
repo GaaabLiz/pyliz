@@ -12,6 +12,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
+from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.transactions import (
     SnapshotTransactionJournal,
@@ -20,7 +21,6 @@ from pylizlib.core.os.snap.storage.transactions import (
     rename_and_sync,
 )
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
-from pylizlib.core.os.utils import is_critical_system_path
 
 
 class SnapshotInstallMetadataError(RuntimeError):
@@ -86,12 +86,15 @@ class SnapshotInstaller:
         """
         self.storage.snapshot.validate()
         self.storage.root_path()
-        recover_storage_transactions(self.storage)
-        import platform
         import sys
 
-        if self.storage.snapshot.os_created and self.storage.snapshot.os_created != platform.system():
-            raise RuntimeError(f"Cannot install snapshot: created on {self.storage.snapshot.os_created}, but current OS is {platform.system()}.")
+        validate_destructive_destinations(
+            [(association.folder_id, association.original_path) for association in self.storage.snapshot.directories],
+            catalogue_path=self.storage.path_catalogue,
+            origin_os=self.storage.snapshot.os_created,
+            operation="install snapshot",
+        )
+        recover_storage_transactions(self.storage)
 
         if enable_everyone_full_control and sys.platform == "win32":
             try:
@@ -187,12 +190,15 @@ class SnapshotInstaller:
             ExceptionGroup: If any target could not be removed. Other targets
                             are still attempted, and metadata is left unchanged.
         """
+        validate_destructive_destinations(
+            [(association.folder_id, association.original_path) for association in self.storage.snapshot.directories],
+            catalogue_path=self.storage.path_catalogue,
+            origin_os=self.storage.snapshot.os_created if self.storage.snapshot.directories else None,
+            operation="remove installed copies",
+        )
         failures = []
         for dir_assoc in self.storage.snapshot.directories:
             install_path = Path(dir_assoc.original_path)
-
-            if is_critical_system_path(install_path):
-                raise ValueError(f"Cannot remove installed copy at '{install_path}': it is a critical system path.")
 
             try:
                 try:
@@ -212,29 +218,13 @@ class SnapshotInstaller:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
 
     def _preflight(self) -> None:
-        """Validate sources, disjoint destinations and manifests before copying."""
-        targets = [
-            (association, Path(association.original_path).resolve(strict=False))
-            for association in self.storage.snapshot.directories
-        ]
-        for index, (association, target) in enumerate(targets):
-            for other_association, other_target in targets[index + 1 :]:
-                if target.is_relative_to(other_target) or other_target.is_relative_to(target):
-                    raise ValueError(
-                        "Snapshot installation destinations cannot be coincident or nested: "
-                        f"'{association.original_path}' ({association.folder_id}) and "
-                        f"'{other_association.original_path}' ({other_association.folder_id})."
-                    )
-
+        """Validate stored sources and manifests before copying."""
         # Preflight
         for dir_assoc in self.storage.snapshot.directories:
             source_dir = self.storage.child_path(dir_assoc.directory_name)
             if not source_dir.exists() or not source_dir.is_dir():
                 raise FileNotFoundError(f"Source directory '{source_dir}' does not exist inside the snapshot.")
             assert_no_symlinks(source_dir)
-            install_location = Path(dir_assoc.original_path)
-            if is_critical_system_path(install_location):
-                raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
             if dir_assoc.integrity_manifest is None:
                 if not self.storage.settings.allow_unverified_legacy_snapshots:
                     raise SnapshotIntegrityError(f"Snapshot association '{dir_assoc.folder_id}' has no integrity manifest; refusing unverified installation.")

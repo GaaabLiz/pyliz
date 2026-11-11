@@ -714,6 +714,39 @@ class TestSnapshotManagerInstall(unittest.TestCase):
             mgr.remove_installed_copies()
         self.assertIn("critical system path", str(ctx.exception))
 
+    def test_remove_preflights_all_paths_before_deleting_any_copy(self):
+        safe_path = TEST_LOCAL_ROOT / "safe_copy_before_critical"
+        safe_path.mkdir(parents=True)
+        (safe_path / "keep.txt").write_text("keep")
+        snap = Snapshot(
+            id=gen_random_string(8),
+            name="BulkCriticalRemoval",
+            desc="",
+            directories=[
+                SnapDirAssociation(index=1, original_path=str(safe_path), folder_id="safe-removal"),
+                SnapDirAssociation(index=2, original_path="/usr/bin/test", folder_id="critical-removal"),
+            ],
+        )
+        mgr = self._mgr(snap)
+
+        with self.assertRaisesRegex(ValueError, "critical system path"):
+            mgr.remove_installed_copies()
+
+        self.assertEqual((safe_path / "keep.txt").read_text(), "keep")
+
+    def test_install_rejects_destinations_overlapping_catalogue(self):
+        snap = make_snapshot("InstallCatalogueOverlap", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        internal_copy = mgr.path_snapshot / snap.directories[0].directory_name
+        snap.directories[0].original_path = str(internal_copy / "would_replace_catalogue_data")
+
+        with self.assertRaisesRegex(ValueError, "overlaps the snapshot catalogue"):
+            mgr.install()
+
+        self.assertTrue((internal_copy / "i1_file.txt").is_file())
+        self.assertFalse((mgr.path_snapshot / ".pyliz_transactions").exists())
+
     def test_install_blocks_critical_paths(self):
         snap = Snapshot(
             id=gen_random_string(8),

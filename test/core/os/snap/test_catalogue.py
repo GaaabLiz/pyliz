@@ -19,6 +19,7 @@ Covers every public method of SnapshotCatalogue:
 import errno
 import json
 import os
+import platform
 import shutil
 import unittest
 import zipfile
@@ -696,8 +697,9 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
 
         association = snap.directories[0]
         self.assertEqual(manifest["format"], "pyliz-associated-directories")
-        self.assertEqual(manifest["version"], 1)
+        self.assertEqual(manifest["version"], 2)
         self.assertEqual(manifest["snapshot_id"], snap.id)
+        self.assertEqual(manifest["os_created"], snap.os_created)
         self.assertEqual(
             manifest["associations"],
             [
@@ -779,6 +781,38 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         self.assertFalse((destination / "old.txt").exists())
         self.assertEqual(source_file.read_text(), "keep the moved source unchanged")
         self.assertFalse((CATALOGUE_PATH / snap.id).exists())
+
+    def test_restore_backup_ad_rejects_critical_and_catalogue_destinations(self):
+        snap = make_snapshot("RestoreADUnsafeDestination", self._src, n=1)
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        backup_zip = mgr.create_backup(BACKUP_PATH, "unsafe_destination", BackupType.ASSOCIATED_DIRECTORIES)
+        source_file = Path(snap.directories[0].original_path) / "br1_file.txt"
+        original_content = source_file.read_text()
+        association_id = snap.directories[0].folder_id
+
+        for destination in (Path("/usr/bin"), CATALOGUE_PATH):
+            with self.subTest(destination=destination):
+                with self.assertRaises(ValueError):
+                    self.cat.restore_backup_with_mapping(backup_zip, {association_id: destination})
+
+        self.assertEqual(source_file.read_text(), original_content)
+        self.assertFalse((CATALOGUE_PATH / ".pyliz_transactions").exists())
+
+    def test_restore_backup_ad_rejects_a_different_origin_operating_system(self):
+        snap = make_snapshot("RestoreADOtherOS", self._src, n=1)
+        snap.os_created = "DifferentOS"
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        backup_zip = mgr.create_backup(BACKUP_PATH, "other_os", BackupType.ASSOCIATED_DIRECTORIES)
+        source_file = Path(snap.directories[0].original_path) / "br1_file.txt"
+        original_content = source_file.read_text()
+
+        with self.assertRaisesRegex(RuntimeError, f"current OS is {platform.system()}"):
+            self.cat.restore_backup(backup_zip)
+
+        self.assertEqual(source_file.read_text(), original_content)
+        self.assertFalse((CATALOGUE_PATH / ".pyliz_transactions").exists())
 
     def test_standalone_associated_restore_journal_recovers_an_interrupted_swap(self):
         destination = TEST_LOCAL_ROOT / "standalone_restore_recovery"
