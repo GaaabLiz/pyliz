@@ -803,12 +803,14 @@ def test_search_only_requires_path_lookup_and_cancels_on_false_identity(tmp_path
     assert len(results) == expected_count
 
 
-def test_shared_search_matcher_keeps_case_sensitive_names_and_extensions(tmp_path):
-    """Extracting matching does not normalize query text or file suffixes."""
+def test_search_matching_keeps_query_case_and_normalizes_extensions(tmp_path):
+    """Search queries remain case-sensitive while extension filters do not."""
     _, snapshot, manager = stored_snapshot(tmp_path)
     searcher = api.SnapshotSearcher(api.SnapshotCatalogue(manager.path_catalogue))
     assert searcher.search(snapshot, api.SnapshotSearchParams("STORED")) == []
-    assert searcher.search(snapshot, api.SnapshotSearchParams("stored", extensions=[".TXT"])) == []
+    result = searcher.search(snapshot, api.SnapshotSearchParams("stored", extensions=[".TXT"]))
+    assert len(result) == 1
+    assert result[0].line_content == "stored"
     params = api.SnapshotSearchParams("VALUE", search_target=api.SearchTarget.FILE_NAME)
     assert searcher.search(snapshot, params) == []
 
