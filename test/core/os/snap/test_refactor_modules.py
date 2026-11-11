@@ -119,3 +119,51 @@ def test_extracted_paths_reject_non_component_and_contain_child(tmp_path):
     with pytest.raises(ValueError):
         get_snapshot_path("../escape", tmp_path)
     assert get_snapshot_child_path("id", tmp_path, "metadata.json") == tmp_path / "id" / "metadata.json"
+
+
+def test_json_codec_round_trip_preserves_format_and_legacy_default():
+    """In-memory conversion retains field ordering, indentation and OS fallback."""
+    import json
+    import platform
+
+    from pylizlib.core.os.snap.storage.metadata import SnapshotJsonCodec
+
+    snapshot = Snapshot("id", "name", "", date_created=datetime(2020, 1, 2))
+    encoded = SnapshotJsonCodec.encode(snapshot)
+    assert encoded.startswith('{\n    "id": "id",')
+    data = json.loads(encoded)
+    assert data["date_created"] == "2020-01-02T00:00:00"
+    data.pop("os_created")
+    decoded = SnapshotJsonCodec.decode(json.dumps(data))
+    assert decoded.os_created == platform.system()
+    assert decoded.date_created == snapshot.date_created
+
+
+def test_serializer_keeps_subclass_text_and_converter_hooks():
+    """Partial updates still use subclass I/O and conversion instead of files."""
+    from pathlib import Path
+
+    from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+    class InMemorySerializer(SnapshotSerializer):
+        """Minimal in-memory adapter exercising inherited serializer hooks."""
+
+        result = None
+
+        @classmethod
+        def read_text(cls, path):
+            """Provide an extensible object without opening a real file."""
+            return '{"extension": 1}'
+
+        @classmethod
+        def write_text(cls, path, contents):
+            """Capture the raw encoded object produced by partial update."""
+            cls.result = contents
+
+        @staticmethod
+        def _converter(value):
+            """Demonstrate the per-subclass fallback conversion hook."""
+            return "custom"
+
+    InMemorySerializer.update_field(Path("unused"), "new", object())
+    assert InMemorySerializer.result == '{\n    "extension": 1,\n    "new": "custom"\n}'
