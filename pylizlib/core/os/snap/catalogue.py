@@ -74,6 +74,8 @@ class SnapshotCatalogue:
         Raises:
             ValueError: If the archive path is invalid, backup naming is not recognized,
                         or the restore cannot be performed.
+            SnapshotIncompleteError: If an associated-directories backup is missing
+                expected folders. Inspect ``missing_folders`` and ``unexpected_entries``.
             IOError: If extraction fails.
         """
         self._backups().restore_backup(backup_zip_path)
@@ -209,6 +211,10 @@ class SnapshotCatalogue:
         Args:
             snap_id: The ID of the snapshot to export.
             destination_path: The folder where the exported zip file will be saved.
+
+        Raises:
+            SnapshotIncompleteError: If any associated source folder is missing.
+                Inspect ``missing_folders``.
         """
         snap = self._require_snapshot(snap_id)
 

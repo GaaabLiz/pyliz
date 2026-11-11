@@ -49,6 +49,13 @@ precedenti temporanee per il recupero; il merge non crea sempre copie di backup.
 Un adapter alternativo dovrebbe esporre `published` e
 `durability_confirmed` sulle eccezioni di scrittura post-pubblicazione.
 
+I backup e i ripristini delle directory associate richiedono che tutte le
+associazioni siano presenti. Se manca una sorgente o una cartella nell'archivio,
+viene sollevata `SnapshotIncompleteError`; `missing_folders` contiene i percorsi
+originali mancanti e `unexpected_entries` le voci dell'archivio senza
+corrispondenza. Il ripristino controlla l'insieme completo prima di modificare
+le destinazioni.
+
 `utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
 implementazioni interne usano direttamente i moduli responsabili, evitando di
 passare dall'esportazione aggregata di `snap.__init__`.
