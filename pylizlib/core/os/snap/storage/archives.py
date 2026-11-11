@@ -21,6 +21,9 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
             for source, archive_name in entries:
                 if message_callback:
                     message_callback(f"Archiviazione: {source.name}")
+                archive_name = Path(archive_name).as_posix()
+                if source.is_dir() and not archive_name.endswith("/"):
+                    archive_name += "/"
                 archive.write(source, arcname=archive_name)
         # Reopen after close: finalization can fail, and each member must
         # pass its CRC check before the normal filename becomes visible.
