@@ -40,6 +40,13 @@ fallisce dopo la rinomina, `MetadataDurabilityError.published` distingue il
 JSON già visibile da una scrittura non pubblicata. Su SMB/NFS un `fsync`
 completato è comunque soltanto la conferma del sistema/server: la libreria non
 può attestare che il server abbia persistito i byte su supporto stabile.
+`SnapshotManager.install()` segnala con `SnapshotInstallMetadataError` un errore
+di `date_last_used` dopo il commit dei dati. L'eccezione indica che le directory
+sono già state installate, espone `metadata_published` (True, False o None se
+l'adapter non può determinarlo). In modalità sostituzione lascia le copie
+precedenti temporanee per il recupero; il merge non crea sempre copie di backup.
+Un adapter alternativo dovrebbe esporre `published` e
+`durability_confirmed` sulle eccezioni di scrittura post-pubblicazione.
 
 `utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
 implementazioni interne usano direttamente i moduli responsabili, evitando di
@@ -81,9 +88,9 @@ universale che aggiunga garanzie nuove ai flussi storici.
 | Flusso | Ordine e limite da conservare |
 |---|---|
 | Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. |
-| Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; al fallimento del salvataggio ripristinare anche i byte JSON originali. |
+| Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; se la pubblicazione JSON non avviene, ripristinare directory, byte e modello. Se avviene ma il flush fallisce, mantenere il nuovo stato e conservare le directory rimosse ancora nello staging. |
 | Sincronizzazione | Preparare tutte le copie, sostituire, aggiornare dimensioni/manifest e salvare; ripristinare copie e metadati in memoria secondo il protocollo esistente. |
-| Installazione | Verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo la transazione sui contenuti. |
+| Installazione | Verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo il commit dei contenuti. Un errore di metadati viene distinto dal fallimento dell'installazione e conserva le copie precedenti. |
 | Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo o un rollback nuovo. |
 | Restore `_ad` | Ripristinare sequenzialmente le associazioni riconosciute; non equipararlo all'installazione. |
 | Pulizia dopo commit | Registrare gli errori e proseguire, senza riattivare il rollback di dati già pubblicati. |
