@@ -6,6 +6,7 @@ from pathlib import Path
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import Snapshot, SnapshotSettings
 from pylizlib.core.os.snap.storage.metadata import get_snapshot_from_path
+from pylizlib.core.os.snap.storage.paths import get_snapshot_path
 from pylizlib.core.os.snap.storage.transactions import TRANSACTION_DIRECTORY
 
 
@@ -17,6 +18,24 @@ def _is_operational_directory(name: str) -> bool:
         or "_staging_" in name
         or "_bck_" in name
     )
+
+
+def read_snapshot_by_id(path_catalogue: Path, snap_id: str, settings: SnapshotSettings) -> Snapshot | None:
+    """Load one published snapshot directly, without scanning the catalogue."""
+    if not isinstance(snap_id, str) or not snap_id or _is_operational_directory(snap_id):
+        return None
+    try:
+        snapshot_path = get_snapshot_path(snap_id, path_catalogue)
+        if not snapshot_path.is_dir():
+            return None
+        snapshot = get_snapshot_from_path(snapshot_path, settings.json_filename)
+        if snapshot is None or snapshot.id != snap_id:
+            logger.error(f"Skipping snapshot directory '{snapshot_path}': metadata ID does not match the requested ID '{snap_id}'.")
+            return None
+        return snapshot
+    except Exception as error:
+        logger.error(f"Failed to load snapshot '{snap_id}' from '{path_catalogue}': {error}.")
+        return None
 
 
 def read_catalogue(path_catalogue: Path, settings: SnapshotSettings, *, strict: bool = False) -> list[Snapshot]:

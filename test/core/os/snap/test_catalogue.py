@@ -108,6 +108,22 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
         self.assertEqual(retrieved.id, snap.id)
         self.assertIsNone(self.cat.get_by_id("nonexistent"))
 
+    def test_get_by_id_reads_only_the_requested_snapshot_metadata(self):
+        from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+        for snap_id in ("DirectLookupA", "DirectLookupB", "DirectLookupC"):
+            self.cat.add(Snapshot(id=snap_id, name=snap_id, desc=""))
+
+        with (
+            patch.object(self.cat, "get_all", side_effect=AssertionError("full catalogue scan")),
+            patch.object(SnapshotSerializer, "from_json", wraps=SnapshotSerializer.from_json) as read_metadata,
+        ):
+            result = self.cat.get_by_id("DirectLookupB")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, "DirectLookupB")
+        self.assertEqual(read_metadata.call_count, 1)
+
     def test_add_multiple_snapshots(self):
         for i in range(3):
             self.cat.add(make_snapshot(f"Multi{i}", self._src, n=1))
@@ -186,7 +202,8 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
     def test_get_snap_directory_path_returns_existing_path(self):
         snap = make_snapshot("DirPath", self._src, n=1)
         self.cat.add(snap)
-        path = self.cat.get_snap_directory_path(snap)
+        with patch.object(self.cat, "get_by_id", side_effect=AssertionError("metadata reload")):
+            path = self.cat.get_snap_directory_path(snap)
         self.assertIsNotNone(path)
         self.assertTrue(path.exists())
 
@@ -464,7 +481,11 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
     def test_export_and_import_full_catalogue(self):
         for i in range(3):
             self.cat.add(make_snapshot(f"CatExp{i}", self._src, n=1))
-        self.cat.export_catalogue(self._export_dir, "cat.zip")
+        from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+        with patch.object(SnapshotSerializer, "from_json", wraps=SnapshotSerializer.from_json) as read_metadata:
+            self.cat.export_catalogue(self._export_dir, "cat.zip")
+        self.assertEqual(read_metadata.call_count, 3)
         self.assertTrue((self._export_dir / "cat.zip").exists())
 
         for s in self.cat.get_all():
