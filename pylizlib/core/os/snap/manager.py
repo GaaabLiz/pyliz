@@ -26,13 +26,14 @@ from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
     SnapEditAction,
-    SnapEditType,
     Snapshot,
     SnapshotSettings,
     validate_directory_component,
 )
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
+from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.utils import SnapshotUtils
 from pylizlib.core.os.utils import get_folder_size_mb, is_critical_system_path
 
@@ -62,25 +63,15 @@ class SnapshotManager:
 
     def _snapshot_root_path(self) -> Path:
         """Validate that the catalogue entry still names this snapshot root."""
-        root = SnapshotUtils.validate_snapshot_root(self.snapshot.folder_name, self.path_catalogue)
-        if root != self.path_snapshot:
-            raise ValueError("The snapshot ID changed after the manager was initialized.")
-        return root
+        return self._storage().root_path()
 
     def _snapshot_child_path(self, name: str) -> Path:
         """Return a validated, contained child of this snapshot."""
-        self.snapshot.validate()
-        path = SnapshotUtils.get_snapshot_child_path(self.snapshot.folder_name, self.path_catalogue, name)
-        if path.parent != self.path_snapshot:
-            raise ValueError("The snapshot ID changed after the manager was initialized.")
-        return path
+        return self._storage().child_path(name)
 
     def __save_json(self):
         """Saves the current snapshot object state to its JSON file."""
-        json_path = self._snapshot_child_path(self.settings.json_filename)
-        if json_path != self.path_snapshot_json:
-            raise ValueError("The snapshot JSON path changed after the manager was initialized.")
-        SnapshotSerializer.to_json(self.snapshot, json_path)
+        self._storage().save_json()
 
     def create(self, progress_callback=None, message_callback=None, *, replace_existing: bool = False):
         """
@@ -234,117 +225,7 @@ class SnapshotManager:
         Args:
             edits: A list of SnapEditAction objects.
         """
-        self.snapshot.validate()
-        self._snapshot_root_path()
-        for edit in edits:
-            edit.validate()
-        snapshot_json_path = self._snapshot_child_path(self.settings.json_filename)
-        old_json = SnapshotSerializer.read_bytes(snapshot_json_path)
-        old = SnapshotSerializer.from_json(snapshot_json_path)
-        expected_edits = SnapshotUtils.get_edits_between_snapshots(old, self.snapshot)
-        old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
-        new_by_id = {assoc.folder_id: assoc for assoc in self.snapshot.directories}
-        for snapshot in (old, self.snapshot):
-            names = [assoc.directory_name for assoc in snapshot.directories]
-            if len(set(names)) != len(names):
-                raise ValueError("Snapshot associations must have unique directory names.")
-
-        # Resolve legacy name/path-based actions against the original metadata,
-        # before any name is reused by another association.
-        actions_by_id = {}
-        for edit in edits:
-            folder_id = edit.folder_id or edit.folder_id_to_remove
-            if not folder_id:
-                if edit.action_type == SnapEditType.ADD_DIR:
-                    matches = [assoc for assoc in self.snapshot.directories if assoc.original_path == edit.new_path]
-                else:
-                    name = edit.old_directory_name or edit.directory_name_to_remove
-                    matches = [assoc for assoc in old.directories if assoc.directory_name == name]
-                if len(matches) != 1:
-                    raise ValueError("Edit action does not identify a unique association.")
-                folder_id = matches[0].folder_id
-            if folder_id in actions_by_id:
-                raise ValueError(f"Multiple edit actions for association '{folder_id}'.")
-            actions_by_id[folder_id] = edit.action_type
-        if actions_by_id != {edit.folder_id: edit.action_type for edit in expected_edits}:
-            raise ValueError("Edit actions do not match the stored and requested snapshot associations.")
-
-        moves = []
-        additions = []
-        for edit in expected_edits:
-            if edit.action_type == SnapEditType.ADD_DIR:
-                additions.append(new_by_id[edit.folder_id])
-            else:
-                source = self._snapshot_child_path(old_by_id[edit.folder_id].directory_name)
-                target = self._snapshot_child_path(new_by_id[edit.folder_id].directory_name) if edit.action_type == SnapEditType.RENAME_DIR else None
-                moves.append((source, target))
-
-        # Validate the complete plan before touching any stored copy.
-        sources = {source for source, _ in moves}
-        targets = [target for _, target in moves if target is not None] + [self._snapshot_child_path(assoc.directory_name) for assoc in additions]
-        for assoc in old.directories:
-            source = self._snapshot_child_path(assoc.directory_name)
-            if not source.is_dir():
-                raise FileNotFoundError(f"Snapshot directory '{source}' is missing.")
-        for target in targets:
-            if target.exists() and target not in sources:
-                raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
-        for assoc in additions:
-            if not Path(assoc.original_path).is_dir():
-                raise FileNotFoundError(f"Source directory '{assoc.original_path}' is missing.")
-
-        staging_path = Path(tempfile.mkdtemp(prefix="_staging_update_", dir=self.path_snapshot))
-        staged_originals = []
-        publications = []
-        published = []
-        saving_json = False
-        previous_manifests = {
-            assoc.folder_id: assoc.integrity_manifest for assoc in self.snapshot.directories
-        }
-        try:
-            for i, (source, target) in enumerate(moves):
-                staged = staging_path / f"original_{i}"
-                source.rename(staged)
-                staged_originals.append((staged, source))
-                if target is not None:
-                    publications.append((staged, target))
-            for assoc in additions:
-                manifest = {}
-                assoc.copy_install_to(
-                    staging_path / "additions",
-                    message_callback=message_callback,
-                    copy_strategy=self.settings.copy_strategy,
-                    manifest=manifest,
-                )
-                assoc.integrity_manifest = manifest
-                publications.append((staging_path / "additions" / assoc.directory_name, self._snapshot_child_path(assoc.directory_name)))
-
-            for staged, target in publications:
-                if target.exists():
-                    raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
-                staged.rename(target)
-                published.append((staged, target))
-
-            for assoc in self.snapshot.directories:
-                expected_path = self._snapshot_child_path(assoc.directory_name)
-                if not expected_path.is_dir():
-                    raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
-            saving_json = True
-            self.__save_json()
-        except Exception:
-            for staged, target in reversed(published):
-                target.rename(staged)
-            for staged, source in reversed(staged_originals):
-                staged.rename(source)
-            if saving_json:
-                SnapshotSerializer.write_bytes(self._snapshot_child_path(self.settings.json_filename), old_json)
-            for assoc in self.snapshot.directories:
-                assoc.integrity_manifest = previous_manifests[assoc.folder_id]
-            shutil.rmtree(staging_path)
-            raise
-
-        # Deletions only affect staged originals after the new state is committed.
-        SnapshotUtils.cleanup_after_commit([staging_path], "Snapshot update")
+        SnapshotEditor(self._storage()).apply(edits, message_callback=message_callback)
 
     def duplicate(self, message_callback=None):
         """
@@ -391,9 +272,7 @@ class SnapshotManager:
 
         rollbacks = []
         updated_manifests = {}
-        original_metadata = {
-            assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.snapshot.directories
-        }
+        original_metadata = {assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.snapshot.directories}
         original_date_last_modified = self.snapshot.date_last_modified
         try:
             for dir_assoc in self.snapshot.directories:
@@ -547,9 +426,7 @@ class SnapshotManager:
                 raise ValueError(f"Cannot install to '{install_location}': it is a critical system path.")
             if dir_assoc.integrity_manifest is None:
                 if not self.settings.allow_unverified_legacy_snapshots:
-                    raise SnapshotIntegrityError(
-                        f"Snapshot association '{dir_assoc.folder_id}' has no integrity manifest; refusing unverified installation."
-                    )
+                    raise SnapshotIntegrityError(f"Snapshot association '{dir_assoc.folder_id}' has no integrity manifest; refusing unverified installation.")
                 logger.warning(
                     "Snapshot association '%s' has no integrity manifest; content verification is unavailable.",
                     dir_assoc.folder_id,
@@ -725,3 +602,7 @@ class SnapshotManager:
         except Exception as e:
             logger.error(f"Failed to create backup for snapshot '{self.snapshot.id}': {e}")
             raise
+
+    def _storage(self) -> SnapshotStorage:
+        """Build operation dependencies from the facade's current public state."""
+        return SnapshotStorage(self.snapshot, self.settings, self.path_catalogue, self.path_snapshot, self.path_snapshot_json)

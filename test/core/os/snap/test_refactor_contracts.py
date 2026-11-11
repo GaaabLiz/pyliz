@@ -33,7 +33,9 @@ def stored_snapshot(tmp_path, snapshot_id="contract"):
     source.mkdir()
     (source / "value.txt").write_text("stored", encoding="utf-8")
     snapshot = Snapshot(
-        id=snapshot_id, name=snapshot_id, desc="",
+        id=snapshot_id,
+        name=snapshot_id,
+        desc="",
         directories=[SnapDirAssociation(1, str(source), "association")],
     )
     manager = SnapshotManager(snapshot, tmp_path / "catalogue", SnapshotSettings())
@@ -120,7 +122,9 @@ def test_search_cancellation_is_per_snapshot_and_precedes_current_file(tmp_path)
         return False
 
     results = api.SnapshotSearcher(catalogue).search_list(
-        [first, second], api.SnapshotSearchParams("stored"), cancel,
+        [first, second],
+        api.SnapshotSearchParams("stored"),
+        cancel,
     )
     assert results == []
     assert calls == [("value.txt", 1, 1), ("value.txt", 1, 1)]
@@ -147,5 +151,71 @@ def test_metadata_updates_keep_separate_ordered_writes(tmp_path):
         manager.update_json_base_fields()
         manager.update_json_data_fields()
     assert [call.args[1] for call in update.call_args_list] == [
-        "name", "desc", "author", "tags", "date_modified", "data", "date_last_modified",
+        "name",
+        "desc",
+        "author",
+        "tags",
+        "date_modified",
+        "data",
+        "date_last_modified",
     ]
+
+
+def test_edit_planner_resolves_legacy_rename_without_touching_storage(tmp_path):
+    """Planning resolves names using persisted IDs and performs no publication."""
+    from pylizlib.core.os.snap.domain import SnapEditAction, SnapEditType
+    from pylizlib.core.os.snap.operations.edits import SnapshotEditPlanner
+
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    before = manager.path_snapshot_json.read_bytes()
+    original_name = snapshot.directories[0].directory_name
+    snapshot.directories[0].index = 2
+    plan = SnapshotEditPlanner(manager._storage()).build(
+        [
+            SnapEditAction(SnapEditType.RENAME_DIR, old_directory_name=original_name),
+        ]
+    )
+    assert plan.old_json == before
+    assert len(plan.moves) == 1
+    assert plan.moves[0].source.name == original_name
+    assert plan.moves[0].target.name == snapshot.directories[0].directory_name
+    assert plan.moves[0].source.is_dir()
+    assert not plan.moves[0].target.exists()
+    assert manager.path_snapshot_json.read_bytes() == before
+
+
+def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path):
+    """A failed JSON rewrite restores whitespace as well as association names."""
+    from pylizlib.core.os.snap.diff import get_edits_between_snapshots
+    from pylizlib.core.os.snap.operations.edits import SnapshotEditor
+
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    before = json.dumps(json.loads(manager.path_snapshot_json.read_text()), indent=2).encode()
+    manager.path_snapshot_json.write_bytes(before)
+    original = snapshot.clone()
+    snapshot.directories[0].index = 2
+
+    def fail_save(_snapshot, path):
+        """Simulate an interrupted metadata rewrite after content publication."""
+        path.write_bytes(b"partial")
+        raise OSError("save failed")
+
+    with patch.object(SnapshotSerializer, "to_json", side_effect=fail_save):
+        with pytest.raises(OSError, match="save failed"):
+            SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
+    assert manager.path_snapshot_json.read_bytes() == before
+    assert (manager.path_snapshot / original.directories[0].directory_name).is_dir()
+    assert not (manager.path_snapshot / snapshot.directories[0].directory_name).exists()
+
+
+def test_storage_context_rejects_mutated_snapshot_identity_and_json_filename(tmp_path):
+    """Extracted storage checks retain the manager's captured destinations."""
+    _, snapshot, manager = stored_snapshot(tmp_path)
+    snapshot.id = "different"
+    with pytest.raises(ValueError, match="ID changed"):
+        manager._snapshot_root_path()
+    snapshot.id = "contract"
+    manager.settings.json_filename = "different.json"
+    with pytest.raises(ValueError, match="JSON path changed"):
+        manager._storage().save_json()
+    assert not (manager.path_snapshot / "different.json").exists()
