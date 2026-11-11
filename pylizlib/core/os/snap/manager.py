@@ -127,14 +127,22 @@ class SnapshotManager:
         recover_storage_transactions(self._storage())
         if not destination_path.exists() or not destination_path.is_dir():
             raise ValueError(f"The provided path {destination_path} is not a valid directory.")
-        new_dir = SnapDirAssociation(
-            index=SnapDirAssociation.next_index(),
-            original_path=destination_path.as_posix(),
-            folder_id=gen_random_string(self.settings.folder_id_length),
-        )
+        used_ids = {association.folder_id for association in self.snapshot.directories}
+        existing_indices = [association.index for association in self.snapshot.directories]
+        index = max(existing_indices, default=0) + 1
+        storage_root = self._snapshot_root_path()
+        while True:
+            folder_id = gen_random_string(self.settings.folder_id_length)
+            if folder_id in used_ids:
+                continue
+            new_dir = SnapDirAssociation(index=index, original_path=destination_path.as_posix(), folder_id=folder_id)
+            stored_path = storage_root / new_dir.directory_name
+            if not stored_path.exists() and not stored_path.is_symlink():
+                break
+            used_ids.add(folder_id)
         manifest = {}
         new_dir.copy_install_to(
-            self._snapshot_root_path(),
+            storage_root,
             copy_strategy=self.settings.copy_strategy,
             manifest=manifest,
         )

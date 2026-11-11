@@ -334,6 +334,67 @@ class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
         self.assertEqual(len(snap.directories), 1)
         self.assertFalse((mgr.path_snapshot / added_assoc.directory_name).exists())
 
+    def test_associations_with_same_basename_and_index_use_distinct_storage_paths(self):
+        sources = []
+        for parent, value in (("first", "first copy"), ("second", "second copy")):
+            source = SOURCE_DATA_PATH / parent / "data"
+            source.mkdir(parents=True)
+            (source / "value.txt").write_text(value, encoding="utf-8")
+            sources.append(source)
+
+        snap = Snapshot(
+            id="SameIndexNames",
+            name="Same index names",
+            desc="",
+            directories=[
+                SnapDirAssociation(index=1, original_path=str(source), folder_id=f"assoc-{index}")
+                for index, source in enumerate(sources)
+            ],
+        )
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        names = [association.directory_name for association in snap.directories]
+        self.assertEqual(len(set(names)), 2)
+        self.assertEqual((mgr.path_snapshot / names[0] / "value.txt").read_text(encoding="utf-8"), "first copy")
+        self.assertEqual((mgr.path_snapshot / names[1] / "value.txt").read_text(encoding="utf-8"), "second copy")
+
+    def test_install_after_reload_uses_a_free_index_and_preserves_both_same_basename_copies(self):
+        first_source = SOURCE_DATA_PATH / "first" / "data"
+        first_source.mkdir(parents=True)
+        (first_source / "value.txt").write_text("first copy", encoding="utf-8")
+        snap = Snapshot(
+            id="RestartIndex",
+            name="Restart index",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(first_source), folder_id="existing-id")],
+        )
+        original_manager = self._mgr(snap)
+        original_manager.create()
+        original_name = snap.directories[0].directory_name
+
+        second_source = SOURCE_DATA_PATH / "second" / "data"
+        second_source.mkdir(parents=True)
+        (second_source / "value.txt").write_text("second copy", encoding="utf-8")
+
+        with patch.object(SnapDirAssociation, "_current_index", 0):
+            restarted_snapshot = SnapshotSerializer.from_json(original_manager.path_snapshot_json)
+            restarted_manager = self._mgr(restarted_snapshot)
+            with patch(
+                "pylizlib.core.os.snap.manager.gen_random_string",
+                side_effect=["existing-id", "new-id"],
+            ):
+                restarted_manager.install_directory(second_source)
+
+        self.assertEqual([association.index for association in restarted_snapshot.directories], [1, 2])
+        added = restarted_snapshot.directories[1]
+        self.assertEqual(added.folder_id, "new-id")
+        self.assertNotEqual(added.directory_name, original_name)
+        self.assertEqual((restarted_manager.path_snapshot / original_name / "value.txt").read_text(encoding="utf-8"), "first copy")
+        self.assertEqual((restarted_manager.path_snapshot / added.directory_name / "value.txt").read_text(encoding="utf-8"), "second copy")
+        reloaded = SnapshotSerializer.from_json(restarted_manager.path_snapshot_json)
+        self.assertEqual([association.directory_name for association in reloaded.directories], [original_name, added.directory_name])
+
     def test_install_directory_raises_on_invalid_path(self):
         snap = make_snapshot("InstDirBad", self._src, n=1)
         mgr = self._mgr(snap)
@@ -658,8 +719,9 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             (source / "foo_file.txt").write_text("changed live source")
         return snap
 
-    def test_remove_and_renumber_same_name_preserves_kept_copy(self):
+    def test_remove_and_renumber_same_name_preserves_kept_copy_path(self):
         snap = self._create_same_name_snapshot()
+        kept_dir_name = snap.directories[1].directory_name
         new = snap.clone()
         new.directories.pop(0)
         new.directories[0].index = 1
@@ -668,8 +730,9 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         edits = SnapshotUtils.get_edits_between_snapshots(snap, new)
         mgr.update_from_actions_list(edits)
 
-        self.assertEqual((mgr.path_snapshot / "1-foo" / "foo_file.txt").read_text(), "saved copy 1")
-        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "snapshot.json", ".snapshot.json.previous"})
+        self.assertEqual(new.directories[0].directory_name, kept_dir_name)
+        self.assertEqual((mgr.path_snapshot / kept_dir_name / "foo_file.txt").read_text(), "saved copy 1")
+        self.assertTrue((mgr.path_snapshot / "snapshot.json").is_file())
         self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).directories, new.directories)
 
     def test_reordering_same_name_directories_preserves_each_copy(self):
@@ -687,67 +750,20 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             self.assertEqual((mgr.path_snapshot / assoc.directory_name / "foo_file.txt").read_text(), f"saved copy {i}")
         self.assertEqual(
             {p.name for p in mgr.path_snapshot.iterdir()},
-            {"1-foo", "2-foo", "3-foo", "snapshot.json", ".snapshot.json.previous"},
+            {*(association.directory_name for association in new.directories), "snapshot.json", ".snapshot.json.previous"},
         )
 
-    def test_duplicate_final_names_rejected_before_modifying_snapshot(self):
+    def test_duplicate_presentation_indices_do_not_collide_on_disk(self):
         snap = self._create_same_name_snapshot()
         new = snap.clone()
         new.directories[1].index = 1
-        mgr = self._mgr(snap)
-        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
-
-        with self.assertRaises(ValueError):
-            self._mgr(new)
-
-        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
-
-    def test_remove_and_renumber_rolls_back_when_final_rename_fails(self):
-        snap = self._create_same_name_snapshot()
-        new = snap.clone()
-        new.directories.pop(0)
-        new.directories[0].index = 1
         mgr = self._mgr(new)
-        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
-        real_rename = Path.rename
-        failed = False
-
-        def fail_final_rename(source, target):
-            nonlocal failed
-            if not failed and Path(target) == mgr.path_snapshot / "1-foo" and source.parent != mgr.path_snapshot:
-                failed = True
-                raise PermissionError("final rename failed")
-            return real_rename(source, target)
-
-        with patch.object(Path, "rename", autospec=True, side_effect=fail_final_rename):
-            with self.assertRaises(PermissionError):
-                mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
-
-        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
-
-    def test_reorder_rolls_back_after_one_final_rename_succeeds(self):
-        snap = self._create_same_name_snapshot(count=3)
-        new = snap.clone()
-        for assoc, index in zip(new.directories, (2, 3, 1)):
-            assoc.index = index
-        mgr = self._mgr(new)
-        before = {p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}
-        real_rename = Path.rename
-        failed = False
-
-        def fail_second_publication(source, target):
-            nonlocal failed
-            if not failed and Path(target) == mgr.path_snapshot / "3-foo" and source.parent != mgr.path_snapshot:
-                failed = True
-                raise PermissionError("second final rename failed")
-            return real_rename(source, target)
-
-        with patch.object(Path, "rename", autospec=True, side_effect=fail_second_publication):
-            with self.assertRaises(PermissionError):
-                mgr.update_from_actions_list(SnapshotUtils.get_edits_between_snapshots(snap, new))
-
-        self.assertTrue(failed)
-        self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
+        edits = SnapshotUtils.get_edits_between_snapshots(snap, new)
+        self.assertEqual(edits, [])
+        self.assertEqual(len({association.directory_name for association in new.directories}), 2)
+        mgr.update_from_actions_list(edits)
+        for index, association in enumerate(new.directories):
+            self.assertEqual((mgr.path_snapshot / association.directory_name / "foo_file.txt").read_text(), f"saved copy {index}")
 
     def test_update_from_actions_list_applies_add_and_remove(self):
         src_sorted = sorted(self._src)
@@ -768,17 +784,16 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         snap_new.directories.append(SnapDirAssociation(index=1, original_path=str(src_sorted[2]), folder_id="added999"))
 
         edits = SnapshotUtils.get_edits_between_snapshots(snap, snap_new)
-        # edits should contain a REMOVE, an ADD, and a RENAME (because kept_assoc index changed)
-        self.assertEqual(len(edits), 3)
-        self.assertTrue(any(e.action_type == SnapEditType.RENAME_DIR for e in edits))
+        # Presentation index changes do not rename the stable physical copy.
+        self.assertEqual(len(edits), 2)
+        self.assertFalse(any(e.action_type == SnapEditType.RENAME_DIR for e in edits))
 
         mgr2 = SnapshotManager(snap_new, CATALOGUE_PATH)
         mgr2.update_from_actions_list(edits)
 
         self.assertFalse((mgr.path_snapshot / removed_assoc.directory_name).exists())
         self.assertTrue((mgr.path_snapshot / snap_new.directories[-1].directory_name).exists())
-        # The kept directory should have been renamed on disk to match its new index
-        self.assertFalse((mgr.path_snapshot / old_kept_dir_name).exists())
+        self.assertEqual(old_kept_dir_name, new_kept_dir_name)
         self.assertTrue((mgr.path_snapshot / new_kept_dir_name).exists())
 
     def test_create_backup_snapshot_directory(self):

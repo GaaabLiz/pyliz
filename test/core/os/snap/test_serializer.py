@@ -59,7 +59,31 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         self.assertEqual(loaded.data, snap.data)
         self.assertEqual(len(loaded.directories), len(snap.directories))
         self.assertEqual(loaded.directories[0].integrity_manifest, snap.directories[0].integrity_manifest)
+        self.assertEqual(loaded.directories[0].directory_name, snap.directories[0].directory_name)
         self.assertIsNotNone(loaded.date_modified)
+
+    def test_legacy_metadata_retains_its_index_based_storage_name(self):
+        json_path = TEST_LOCAL_ROOT / "legacy_storage_name.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "id": "LegacyStorage",
+                    "name": "Legacy storage",
+                    "desc": "",
+                    "directories": [{"index": 1, "original_path": "/source/data", "folder_id": "legacy-id", "mb_size": 0}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        loaded = SnapshotSerializer.from_json(json_path)
+        self.assertEqual(loaded.directories[0].directory_name, "1-data")
+        loaded.directories[0].index = 7
+
+        SnapshotSerializer.to_json(loaded, json_path)
+        raw = json.loads(json_path.read_text(encoding="utf-8"))
+        self.assertEqual(raw["directories"][0]["storage_name"], "1-data")
+        self.assertEqual(SnapshotSerializer.from_json(json_path).directories[0].directory_name, "1-data")
 
     def test_optional_datetime_fields_survive_as_none(self):
         src = list(SOURCE_DATA_PATH.iterdir())

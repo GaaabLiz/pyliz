@@ -571,6 +571,7 @@ def _refresh_snapshot_model(storage) -> None:
             for model_field in fields(SnapDirAssociation):
                 if model_field.name != "_current_index":
                     setattr(association, model_field.name, deepcopy(getattr(persisted, model_field.name)))
+            association._set_storage_name(persisted.directory_name)
         directories.append(association)
     for model_field in fields(Snapshot):
         if model_field.name != "directories":
