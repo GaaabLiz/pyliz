@@ -244,6 +244,28 @@ class TestSnapshotSearcherMultipleSnapshots(unittest.TestCase):
         self.assertIn("SearchSnap", snap_names)
         self.assertIn("SearchSnap2", snap_names)
 
+    def test_search_list_reuses_loaded_snapshots_without_rereading_catalogue_metadata(self):
+        from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+        snap2_dir = SOURCE_DATA_PATH / "srch4"
+        snap2_dir.mkdir(exist_ok=True)
+        (snap2_dir / "value.txt").write_text("Hello again from snap2", encoding="utf-8")
+        snap2 = Snapshot(
+            id="search-snap3-id",
+            name="SearchSnap3",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(snap2_dir), folder_id="sd4")],
+        )
+        self.catalogue.add(snap2)
+        loaded_snapshots = self.catalogue.get_all()
+        params = SnapshotSearchParams(query="Hello", search_target=SearchTarget.FILE_CONTENT)
+
+        with patch.object(SnapshotSerializer, "from_json", wraps=SnapshotSerializer.from_json) as read_metadata:
+            results = self.searcher.search_list(loaded_snapshots, params)
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(read_metadata.call_count, 0)
+
     def test_progress_callback_is_called_for_each_file(self):
         calls: list = []
 

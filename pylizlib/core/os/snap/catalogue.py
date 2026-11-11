@@ -21,7 +21,7 @@ from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
-from pylizlib.core.os.snap.storage.catalogue import read_catalogue
+from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
 from pylizlib.core.os.snap.storage.transactions import recover_pending_transactions, recover_storage_transactions
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
@@ -162,11 +162,11 @@ class SnapshotCatalogue:
         Returns:
             The Snapshot object if found, otherwise None.
         """
-        all_snaps = self.get_all()
-        for snap in all_snaps:
-            if snap.id == snap_id:
-                return snap
-        return None
+        recover_pending_transactions(self.path_catalogue)
+        snapshot = read_snapshot_by_id(self.path_catalogue, snap_id, self.settings)
+        if snapshot is not None:
+            recover_storage_transactions(self._manager(snapshot)._storage())
+        return snapshot
 
     def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot, message_callback=None):
         """
@@ -356,10 +356,20 @@ class SnapshotCatalogue:
 
         Returns:
             The Path to the snapshot's directory, or None if the snapshot doesn't exist.
+
+        The supplied snapshot is treated as already loaded. The method checks
+        its contained directory and metadata entry without decoding the JSON again.
         """
-        if not self.exists(snap.id):
+        if _is_operational_directory(snap.id):
             return None
-        return SnapshotUtils.get_snapshot_path(snap.folder_name, self.path_catalogue)
+        try:
+            snapshot_path = SnapshotUtils.validate_snapshot_root(snap.folder_name, self.path_catalogue)
+            snapshot_json_path = SnapshotUtils.get_snapshot_json_path(snap.folder_name, self.path_catalogue, self.settings.json_filename)
+        except ValueError:
+            return None
+        if not snapshot_path.is_dir() or not snapshot_json_path.is_file():
+            return None
+        return snapshot_path
 
     def _backups(self) -> CatalogueBackupService:
         """Build backup dependencies from the current path, settings and lookup."""
