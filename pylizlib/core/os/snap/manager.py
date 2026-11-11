@@ -211,6 +211,7 @@ class SnapshotManager:
             clear_destination (bool): If True, clears the destination directories before copying.
 
         Raises:
+            ValueError: If two associated install paths are the same or nested.
             SnapshotInstallMetadataError: The directory contents were installed, but
                 updating ``date_last_used`` failed. Inspect ``metadata_published`` to
                 determine whether the JSON update became visible.

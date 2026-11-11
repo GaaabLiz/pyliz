@@ -106,8 +106,8 @@ journal registra il commit.
 | Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. La recovery completa la pubblicazione se il commit era già deciso. |
 | Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; se la pubblicazione JSON non avviene, ripristinare directory, byte e modello. Se avviene ma il flush fallisce, mantenere il nuovo stato e conservare le directory rimosse ancora nello staging. |
 | Sincronizzazione | Preparare tutte le copie, sostituire, aggiornare dimensioni/manifest e salvare; ripristinare copie e metadati in memoria secondo il protocollo esistente. |
-| Installazione | Verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo il commit dei contenuti. Un errore di metadati viene distinto dal fallimento dell'installazione e conserva le copie precedenti. |
-| Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo o un rollback nuovo. |
+| Installazione | Rifiutare prima dello staging destinazioni coincidenti o annidate; verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo il commit dei contenuti. |
+| Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo. |
 | Restore `_ad` | Ripristinare le associazioni riconosciute con staging e journal; il recupero completa o annulla lo swap dopo un arresto. |
 | Pulizia dopo commit | Registrare gli errori e proseguire, senza riattivare il rollback di dati già pubblicati. |
 
