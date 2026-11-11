@@ -16,6 +16,16 @@ def is_link_or_junction(path: Path) -> bool:
     return path.is_symlink() or (is_junction is not None and is_junction())
 
 
+def assert_destination_outside_source(source: Path, destination: Path) -> None:
+    """Reject recursive tree copies, resolving both paths through aliases."""
+    source = Path(source)
+    destination = Path(destination)
+    source_resolved = source.resolve(strict=False)
+    destination_resolved = destination.resolve(strict=False)
+    if destination_resolved.is_relative_to(source_resolved):
+        raise ValueError(f"Copy destination '{destination}' is inside source directory '{source}'.")
+
+
 def iter_files_strict(root: Path) -> Iterator[Path]:
     """Enumerate files without suppressing scan or metadata errors.
 
