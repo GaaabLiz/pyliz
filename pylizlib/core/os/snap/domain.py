@@ -1,33 +1,19 @@
-"""
-Core domain models for the snapshot system.
+"""Snapshot models, validation rules, enum values and shared configuration.
 
-Defines all data structures (dataclasses, enums) that represent the snapshot
-domain.  This module has no business logic and no I/O — it only holds state
-and lightweight helpers that compute properties from that state.
-
-Classes:
-    SnapDirAssociation  – Links an original directory to its in-snapshot copy.
-    SnapEditType        – Enum: ADD_DIR | REMOVE_DIR.
-    BackupType          – Enum: ASSOCIATED_DIRECTORIES | SNAPSHOT_DIRECTORY.
-    SnapshotBackupInfo  – Parsed metadata from a backup archive filename.
-    SnapshotSortKey     – Enum of sortable Snapshot attributes.
-    SnapEditAction      – A single atomic change to a snapshot's structure.
-    SnapshotSettings    – Configuration for snapshot management.
-    Snapshot            – A named collection of directory associations.
+Models remain mutable. Association construction still measures missing sizes,
+validation normalizes original paths, and compatibility helpers delegate copy
+and example generation to dedicated modules without changing their timing.
 """
 
 import math
 import platform
-import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
 
-from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import random_subfolder
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.integrity import IntegrityManifest, validate_integrity_manifest
 from pylizlib.core.os.utils import get_folder_size_mb
@@ -39,16 +25,7 @@ def validate_directory_component(value: str, field_name: str = "directory name",
         raise TypeError(f"{field_name} must be a string.")
     if allow_empty and value == "":
         return value
-    if (
-        not value
-        or value in {".", ".."}
-        or "/" in value
-        or "\\" in value
-        or ":" in value
-        or "\x00" in value
-        or Path(value).is_absolute()
-        or Path(value).name != value
-    ):
+    if not value or value in {".", ".."} or "/" in value or "\\" in value or ":" in value or "\x00" in value or Path(value).is_absolute() or Path(value).name != value:
         raise ValueError(f"{field_name} must be a single relative path component: {value!r}.")
     return value
 
@@ -138,11 +115,9 @@ class SnapDirAssociation:
         Returns:
             A new `SnapDirAssociation` instance with random data.
         """
-        return SnapDirAssociation(
-            index=SnapDirAssociation.next_index(),
-            original_path=random_subfolder(source_folder_for_choices).__str__(),
-            folder_id=gen_random_string(folder_id_length),
-        )
+        from pylizlib.core.os.snap.factories import gen_random_association
+
+        return gen_random_association(source_folder_for_choices, folder_id_length)
 
     @staticmethod
     def gen_random_list(count: int, source_folder_for_choices: Path) -> list["SnapDirAssociation"]:
@@ -156,7 +131,9 @@ class SnapDirAssociation:
         Returns:
             A list of new `SnapDirAssociation` instances.
         """
-        return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
+        from pylizlib.core.os.snap.factories import gen_random_association_list
+
+        return gen_random_association_list(count, source_folder_for_choices)
 
     def copy_install_to(
         self,
@@ -169,45 +146,9 @@ class SnapDirAssociation:
         expected_manifest: IntegrityManifest | None = None,
     ):
         """Copy this association using the configured directory-copy strategy."""
-        source = Path(self.original_path)
-        directory_name = self.directory_name
-        selected_strategy = copy_strategy or SequentialFileCopyStrategy()
-        if not isinstance(selected_strategy, DirectoryCopyStrategy):
-            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+        from pylizlib.core.os.snap.storage.association import copy_association
 
-        target_is_junction = getattr(catalogue_target_path, "is_junction", None)
-        if catalogue_target_path.is_symlink() or (target_is_junction is not None and target_is_junction()):
-            raise ValueError(f"Snapshot storage root '{catalogue_target_path}' cannot be a symbolic link.")
-        destination = catalogue_target_path / directory_name
-        target_root = catalogue_target_path.resolve(strict=False)
-        expected_destination = target_root / directory_name
-        resolved_destination = destination.resolve(strict=False)
-        if resolved_destination != expected_destination or not resolved_destination.is_relative_to(target_root):
-            raise ValueError(f"Snapshot directory destination '{destination}' escapes '{catalogue_target_path}'.")
-
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if catalogue_target_path.is_symlink() or catalogue_target_path.resolve(strict=False) != target_root:
-            raise ValueError(f"Snapshot storage root '{catalogue_target_path}' changed during copy.")
-        try:
-            if manifest is None and expected_manifest is None:
-                selected_strategy.copy_directory(source, destination, progress_callback, message_callback)
-            else:
-                selected_strategy.copy_directory(
-                    source,
-                    destination,
-                    progress_callback,
-                    message_callback,
-                    manifest=manifest,
-                    expected_manifest=expected_manifest,
-                )
-        except Exception:
-            if destination.is_symlink():
-                destination.unlink(missing_ok=True)
-            elif destination.exists():
-                shutil.rmtree(destination)
-            raise
-        if destination.is_symlink() or destination.resolve(strict=False) != expected_destination or not destination.is_dir():
-            raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
+        return copy_association(self, catalogue_target_path, progress_callback, message_callback, copy_strategy=copy_strategy, manifest=manifest, expected_manifest=expected_manifest)
 
 
 class SnapEditType(Enum):
@@ -525,11 +466,7 @@ class Snapshot:
                     original_path=dir_assoc.original_path,
                     folder_id=dir_assoc.folder_id,
                     mb_size=dir_assoc.mb_size,
-                    integrity_manifest=(
-                        {path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()}
-                        if dir_assoc.integrity_manifest is not None
-                        else None
-                    ),
+                    integrity_manifest=({path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()} if dir_assoc.integrity_manifest is not None else None),
                 )
                 for dir_assoc in self.directories
             ],
