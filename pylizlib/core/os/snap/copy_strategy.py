@@ -63,6 +63,63 @@ def _is_link_or_junction(path: Path) -> bool:
     return is_link_or_junction(path)
 
 
+class _FileCopySession:
+    """Per-call byte counters and manifest recording for sequential file copying.
+
+    A strategy remains reusable: this mutable state belongs to one destination,
+    not to the strategy instance or a process-wide default settings object.
+    """
+
+    def __init__(
+        self, destination: Path, capture_integrity: bool, observed: IntegrityManifest | None, total_bytes: int, progress_callback: ProgressCallback | None, message_callback: MessageCallback | None
+    ):
+        """Capture the already-computed totals without performing additional I/O."""
+        self.destination = destination
+        self.capture_integrity = capture_integrity
+        self.observed = observed
+        self.total_bytes = total_bytes
+        self.copied_bytes = 0
+        self.progress_callback = progress_callback
+        self.message_callback = message_callback
+
+    def copy_file(self, src: str, dst: str, *, follow_symlinks: bool = True) -> str:
+        """Copy and optionally hash exactly the bytes written, then report progress."""
+        if self.message_callback:
+            self.message_callback(f"Copia in corso: {Path(src).name}")
+        if self.capture_integrity:
+            digest = hashlib.sha256()
+            file_size = 0
+            with open(src, "rb") as source_file, open(dst, "xb") as destination_file:
+                for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
+                    destination_file.write(chunk)
+                    digest.update(chunk)
+                    file_size += len(chunk)
+            shutil.copystat(src, dst, follow_symlinks=follow_symlinks)
+            relative_path = Path(dst).relative_to(self.destination).as_posix()
+            assert self.observed is not None
+            self.observed[relative_path] = {"type": "file", "size": file_size, "sha256": digest.hexdigest()}
+            result = dst
+        else:
+            result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+        if self.progress_callback:
+            self.copied_bytes += Path(dst).stat().st_size
+            self.progress_callback(self.copied_bytes, self.total_bytes)
+        return result
+
+    def record_directories(self) -> None:
+        """Record stored directories, including empty ones, after file copying."""
+        assert self.observed is not None
+
+        def raise_walk_error(error: OSError) -> None:
+            raise error
+
+        for current, directories, _ in os.walk(self.destination, onerror=raise_walk_error):
+            directories[:] = sorted(directories)
+            for name in directories:
+                relative_path = (Path(current) / name).relative_to(self.destination).as_posix()
+                self.observed[relative_path] = {"type": "directory", "size": 0, "sha256": None}
+
+
 class SequentialFileCopyStrategy(DirectoryCopyStrategy):
     """Copy files in sequence, preserving the library's current default."""
 
@@ -102,51 +159,20 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
             validate_integrity_manifest(dict(expected_manifest))
         observed: IntegrityManifest | None = {".": {"type": "directory", "size": 0, "sha256": None}} if capture_integrity else None
         total_bytes = self._total_bytes(source) if progress_callback else 0
-        copied_bytes = 0
-
-        def copy_file(src: str, dst: str, *, follow_symlinks: bool = True) -> str:
-            nonlocal copied_bytes
-            if message_callback:
-                message_callback(f"Copia in corso: {Path(src).name}")
-            if capture_integrity:
-                digest = hashlib.sha256()
-                file_size = 0
-                with open(src, "rb") as source_file, open(dst, "xb") as destination_file:
-                    for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
-                        destination_file.write(chunk)
-                        digest.update(chunk)
-                        file_size += len(chunk)
-                shutil.copystat(src, dst, follow_symlinks=follow_symlinks)
-                relative_path = Path(dst).relative_to(destination).as_posix()
-                assert observed is not None
-                observed[relative_path] = {"type": "file", "size": file_size, "sha256": digest.hexdigest()}
-                result = dst
-            else:
-                result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
-            if progress_callback:
-                copied_bytes += Path(dst).stat().st_size
-                progress_callback(copied_bytes, total_bytes)
-            return result
+        session = _FileCopySession(destination, capture_integrity, observed, total_bytes, progress_callback, message_callback)
 
         try:
             destination.mkdir()
             for source_item in source.iterdir():
                 destination_item = destination / source_item.name
                 if source_item.is_dir():
-                    shutil.copytree(source_item, destination_item, copy_function=copy_file)
+                    shutil.copytree(source_item, destination_item, copy_function=session.copy_file)
                 else:
-                    copy_file(str(source_item), str(destination_item))
+                    session.copy_file(str(source_item), str(destination_item))
             if capture_integrity:
                 assert observed is not None
 
-                def raise_walk_error(error: OSError) -> None:
-                    raise error
-
-                for current, directories, _ in os.walk(destination, onerror=raise_walk_error):
-                    directories[:] = sorted(directories)
-                    for name in directories:
-                        relative_path = (Path(current) / name).relative_to(destination).as_posix()
-                        observed[relative_path] = {"type": "directory", "size": 0, "sha256": None}
+                session.record_directories()
                 validate_integrity_manifest(observed)
                 if expected_manifest is not None:
                     assert_manifest_matches(dict(expected_manifest), observed)
