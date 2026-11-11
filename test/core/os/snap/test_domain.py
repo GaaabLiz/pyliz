@@ -262,6 +262,9 @@ class TestSnapshotSettings(unittest.TestCase):
         self.assertIsInstance(s.copy_strategy, SequentialFileCopyStrategy)
         self.assertIs(s.copy_metadata_mode, CopyMetadataMode.BASIC)
         self.assertFalse(s.allow_unverified_legacy_snapshots)
+        self.assertIsNone(s.archive_temp_directory)
+        self.assertEqual(s.max_archive_uncompressed_bytes, 100 * 1024 * 1024 * 1024)
+        self.assertEqual(s.max_archive_entries, 1_000_000)
 
     def test_extended_metadata_setting_decorates_the_selected_copy_strategy(self):
         settings = SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED)
@@ -286,6 +289,18 @@ class TestSnapshotSettings(unittest.TestCase):
     def test_legacy_integrity_override_must_be_a_boolean(self):
         with self.assertRaises(TypeError):
             SnapshotSettings(allow_unverified_legacy_snapshots=1)
+
+    def test_archive_limits_and_temporary_directory_are_validated(self):
+        with self.assertRaises(TypeError):
+            SnapshotSettings(max_archive_entries=True)
+        with self.assertRaises(ValueError):
+            SnapshotSettings(max_archive_uncompressed_bytes=-1)
+        with self.assertRaises(TypeError):
+            SnapshotSettings(archive_temp_directory="/tmp")
+
+        settings = SnapshotSettings(archive_temp_directory=Path("/archive-staging"), max_archive_entries=None)
+        self.assertEqual(settings.archive_temp_directory, Path("/archive-staging"))
+        self.assertIsNone(settings.max_archive_entries)
 
     def test_backup_enabled_requires_both_flag_and_path(self):
         self.assertFalse(SnapshotSettings(backup_pre_install=True, backup_path=None).bck_before_install_enabled)

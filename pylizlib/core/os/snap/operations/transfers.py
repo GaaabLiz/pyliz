@@ -75,11 +75,19 @@ class CatalogueTransferService:
         if not zip_path.is_file() or zip_path.suffix != ".zip":
             raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        temp_parent = self.settings.archive_temp_directory or self.path_catalogue
+        temp_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
             temp_dir_path = Path(temp_dir)
 
             # Extract the zip to a temporary directory
-            extract_zip(zip_path, temp_dir_path)
+            extract_zip(
+                zip_path,
+                temp_dir_path,
+                max_entries=self.settings.max_archive_entries,
+                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+                additional_space_paths=[self.path_catalogue],
+            )
 
             # Iterate through extracted folders and import them
             for potential_snap_dir in temp_dir_path.iterdir():
@@ -101,11 +109,19 @@ class CatalogueTransferService:
         if not zip_path.is_file() or zip_path.suffix != ".zip":
             raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        temp_parent = self.settings.archive_temp_directory or self.path_catalogue
+        temp_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
             temp_dir_path = Path(temp_dir)
 
             # Extract the zip to a temporary directory
-            extract_zip(zip_path, temp_dir_path)
+            extract_zip(
+                zip_path,
+                temp_dir_path,
+                max_entries=self.settings.max_archive_entries,
+                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+                additional_space_paths=[self.path_catalogue],
+            )
 
             # Validate the content and get snapshot
             json_path = temp_dir_path / self.settings.json_filename

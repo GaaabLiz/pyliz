@@ -22,6 +22,7 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Scansione e politiche sui link | `storage/tree.py` |
 | Pubblicazione delle directory e pulizia | `storage/publication.py` |
 | Primitive di lettura e scrittura ZIP | `storage/archives.py` |
+| Limiti predefiniti per import e restore ZIP | `storage/archive_limits.py` |
 | Conversione JSON e file descriptor protetti | `storage/metadata.py` |
 | Scansione delle voci del catalogo | `storage/catalogue.py` |
 | Dipendenze di una singola operazione | `storage/context.py` |
@@ -120,6 +121,18 @@ legacy. Per cambiare destinazione,
 `SnapshotCatalogue.restore_backup_with_mapping(zip_path, {folder_id: path})`
 accetta una mappa dagli ID persistenti delle associazioni ai nuovi percorsi; le
 associazioni non indicate mantengono il percorso salvato nell'archivio.
+
+La scrittura degli ZIP accetta anche timestamp sorgente precedenti al 1980 e li
+limita all'intervallo rappresentabile dal formato. Import e restore controllano
+prima dell'estrazione il numero di voci, il totale dei byte non compressi e lo
+spazio disponibile, includendo il secondo staging necessario alla pubblicazione.
+I limiti predefiniti sono 100 GiB e 1.000.000 di voci e si possono modificare o
+disabilitare con `SnapshotSettings.max_archive_uncompressed_bytes` e
+`max_archive_entries`. Import e restore SD usano il filesystem del catalogo per
+lo staging; il restore AD sceglie il volume di una destinazione associata. Si può
+impostare `SnapshotSettings.archive_temp_directory` per scegliere un altro
+volume. Il controllo verifica anche lo spazio per la copia finale, ma non riserva
+capacità contro scritture concorrenti.
 
 `utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
 implementazioni interne usano direttamente i moduli responsabili, evitando di

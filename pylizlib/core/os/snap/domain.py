@@ -17,6 +17,7 @@ from typing import ClassVar, Optional
 
 from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, DirectoryCopyStrategy, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.integrity import IntegrityManifest, integrity_manifest_size_mb, validate_integrity_manifest
+from pylizlib.core.os.snap.storage.archive_limits import DEFAULT_MAX_ARCHIVE_ENTRIES, DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES
 from pylizlib.core.os.snap.storage.original_paths import normalize_original_path
 
 
@@ -288,6 +289,9 @@ class SnapshotSettings:
         copy_metadata_mode: Select the existing basic metadata behavior or the
                             stricter platform-supported extended metadata copier.
         allow_unverified_legacy_snapshots: Allow installation without a content manifest.
+        archive_temp_directory: Filesystem location for temporary ZIP extraction.
+        max_archive_uncompressed_bytes: Maximum total expanded size accepted on import/restore.
+        max_archive_entries: Maximum number of ZIP members accepted on import/restore.
     """
 
     json_filename: str = "snapshot.json"
@@ -301,6 +305,9 @@ class SnapshotSettings:
     copy_strategy: DirectoryCopyStrategy = field(default_factory=SequentialFileCopyStrategy)
     allow_unverified_legacy_snapshots: bool = False
     copy_metadata_mode: CopyMetadataMode = CopyMetadataMode.BASIC
+    archive_temp_directory: Path | None = None
+    max_archive_uncompressed_bytes: int | None = DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES
+    max_archive_entries: int | None = DEFAULT_MAX_ARCHIVE_ENTRIES
 
     def __setattr__(self, name, value):
         """Keep the selected copier in sync when settings are changed at runtime."""
@@ -329,6 +336,14 @@ class SnapshotSettings:
             raise TypeError("allow_unverified_legacy_snapshots must be a boolean.")
         if not isinstance(self.copy_metadata_mode, CopyMetadataMode):
             raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
+        if self.archive_temp_directory is not None and not isinstance(self.archive_temp_directory, Path):
+            raise TypeError("archive_temp_directory must be a pathlib.Path or None.")
+        for name in ("max_archive_uncompressed_bytes", "max_archive_entries"):
+            limit = getattr(self, name)
+            if limit is not None and type(limit) is not int:
+                raise TypeError(f"{name} must be a non-negative integer or None.")
+            if limit is not None and limit < 0:
+                raise ValueError(f"{name} cannot be negative.")
 
     @property
     def bck_before_install_enabled(self) -> bool:

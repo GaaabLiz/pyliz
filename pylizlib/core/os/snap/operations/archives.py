@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import stat
 import tempfile
 import zipfile
@@ -25,7 +26,7 @@ from pylizlib.core.os.snap.operations.backup_manifest import (
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.storage.archives import _write_verified_zip_exclusive, extract_zip
+from pylizlib.core.os.snap.storage.archives import _write_verified_zip_exclusive, extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
@@ -268,6 +269,11 @@ class CatalogueBackupService:
             if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
                 continue
             try:
+                validate_zip_archive(
+                    zip_path,
+                    max_entries=self.settings.max_archive_entries,
+                    max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+                )
                 backups.append(self._read_archive_metadata(zip_path).info)
             except Exception as error:
                 logger.warning(f"Could not read embedded backup metadata from '{zip_path}': {error}")
@@ -317,18 +323,49 @@ class CatalogueBackupService:
         if not backup_zip_path.is_file():
             raise ValueError(f"Provided path '{backup_zip_path}' is not a file.")
 
+        preflight = validate_zip_archive(
+            backup_zip_path,
+            max_entries=self.settings.max_archive_entries,
+            max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+        )
         metadata = self._read_archive_metadata(backup_zip_path)
         info = metadata.info
         if info.backup_type is None:
             raise ValueError("Could not recognize backup type from archive metadata or legacy filename.")
+        if info.backup_type == BackupType.SNAPSHOT_DIRECTORY and destination_mapping is not None:
+            raise ValueError("Destination remapping is only supported for associated-directories backups.")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        restore_space_requirements = []
+        if info.backup_type == BackupType.ASSOCIATED_DIRECTORIES:
+            associations, origin_os = self._associated_restore_context(metadata)
+            destinations = self._resolve_restore_destinations(associations, destination_mapping, origin_os)
+            for association, destination in zip(associations, destinations, strict=True):
+                if not destination.parent.is_dir():
+                    raise FileNotFoundError(f"Parent directory for restore destination '{destination}' does not exist.")
+                required_bytes = preflight.bytes_by_root.get(association.directory_name, 0)
+                restore_space_requirements.append((destination.parent, required_bytes))
+        else:
+            restore_space_requirements.append((self.path_catalogue, preflight.uncompressed_bytes))
+
+        temp_parent = self.settings.archive_temp_directory
+        if temp_parent is None and info.backup_type == BackupType.ASSOCIATED_DIRECTORIES and destinations:
+            # Put the extracted archive on a destination volume by default so a
+            # large AD restore does not need equivalent space under system temp.
+            temp_parent = max((destination.parent for destination in destinations), key=lambda path: shutil.disk_usage(path).free)
+        if temp_parent is None:
+            temp_parent = self.path_catalogue
+        temp_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
             temp_dir_path = Path(temp_dir)
-            extract_zip(backup_zip_path, temp_dir_path)
+            extract_zip(
+                backup_zip_path,
+                temp_dir_path,
+                max_entries=self.settings.max_archive_entries,
+                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+                additional_space_requirements=restore_space_requirements,
+            )
 
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
-                if destination_mapping is not None:
-                    raise ValueError("Destination remapping is only supported for associated-directories backups.")
                 self._restore_snapshot_directory(temp_dir_path, metadata)
                 return
 
@@ -504,6 +541,11 @@ class CatalogueBackupService:
         destination_mapping: Mapping[str, str | Path] | None = None,
     ) -> None:
         """Restore AD contents using embedded associations, or legacy catalogue metadata."""
+        associations, origin_os = self._associated_restore_context(metadata)
+        self._restore_archived_associations(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
+
+    def _associated_restore_context(self, metadata: _ArchiveMetadata) -> tuple[list[ArchivedAssociation], str | None]:
+        """Resolve the associations and OS that govern an associated-directory restore."""
         info = metadata.info
         if not info.snapshot_id:
             raise ValueError("Could not determine snapshot ID from associated-directories archive metadata.")
@@ -535,7 +577,43 @@ class CatalogueBackupService:
                 for association in snapshot.directories
             ]
 
-        self._restore_archived_associations(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
+        return associations, origin_os
+
+    def _resolve_restore_destinations(
+        self,
+        associations: list[ArchivedAssociation],
+        destination_mapping: Mapping[str, str | Path] | None,
+        origin_os: str | None,
+    ) -> list[Path]:
+        """Validate association mapping and all paths before extraction or replacement."""
+        mapping = destination_mapping or {}
+        if any(not isinstance(folder_id, str) or not folder_id for folder_id in mapping):
+            raise TypeError("Destination mapping keys must be non-empty association IDs.")
+        unknown_ids = set(mapping) - {association.folder_id for association in associations}
+        if unknown_ids:
+            raise ValueError(f"Destination mapping contains unknown association IDs: {', '.join(sorted(unknown_ids))}.")
+
+        destination_inputs = []
+        for association in associations:
+            raw_destination = mapping.get(association.folder_id, association.original_path)
+            if not isinstance(raw_destination, (str, os.PathLike)):
+                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a path.")
+            destination_value = os.fspath(raw_destination)
+            if not isinstance(destination_value, str):
+                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a string path.")
+            if not destination_value or "\x00" in destination_value:
+                raise ValueError(f"Restore destination for association '{association.folder_id}' must be non-empty and contain no NUL characters.")
+            if association.folder_id not in mapping and not Path(destination_value).is_absolute():
+                if PureWindowsPath(destination_value).is_absolute():
+                    raise ValueError(f"Restore destination for association '{association.folder_id}' must be mapped for this platform.")
+            destination_inputs.append((association.folder_id, destination_value))
+
+        return validate_destructive_destinations(
+            destination_inputs,
+            catalogue_path=self.path_catalogue,
+            origin_os=origin_os,
+            operation="restore associated directories",
+        )
 
     def _restore_archived_associations(
         self,
@@ -547,13 +625,6 @@ class CatalogueBackupService:
     ) -> None:
         """Preflight and transactionally restore every association to its captured or mapped path."""
         dir_name_to_assoc = {association.directory_name: association for association in associations}
-        mapping = destination_mapping or {}
-        if any(not isinstance(folder_id, str) or not folder_id for folder_id in mapping):
-            raise TypeError("Destination mapping keys must be non-empty association IDs.")
-        unknown_ids = set(mapping) - {association.folder_id for association in associations}
-        if unknown_ids:
-            raise ValueError(f"Destination mapping contains unknown association IDs: {', '.join(sorted(unknown_ids))}.")
-
         extracted_entries = sorted(
             (entry for entry in temp_dir_path.iterdir() if entry.name != manifest_name),
             key=lambda entry: entry.name,
@@ -570,28 +641,7 @@ class CatalogueBackupService:
         if missing_folders or unexpected_entries:
             raise SnapshotIncompleteError("Associated-directories restore", missing_folders, unexpected_entries)
 
-        destination_inputs = []
-        for association in associations:
-            extracted_dir = extracted_by_name[association.directory_name]
-            raw_destination = mapping.get(association.folder_id, association.original_path)
-            if not isinstance(raw_destination, (str, os.PathLike)):
-                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a path.")
-            destination_value = os.fspath(raw_destination)
-            if not isinstance(destination_value, str):
-                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a string path.")
-            if not destination_value or "\x00" in destination_value:
-                raise ValueError(f"Restore destination for association '{association.folder_id}' must be non-empty and contain no NUL characters.")
-            if association.folder_id not in mapping and not Path(destination_value).is_absolute():
-                if PureWindowsPath(destination_value).is_absolute():
-                    raise ValueError(f"Restore destination for association '{association.folder_id}' must be mapped for this platform.")
-            destination_inputs.append((association.folder_id, destination_value))
-
-        destinations = validate_destructive_destinations(
-            destination_inputs,
-            catalogue_path=self.path_catalogue,
-            origin_os=origin_os,
-            operation="restore associated directories",
-        )
+        destinations = self._resolve_restore_destinations(associations, destination_mapping, origin_os)
 
         tasks = []
         for association, destination in zip(associations, destinations, strict=True):
