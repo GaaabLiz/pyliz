@@ -278,3 +278,19 @@ def test_sync_failure_restores_copies_and_memory_without_rewriting_metadata_byte
     assert snapshot.date_last_modified == old_date
     assert manager.path_snapshot_json.read_bytes() == b"partial sync metadata"
     assert list(manager.path_snapshot.glob("*_bck_*")) == []
+
+
+def test_lifecycle_metadata_failure_preserves_old_root_and_manifest_identity(tmp_path):
+    """A replacement whose staged JSON fails never moves the original root."""
+    from pylizlib.core.os.snap.operations.lifecycle import SnapshotLifecycle
+
+    source, snapshot, manager = stored_snapshot(tmp_path)
+    before = {p.relative_to(manager.path_snapshot): p.read_bytes() for p in manager.path_snapshot.rglob("*") if p.is_file()}
+    manifest = snapshot.directories[0].integrity_manifest
+    (source / "value.txt").write_text("new source data")
+    with patch.object(SnapshotSerializer, "to_json", side_effect=OSError("staged JSON failed")):
+        with pytest.raises(OSError, match="staged JSON failed"):
+            SnapshotLifecycle(manager._storage()).create(replace_existing=True)
+    assert {p.relative_to(manager.path_snapshot): p.read_bytes() for p in manager.path_snapshot.rglob("*") if p.is_file()} == before
+    assert snapshot.directories[0].integrity_manifest is manifest
+    assert list(manager.path_catalogue.iterdir()) == [manager.path_snapshot]
