@@ -56,6 +56,30 @@ originali mancanti e `unexpected_entries` le voci dell'archivio senza
 corrispondenza. Il ripristino controlla l'insieme completo prima di modificare
 le destinazioni.
 
+## Ricerca dei contenuti
+
+`SnapshotSearchParams` usa una lettura a blocchi e limita i candidati a
+`max_files` (default 10.000), i risultati a `max_results` (default 1.000) e il
+testo mostrato per riga a `max_line_preview_chars` (default 4.096). La
+paginazione usa `result_offset`; in `search_list()` la pagina è condivisa fra
+tutti gli snapshot. Le estensioni sono confrontate senza distinzione fra
+maiuscole e minuscole e possono essere composte, ad esempio `.TAR.GZ`.
+
+Se non viene indicata `encoding`, la ricerca riconosce BOM e UTF-16 senza BOM
+con testo ASCII, prova UTF-8 e usa Windows-1252 se il testo non è UTF-8 valido. Se la
+decodifica fallisce più avanti nel file, il file viene riletto con Windows-1252.
+I file che il campione iniziale identifica come binari vengono saltati; un
+errore di decodifica testuale non viene descritto come file binario. Per altri
+codici si può impostare `encoding` esplicitamente.
+
+Le query di testo e regex possono attraversare le righe. Il contenuto è letto
+con blocchi da `chunk_size` (default 64 KiB). Le regex hanno un timeout per
+finestra (`regex_timeout_seconds`, default 0,1 s) e la finestra è limitata a
+`max_context_chars` (default 1 Mi caratteri): match regex che richiedono più
+contesto non sono garantiti. Solo `False` interrompe la ricerca dello snapshot
+corrente; la callback viene richiamata anche durante la lettura, così può
+interrompere un file molto grande.
+
 La destinazione di un backup deve risolversi fuori dagli alberi che verranno
 archiviati. Questo evita di includere ZIP precedenti e viene controllato anche
 quando la destinazione usa un alias o un link simbolico.
@@ -183,8 +207,8 @@ propri test: non va inserita in uno spostamento di codice.
   a una sorgente congelata dal filesystem/provider.
 - La presenza di una callback può attivare la scansione dei byte nella copia.
   Create mantiene l'adapter anche senza osservatore; install passa `None`.
-- Nella ricerca soltanto `False` interrompe il ciclo corrente, prima di leggere
-  quel file. La ricerca degli snapshot successivi continua.
+- Nella ricerca soltanto `False` interrompe lo snapshot corrente; la callback
+  viene chiamata prima di ciascun file e durante le letture a blocchi.
 - L'import del catalogo gestisce gli errori per voce e legge inizialmente solo
   l'ID; l'import singolo valida invece l'intero modello.
 

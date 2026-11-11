@@ -111,6 +111,176 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
         for r in results:
             self.assertEqual(r.file_path.suffix, ".txt")
 
+    def test_extension_filter_is_case_insensitive_and_supports_compound_suffixes(self):
+        source = SOURCE_DATA_PATH / "srch1"
+        upper = source / "upper.TXT"
+        compound = source / "archive.tar.gz"
+        upper.write_text("needle", encoding="utf-8")
+        compound.write_text("needle", encoding="utf-8")
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        upper_results = self.searcher.search(self.snap, SnapshotSearchParams(query="needle", extensions=[".txt"]))
+        compound_results = self.searcher.search(self.snap, SnapshotSearchParams(query="needle", extensions=[".TAR.GZ"]))
+
+        self.assertIn("upper.TXT", {result.file_path.name for result in upper_results})
+        self.assertEqual({result.file_path.name for result in compound_results}, {"archive.tar.gz"})
+
+    def test_cp1252_and_utf16_text_are_searchable(self):
+        source = SOURCE_DATA_PATH / "srch1"
+        cp1252_file = source / "western.txt"
+        utf16_file = source / "unicode.txt"
+        utf16_no_bom_file = source / "unicode-no-bom.txt"
+        cp1252_file.write_bytes("café déjà vu".encode("cp1252"))
+        utf16_file.write_text("ciao mondo", encoding="utf-16")
+        utf16_no_bom_file.write_bytes("hello café".encode("utf-16-le"))
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        results = self.searcher.search(self.snap, SnapshotSearchParams(query="café"))
+        self.assertIn("western.txt", {result.file_path.name for result in results})
+        results = self.searcher.search(self.snap, SnapshotSearchParams(query="ciao mondo"))
+        self.assertIn("unicode.txt", {result.file_path.name for result in results})
+        results = self.searcher.search(self.snap, SnapshotSearchParams(query="hello café"))
+        self.assertIn("unicode-no-bom.txt", {result.file_path.name for result in results})
+
+    def test_cp1252_fallback_is_not_misreported_as_binary(self):
+        source_file = SOURCE_DATA_PATH / "srch1" / "western.txt"
+        source_file.write_bytes("olé".encode("cp1252"))
+
+        encoding, binary, used_fallback = self.searcher._detect_encoding(source_file, None)
+
+        self.assertEqual(encoding, "cp1252")
+        self.assertFalse(binary)
+        self.assertTrue(used_fallback)
+
+    def test_late_utf8_decode_error_retries_the_file_with_cp1252(self):
+        source_file = SOURCE_DATA_PATH / "srch1" / "late-western.txt"
+        source_file.write_bytes(b"ASCII prefix " * 900 + "café".encode("cp1252"))
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        with self.assertLogs(level="WARNING") as captured:
+            results = self.searcher.search(
+                self.snap,
+                SnapshotSearchParams(query="café", chunk_size=1024),
+            )
+
+        self.assertIn("late-western.txt", {result.file_path.name for result in results})
+        self.assertTrue(any("retrying with Windows-1252" in message for message in captured.output))
+        self.assertFalse(any("binary content" in message for message in captured.output))
+
+    def test_multiline_text_match_crosses_read_chunks(self):
+        source_file = SOURCE_DATA_PATH / "srch1" / "multiline.txt"
+        source_file.write_text("first line\nsecond line\nthird", encoding="utf-8")
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        results = self.searcher.search(
+            self.snap,
+            SnapshotSearchParams(query="line\nsecond", chunk_size=4),
+        )
+
+        match = next(result for result in results if result.file_path.name == "multiline.txt")
+        self.assertEqual(match.line_number, 1)
+        self.assertEqual(match.line_content, "first line")
+
+        regex_results = self.searcher.search(
+            self.snap,
+            SnapshotSearchParams(
+                query=r"first line\nsecond",
+                query_type=QueryType.REGEX,
+                chunk_size=4,
+            ),
+        )
+        self.assertIn("multiline.txt", {result.file_path.name for result in regex_results})
+
+    def test_large_single_line_returns_bounded_preview_and_can_be_cancelled_mid_file(self):
+        source_file = SOURCE_DATA_PATH / "srch1" / "huge.txt"
+        source_file.write_text("x" * 50_000 + "needle" + "y" * 50_000, encoding="utf-8")
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        results = self.searcher.search(
+            self.snap,
+            SnapshotSearchParams(query="needle", chunk_size=256, max_line_preview_chars=80),
+        )
+        match = next(result for result in results if result.file_path.name == "huge.txt")
+        self.assertLessEqual(len(match.line_content), 82)
+        self.assertIn("needle", match.line_content)
+
+        cancel_dir = SOURCE_DATA_PATH / "cancel-search"
+        cancel_dir.mkdir(exist_ok=True)
+        (cancel_dir / "cancel.txt").write_text("needle\n" + "x" * 50_000, encoding="utf-8")
+        cancel_snap = Snapshot(
+            id="search-cancel-snap-id",
+            name="CancelSnap",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(cancel_dir), folder_id="cancel-folder")],
+        )
+        self.catalogue.add(cancel_snap)
+        cancelled_calls = 0
+
+        def cancel_during_read(filename: str, total: int, processed: int) -> bool:
+            nonlocal cancelled_calls
+            cancelled_calls += 1
+            return cancelled_calls < 4
+
+        results = self.searcher.search(
+            cancel_snap,
+            SnapshotSearchParams(query="needle", chunk_size=8, max_results=10),
+            on_progress=cancel_during_read,
+        )
+        self.assertGreaterEqual(cancelled_calls, 4)
+        self.assertLess(cancelled_calls, 10_000)
+        self.assertTrue(results)
+
+    def test_result_page_limits_and_offsets_search_results(self):
+        first_page = self.searcher.search(
+            self.snap,
+            SnapshotSearchParams(query="Hello", max_results=1),
+        )
+        second_page = self.searcher.search(
+            self.snap,
+            SnapshotSearchParams(query="Hello", max_results=1, result_offset=1),
+        )
+
+        self.assertEqual(len(first_page), 1)
+        self.assertEqual(len(second_page), 1)
+        self.assertNotEqual(first_page[0].file_path, second_page[0].file_path)
+
+    def test_max_files_bounds_the_candidate_path_list(self):
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        with self.assertLogs(level="WARNING") as captured:
+            results = self.searcher.search(
+                self.snap,
+                SnapshotSearchParams(
+                    query="",
+                    search_target=SearchTarget.FILE_NAME,
+                    max_files=1,
+                    max_results=100,
+                ),
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(any("max_files=1" in message for message in captured.output))
+
+    def test_regex_timeout_skips_remaining_content_without_blocking_search(self):
+        source_file = SOURCE_DATA_PATH / "srch1" / "regex-heavy.txt"
+        source_file.write_text("a" * 10_000 + "!", encoding="utf-8")
+        self.catalogue.update_assoc_with_installed(self.snap.id)
+
+        with self.assertLogs(level="WARNING") as captured:
+            results = self.searcher.search(
+                self.snap,
+                SnapshotSearchParams(
+                    query=r"(a|aa)+$",
+                    query_type=QueryType.REGEX,
+                    chunk_size=1024,
+                    max_context_chars=2048,
+                    regex_timeout_seconds=0.001,
+                ),
+            )
+
+        self.assertEqual(results, [])
+        self.assertTrue(any("timed out" in message for message in captured.output))
+
     def test_binary_file_is_skipped_gracefully(self):
         params = SnapshotSearchParams(query="binary")
         results = self.searcher.search(self.snap, params)
@@ -244,6 +414,26 @@ class TestSnapshotSearcherMultipleSnapshots(unittest.TestCase):
         self.assertIn("SearchSnap", snap_names)
         self.assertIn("SearchSnap2", snap_names)
 
+    def test_search_list_applies_result_page_across_snapshots(self):
+        snap2_dir = SOURCE_DATA_PATH / "srch5"
+        snap2_dir.mkdir(exist_ok=True)
+        (snap2_dir / "extra.txt").write_text("Hello from snap2", encoding="utf-8")
+        snap2 = Snapshot(
+            id="search-snap-page-id",
+            name="SearchSnapPage",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(snap2_dir), folder_id="sd5")],
+        )
+        self.catalogue.add(snap2)
+
+        results = self.searcher.search_list(
+            [self.snap, snap2],
+            SnapshotSearchParams(query="Hello", max_results=1, result_offset=2),
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].snapshot_name, "SearchSnapPage")
+
     def test_search_list_reuses_loaded_snapshots_without_rereading_catalogue_metadata(self):
         from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
@@ -277,6 +467,22 @@ class TestSnapshotSearcherMultipleSnapshots(unittest.TestCase):
         self.assertGreater(len(calls), 0)
         last = calls[-1]
         self.assertEqual(last[1], last[2])  # total == processed on last call
+
+    def test_progress_callback_exceptions_propagate_during_file_reads(self):
+        calls = 0
+
+        def fail_during_read(filename: str, total: int, processed: int) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise ValueError("observer failed")
+
+        with self.assertRaisesRegex(ValueError, "observer failed"):
+            self.searcher.search(
+                self.snap,
+                SnapshotSearchParams(query="Hello", chunk_size=4),
+                on_progress=fail_during_read,
+            )
 
     def test_search_nonexistent_snapshot_path_returns_empty_with_warning(self):
         ghost_snap = Snapshot(
