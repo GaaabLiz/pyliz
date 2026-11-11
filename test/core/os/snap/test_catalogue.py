@@ -735,7 +735,7 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
                     "folder_id": association.folder_id,
                     "index": association.index,
                     "directory_name": association.directory_name,
-                    "original_path": Path(association.original_path).absolute().as_posix(),
+                    "original_path": association.original_path,
                 }
             ],
         )

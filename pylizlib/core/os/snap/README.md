@@ -161,8 +161,11 @@ propri test: non va inserita in uno spostamento di codice.
 ## Altri vincoli di compatibilità
 
 - Le associazioni calcolano ancora `mb_size` nel costruttore quando manca;
-  `validate()` normalizza ancora `original_path` e viene chiamato dalle
-  proprietà che già lo facevano.
+  `validate()` normalizza `original_path` in un percorso assoluto ancorato alla
+  directory corrente al momento della costruzione e viene chiamato dalle
+  proprietà che già lo facevano. La normalizzazione è lessicale e non segue i
+  link simbolici. Il JSON rifiuta percorsi relativi; su Windows i drive di rete
+  mappati vengono convertiti nel percorso UNC quando la mappatura è disponibile.
 - I default `SnapshotSettings()` dei due costruttori pubblici mantengono la
   condivisione storica. Non aggiungere copie o ricostruzioni implicite.
 - Il diff usa `folder_id` come identità stabile e conserva l'ordine di aggiunte,

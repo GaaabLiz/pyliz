@@ -17,6 +17,7 @@ from typing import ClassVar, Optional
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, DirectoryCopyStrategy, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.integrity import IntegrityManifest, validate_integrity_manifest
+from pylizlib.core.os.snap.storage.original_paths import normalize_original_path
 from pylizlib.core.os.utils import get_folder_size_mb
 
 
@@ -56,6 +57,7 @@ class SnapDirAssociation:
         Size errors keep the existing zero-size fallback and logging behavior."""
         self._storage_name = None
         self._storage_id = None
+        self._path_initialized = False
         self.validate()
         if self.mb_size is None:
             try:
@@ -78,7 +80,11 @@ class SnapDirAssociation:
             raise ValueError("Snapshot directory original_path must be a non-empty path without NUL characters.")
         if not isinstance(self.folder_id, str) or not self.folder_id:
             raise TypeError("Snapshot directory folder_id must be a non-empty string.")
-        self.original_path = Path(self.original_path).as_posix()
+        self.original_path = normalize_original_path(
+            self.original_path,
+            allow_relative=not self._path_initialized,
+        )
+        self._path_initialized = True
         if self.mb_size is not None:
             if type(self.mb_size) not in (int, float):
                 raise TypeError("Snapshot directory mb_size must be a non-negative number or None.")
@@ -241,6 +247,7 @@ class SnapEditAction:
 
     def __post_init__(self):
         """Validate a newly constructed edit before it can be used in a filesystem plan."""
+        self._path_initialized = False
         self.validate()
 
     def validate(self) -> None:
@@ -253,6 +260,12 @@ class SnapEditAction:
             value = getattr(self, name)
             if not isinstance(value, str):
                 raise TypeError(f"Snapshot edit {name} must be a string.")
+        if self.action_type == SnapEditType.ADD_DIR and self.new_path:
+            self.new_path = normalize_original_path(
+                self.new_path,
+                allow_relative=not self._path_initialized,
+            )
+        self._path_initialized = True
         for name in ("directory_name_to_remove", "old_directory_name", "new_directory_name"):
             validate_directory_component(getattr(self, name), name, allow_empty=True)
 

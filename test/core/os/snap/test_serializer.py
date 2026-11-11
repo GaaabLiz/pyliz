@@ -142,6 +142,23 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         with self.assertRaises(TypeError):
             SnapshotSerializer.from_json(json_path)
 
+    def test_json_rejects_relative_original_path(self):
+        json_path = TEST_LOCAL_ROOT / "relative_original_path.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "id": "relative-path",
+                    "name": "Relative path",
+                    "desc": "",
+                    "directories": [{"index": 1, "original_path": "data", "folder_id": "assoc"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ValueError, "relative paths cannot be resolved safely"):
+            SnapshotSerializer.from_json(json_path)
+
 
 class TestSnapshotSerializerSymlinkSafety(unittest.TestCase):
     def setUp(self):
