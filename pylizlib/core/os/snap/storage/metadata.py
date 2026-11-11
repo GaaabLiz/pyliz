@@ -63,7 +63,7 @@ class MetadataFile:
     @staticmethod
     def read_bytes(path: Path, opener: Callable = None) -> bytes:
         """Read a regular metadata file without following symbolic links."""
-        descriptor = (opener or MetadataFile.open_file)(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        descriptor = (opener if opener is not None else MetadataFile.open_file)(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
         try:
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ValueError(f"Snapshot metadata path '{path}' is not a regular file.")
@@ -75,7 +75,7 @@ class MetadataFile:
     @staticmethod
     def write_bytes(path: Path, contents: bytes, opener: Callable = None) -> None:
         """Write a regular metadata file without following symbolic links."""
-        descriptor = (opener or MetadataFile.open_file)(path, os.O_WRONLY | os.O_CREAT | getattr(os, "O_NONBLOCK", 0))
+        descriptor = (opener if opener is not None else MetadataFile.open_file)(path, os.O_WRONLY | os.O_CREAT | getattr(os, "O_NONBLOCK", 0))
         try:
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ValueError(f"Snapshot metadata path '{path}' is not a regular file.")
@@ -122,10 +122,8 @@ class SnapshotJsonCodec:
         The optional converter retains the public serializer customization hook.
         File access is intentionally left to the caller.
         """
-        snapshot.validate()
-        data_dict = asdict(snapshot)
-        json_str = json.dumps(data_dict, default=converter or SnapshotJsonCodec.convert, indent=4)
-        return json_str
+        data_dict = SnapshotJsonCodec.snapshot_data(snapshot)
+        return SnapshotJsonCodec.encode_data(data_dict, converter)
 
     @staticmethod
     def decode(contents: str) -> Snapshot:
@@ -168,9 +166,26 @@ class SnapshotJsonCodec:
         This intentionally does not decode the domain model or add validation.
         The legacy partial-update API accepts arbitrary JSON object fields.
         """
+        data = SnapshotJsonCodec.updated_data(contents, field_name, new_value)
+        return SnapshotJsonCodec.encode_data(data, converter)
+
+    @staticmethod
+    def snapshot_data(snapshot: Snapshot) -> dict:
+        """Validate before conversion, preserving public serializer hook timing."""
+        snapshot.validate()
+        return asdict(snapshot)
+
+    @staticmethod
+    def updated_data(contents: str, field_name: str, new_value) -> dict:
+        """Patch a decoded JSON object without constructing a domain model."""
         data = json.loads(contents)
         data[field_name] = new_value
-        return json.dumps(data, default=converter or SnapshotJsonCodec.convert, indent=4)
+        return data
+
+    @staticmethod
+    def encode_data(data: dict, converter: Callable | None = None) -> str:
+        """Encode prepared data with the existing converter and indentation."""
+        return json.dumps(data, default=converter if converter is not None else SnapshotJsonCodec.convert, indent=4)
 
 
 def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
