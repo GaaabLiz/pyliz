@@ -17,6 +17,7 @@ from pylizlib.core.os.snap.integrity import (
     assert_manifest_matches,
     validate_integrity_manifest,
 )
+from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 ProgressCallback = Callable[[int, int], None]
 MessageCallback = Callable[[str], None]
@@ -59,10 +60,8 @@ def _remove_tree(path: Path) -> None:
 
 
 def _is_link_or_junction(path: Path) -> bool:
-    if path.is_symlink():
-        return True
-    is_junction = getattr(path, "is_junction", None)
-    return is_junction is not None and is_junction()
+    """Compatibility helper for the common storage entry check."""
+    return is_link_or_junction(path)
 
 
 class SequentialFileCopyStrategy(DirectoryCopyStrategy):

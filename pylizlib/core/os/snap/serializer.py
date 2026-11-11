@@ -19,13 +19,13 @@ from enum import Enum
 from pathlib import Path
 
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
+from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
 class SnapshotSerializer:
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:
-        is_junction = getattr(path, "is_junction", None)
-        return path.is_symlink() or (is_junction is not None and is_junction())
+        return is_link_or_junction(path)
 
     @staticmethod
     def _open_file(path: Path, flags: int, mode: int = 0o666) -> int:

@@ -22,23 +22,24 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.snap import diff as _diff
+from pylizlib.core.os.snap import sorting as _sorting
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     SnapEditAction,
-    SnapEditType,
     Snapshot,
     SnapshotSortKey,
     validate_directory_component,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
 class SnapshotUtils:
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:
-        is_junction = getattr(path, "is_junction", None)
-        return path.is_symlink() or (is_junction is not None and is_junction())
+        return is_link_or_junction(path)
 
     @staticmethod
     def iter_files_strict(root: Path) -> Iterator[Path]:
@@ -348,44 +349,7 @@ class SnapshotUtils:
         Returns:
             A list of SnapEditAction objects representing the changes.
         """
-        edits: list[SnapEditAction] = []
-
-        old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
-        new_by_id = {assoc.folder_id: assoc for assoc in new.directories}
-        if len(old_by_id) != len(old.directories) or len(new_by_id) != len(new.directories):
-            raise ValueError("Snapshot associations must have unique folder IDs.")
-
-        for assoc in new.directories:
-            if assoc.folder_id not in old_by_id:
-                edits.append(SnapEditAction(action_type=SnapEditType.ADD_DIR, new_path=assoc.original_path, folder_id=assoc.folder_id))
-
-        for assoc in old.directories:
-            if assoc.folder_id in new_by_id:
-                continue
-            edits.append(
-                SnapEditAction(
-                    action_type=SnapEditType.REMOVE_DIR,
-                    folder_id_to_remove=assoc.folder_id,
-                    directory_name_to_remove=assoc.directory_name,
-                    folder_id=assoc.folder_id,
-                )
-            )
-
-        for old_assoc in old.directories:
-            new_assoc = new_by_id.get(old_assoc.folder_id)
-            if new_assoc is None:
-                continue
-            if old_assoc.directory_name != new_assoc.directory_name:
-                edits.append(
-                    SnapEditAction(
-                        action_type=SnapEditType.RENAME_DIR,
-                        old_directory_name=old_assoc.directory_name,
-                        new_directory_name=new_assoc.directory_name,
-                        folder_id=old_assoc.folder_id,
-                    )
-                )
-
-        return edits
+        return _diff.get_edits_between_snapshots(old, new)
 
     @staticmethod
     def sort_snapshots(
@@ -406,22 +370,4 @@ class SnapshotUtils:
         Returns:
             A new list containing the sorted Snapshots.
         """
-        key_attr = sort_by.value
-        snaps_with_value = []
-        snaps_with_none = []
-
-        for snap in snapshots:
-            if getattr(snap, key_attr) is None:
-                snaps_with_none.append(snap)
-            else:
-                snaps_with_value.append(snap)
-
-        def get_key(snapshot: Snapshot):
-            value = getattr(snapshot, key_attr)
-            if isinstance(value, str):
-                return value.lower()
-            return value
-
-        sorted_snaps = sorted(snaps_with_value, key=get_key, reverse=reverse)
-
-        return sorted_snaps + snaps_with_none
+        return _sorting.sort_snapshots(snapshots, sort_by, reverse)
