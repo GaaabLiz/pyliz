@@ -212,7 +212,20 @@ class SnapshotInstaller:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
 
     def _preflight(self) -> None:
-        """Validate stored sources, targets and legacy-manifest policy before copying."""
+        """Validate sources, disjoint destinations and manifests before copying."""
+        targets = [
+            (association, Path(association.original_path).resolve(strict=False))
+            for association in self.storage.snapshot.directories
+        ]
+        for index, (association, target) in enumerate(targets):
+            for other_association, other_target in targets[index + 1 :]:
+                if target.is_relative_to(other_target) or other_target.is_relative_to(target):
+                    raise ValueError(
+                        "Snapshot installation destinations cannot be coincident or nested: "
+                        f"'{association.original_path}' ({association.folder_id}) and "
+                        f"'{other_association.original_path}' ({other_association.folder_id})."
+                    )
+
         # Preflight
         for dir_assoc in self.storage.snapshot.directories:
             source_dir = self.storage.child_path(dir_assoc.directory_name)

@@ -78,6 +78,41 @@ def test_install_merge_replaces_colliding_top_level_directory(tmp_path):
     assert snapshot.date_last_used is not None
 
 
+@pytest.mark.parametrize("clear_destination", [True, False])
+@pytest.mark.parametrize("same_path", [True, False])
+def test_install_rejects_coincident_or_nested_targets_before_staging(tmp_path, clear_destination, same_path):
+    """Overlapping associations fail before either live destination changes."""
+    root = tmp_path / "data"
+    parent = root / "progetto"
+    child = parent / "cache"
+    child.mkdir(parents=True)
+    (parent / "project.txt").write_text("snapshot project")
+    (child / "cache.txt").write_text("snapshot cache")
+    child_path = parent if same_path else child
+    snapshot = Snapshot(
+        f"overlap-{clear_destination}-{same_path}",
+        "overlap",
+        "",
+        directories=[
+            SnapDirAssociation(1, str(parent), "parent"),
+            SnapDirAssociation(2, str(child_path), "child"),
+        ],
+    )
+    manager = SnapshotManager(snapshot, tmp_path / "catalogue", SnapshotSettings())
+    manager.create()
+    (parent / "project.txt").write_text("live project")
+    (child / "cache.txt").write_text("live cache")
+    before = {path.relative_to(parent): path.read_bytes() for path in parent.rglob("*") if path.is_file()}
+
+    with pytest.raises(ValueError, match="cannot be coincident or nested"):
+        manager.install(clear_destination=clear_destination)
+
+    assert {path.relative_to(parent): path.read_bytes() for path in parent.rglob("*") if path.is_file()} == before
+    assert list(tmp_path.rglob("*_staging_*")) == []
+    assert list(tmp_path.rglob("*_bck_*")) == []
+    assert not (manager.path_snapshot / ".pyliz_transactions").exists()
+
+
 def test_install_metadata_failure_leaves_published_contents(tmp_path):
     """A post-commit metadata failure is typed and leaves a recovery copy."""
     source, snapshot, manager = stored_snapshot(tmp_path)
