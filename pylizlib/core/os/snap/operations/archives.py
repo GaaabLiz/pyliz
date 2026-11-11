@@ -1,6 +1,6 @@
 """Snapshot backup creation and catalogue restore operations."""
 
-import shutil
+import os
 import stat
 import tempfile
 from collections.abc import Callable
@@ -16,7 +16,9 @@ from pylizlib.core.os.snap.operations.backup_names import build_backup_filename,
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
-from pylizlib.core.os.snap.storage.publication import cleanup_after_commit, publish_snapshot_tree
+from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snapshot_path
+from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_files_strict
 
 
@@ -44,6 +46,7 @@ class SnapshotArchiveService:
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
                 raise ValueError(f"Unsupported backup type: {backup_type}")
+            recover_storage_transactions(self.storage)
             self.storage.snapshot.validate()
             self.storage.root_path()
             snapshot_json_path = self.storage.child_path(self.storage.settings.json_filename)
@@ -92,11 +95,13 @@ class SnapshotLookup(Protocol):
 
 @dataclass(frozen=True)
 class RestoreReplacement:
-    """Extracted association and its live destination and optional old backup."""
+    """Durably staged association and its live destination and optional backup."""
 
-    extracted_dir: Path
+    folder_id: str
+    staged_dir: Path
     destination: Path
     backup_dest: Path
+    had_original: bool
 
 
 class CatalogueBackupService:
@@ -147,6 +152,7 @@ class CatalogueBackupService:
                         or the restore cannot be performed.
             IOError: If extraction fails.
         """
+        recover_pending_transactions(self.path_catalogue)
         if not backup_zip_path.is_file() or backup_zip_path.suffix != ".zip":
             raise ValueError(f"Provided path '{backup_zip_path}' is not a valid .zip file.")
 
@@ -212,6 +218,16 @@ class CatalogueBackupService:
         if not snapshot:
             raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Associated-directories restore requires an existing snapshot metadata entry.")
 
+        snapshot_root = get_snapshot_path(snapshot.folder_name, self.path_catalogue)
+        storage = SnapshotStorage(
+            snapshot,
+            self.settings,
+            self.path_catalogue,
+            snapshot_root,
+            get_snapshot_json_path(snapshot.folder_name, self.path_catalogue, self.settings.json_filename),
+        )
+        recover_storage_transactions(storage)
+
         dir_name_to_assoc: dict[str, SnapDirAssociation] = {assoc.directory_name: assoc for assoc in snapshot.directories}
 
         # Preflight: collect all targets and validate unambiguously
@@ -225,36 +241,62 @@ class CatalogueBackupService:
                 logger.warning(f"No matching associated directory found for backup folder '{extracted_dir.name}'. Skipping.")
                 continue
 
-            destination = Path(candidate.original_path)
-            tasks.append(RestoreReplacement(extracted_dir, destination, destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")))
+            destination = Path(os.path.abspath(candidate.original_path))
+            backup_dest = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
+            try:
+                destination.lstat()
+                had_original = True
+            except FileNotFoundError:
+                had_original = False
+            tasks.append(RestoreReplacement(candidate.folder_id, extracted_dir, destination, backup_dest, had_original))
 
         if not tasks:
             raise ValueError("No associated directories were restored from the backup archive.")
 
-        # Swap transaction
-        completed_rollbacks = []
+        journal = SnapshotTransactionJournal.begin(snapshot_root, "restore_associations", {"entries": []})
         try:
+            entries = []
+            staged_tasks = []
+            for index, task in enumerate(tasks):
+                staged_dir = journal.workspace / f"restore_{index}"
+                assert_no_symlinks(task.staged_dir)
+                self.settings.copy_strategy.copy_directory(task.staged_dir, staged_dir)
+                assert_no_symlinks(staged_dir)
+                staged_task = RestoreReplacement(task.folder_id, staged_dir, task.destination, task.backup_dest, task.had_original)
+                staged_tasks.append(staged_task)
+                entries.append(
+                    {
+                        "folder_id": task.folder_id,
+                        "stage": staged_dir.as_posix(),
+                        "stage_root": journal.workspace.as_posix(),
+                        "destination": task.destination.as_posix(),
+                        "backup": task.backup_dest.as_posix(),
+                        "had_original": task.had_original,
+                    }
+                )
+            tasks = staged_tasks
+            journal.update_payload(entries=entries)
             for task in tasks:
                 destination = task.destination
                 backup_dest = task.backup_dest
-                extracted_dir = task.extracted_dir
 
-                if destination.exists():
-                    destination.rename(backup_dest)
+                if task.had_original:
+                    if not (destination.exists() or destination.is_symlink()):
+                        raise FileNotFoundError(f"Restore destination '{destination}' disappeared before publication.")
+                    rename_and_sync(destination, backup_dest)
+                elif destination.exists() or destination.is_symlink():
+                    raise FileExistsError(f"Restore destination '{destination}' appeared before publication.")
 
-                self.settings.copy_strategy.copy_directory(extracted_dir, destination)
-                completed_rollbacks.append(task)
+                rename_and_sync(task.staged_dir, destination)
 
+            journal.set_state("commit_decided")
+            journal.set_state("committed")
         except Exception as e:
             logger.error(f"Failed to restore associated directories: {e}. Rolling back.")
-            for task in tasks:
-                destination = task.destination
-                backup_dest = task.backup_dest
-                if backup_dest.exists():
-                    if destination.exists():
-                        shutil.rmtree(destination)
-                    backup_dest.rename(destination)
+            try:
+                journal.decide_rollback(storage)
+            except Exception as rollback_error:
+                e.add_note(f"Persistent recovery journal retained at '{journal.path}': {rollback_error}")
             raise IOError(f"Failed to restore associated directories: {e}") from e
 
-        # All replacements succeeded; backups may now be partially deleted.
-        cleanup_after_commit((task.backup_dest for task in tasks), "Associated-directories restore")
+        journal.finalize([task.backup_dest for task in tasks], "Associated-directories restore")

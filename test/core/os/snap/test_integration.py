@@ -92,8 +92,8 @@ class TestIntegrationCleanupFailures(unittest.TestCase):
 
         def fail_after_deleting_one_file(path, *args, **kwargs):
             backup = Path(path)
-            original = backup / "original" if operation == "restore_sd" else backup
-            is_backup = original.is_dir() and (operation == "restore_sd" or "_bck_" in backup.name)
+            original = backup
+            is_backup = original.is_dir() and (operation == "restore_sd" and backup.name == "original" or "_bck_" in backup.name)
             if is_backup and not damaged_backups:
                 next(p for p in original.rglob("*") if p.is_file()).unlink()
                 damaged_backups.append(backup)
@@ -116,7 +116,7 @@ class TestIntegrationCleanupFailures(unittest.TestCase):
             self.assertEqual({p.name: p.read_bytes() for p in target.iterdir()}, files)
         # Other backups are still cleaned even when the first cleanup fails.
         if operation == "restore_sd":
-            self.assertEqual(list(CATALOGUE_PATH.glob("_staging_snapshot_*")), damaged_backups)
+            self.assertEqual(list(CATALOGUE_PATH.glob(".pyliz_transactions/*/original")), damaged_backups)
         else:
             self.assertEqual(list(damaged_backups[0].parent.glob("*_bck_*")), damaged_backups)
         loaded = SnapshotSerializer.from_json(self.mgr.path_snapshot_json)

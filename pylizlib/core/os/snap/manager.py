@@ -23,6 +23,7 @@ from pylizlib.core.os.snap.operations.lifecycle import SnapshotLifecycle
 from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
 
@@ -90,6 +91,7 @@ class SnapshotManager:
         Updates the 'data' and 'date_last_modified' fields in the snapshot's JSON file.
         This method is typically called after modifying the snapshot's data dictionary.
         """
+        recover_storage_transactions(self._storage())
         self.snapshot.validate()
         json_path = self._snapshot_child_path(self.settings.json_filename)
         SnapshotSerializer.update_field(json_path, "data", self.snapshot.data)
@@ -101,6 +103,7 @@ class SnapshotManager:
         Updates the basic metadata fields (name, desc, author, tags, date_modified)
         of the snapshot's JSON file.
         """
+        recover_storage_transactions(self._storage())
         self.snapshot.validate()
         json_path = self._snapshot_child_path(self.settings.json_filename)
         SnapshotSerializer.update_field(json_path, "name", self.snapshot.name)
@@ -121,6 +124,7 @@ class SnapshotManager:
         Raises:
             ValueError: If the destination_path is not a valid directory.
         """
+        recover_storage_transactions(self._storage())
         if not destination_path.exists() or not destination_path.is_dir():
             raise ValueError(f"The provided path {destination_path} is not a valid directory.")
         new_dir = SnapDirAssociation(
@@ -146,6 +150,7 @@ class SnapshotManager:
         Args:
             folder_id: The unique ID of the folder to remove.
         """
+        recover_storage_transactions(self._storage())
         dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
         if dir_to_remove:
             dir_path = self._snapshot_child_path(dir_to_remove.directory_name)

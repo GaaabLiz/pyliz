@@ -3,6 +3,7 @@
 This facade owns backup triggers and caller-visible orchestration. Storage
 scans and archive algorithms live in dedicated internal modules."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,7 @@ from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import read_catalogue
+from pylizlib.core.os.snap.storage.transactions import recover_pending_transactions, recover_storage_transactions
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
 
@@ -133,7 +135,11 @@ class SnapshotCatalogue:
         Returns:
             A list of Snapshot objects found in the catalogue.
         """
-        return read_catalogue(self.path_catalogue, self.settings, strict=strict)
+        recover_pending_transactions(self.path_catalogue)
+        snapshots = read_catalogue(self.path_catalogue, self.settings, strict=strict)
+        for snapshot in snapshots:
+            recover_storage_transactions(self._manager(snapshot)._storage())
+        return snapshots
 
     def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
         """
@@ -176,8 +182,8 @@ class SnapshotCatalogue:
         snap_manager = self._manager(snap)
         if self.settings.bck_before_modify_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
-        snap_manager.update_json_base_fields()
-        snap_manager.update_json_data_fields()
+        snap_manager.snapshot.date_modified = datetime.now()
+        snap_manager.snapshot.date_last_modified = datetime.now()
         snap_manager.update_from_actions_list(edits, message_callback=message_callback)
 
     def duplicate_by_id(self, snap_id: str, message_callback=None):

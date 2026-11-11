@@ -84,7 +84,16 @@ def test_install_metadata_failure_leaves_published_contents(tmp_path):
     (source / "value.txt").write_text("live")
     from pylizlib.core.os.snap import SnapshotInstallMetadataError
 
-    with patch.object(SnapshotSerializer, "update_field", side_effect=OSError("metadata failed")):
+    write_bytes = SnapshotSerializer.write_bytes
+
+    def fail_active_metadata(path, contents):
+        """Fail the active JSON publication after installation has committed."""
+        if path == manager.path_snapshot_json:
+            assert (source / "value.txt").read_text() == "stored"
+            raise OSError("metadata failed")
+        return write_bytes(path, contents)
+
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=fail_active_metadata):
         with pytest.raises(SnapshotInstallMetadataError, match="contents were installed") as raised:
             manager.install()
     assert (source / "value.txt").read_text() == "stored"
@@ -104,14 +113,15 @@ def test_install_metadata_durability_failure_records_published_timestamp(tmp_pat
     source, snapshot, manager = stored_snapshot(tmp_path)
     before = manager.path_snapshot_json.read_bytes()
     error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
-    update_field = SnapshotSerializer.update_field
+    write_bytes = SnapshotSerializer.write_bytes
 
-    def publish_then_fail(path, field_name, value):
-        """Persist the field, then simulate failure flushing its directory entry."""
-        update_field(path, field_name, value)
-        raise error
+    def publish_then_fail(path, contents):
+        """Persist the JSON, then simulate failure flushing its directory entry."""
+        write_bytes(path, contents)
+        if path == manager.path_snapshot_json:
+            raise error
 
-    with patch.object(SnapshotSerializer, "update_field", side_effect=publish_then_fail):
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=publish_then_fail):
         with pytest.raises(SnapshotInstallMetadataError) as raised:
             manager.install()
 
@@ -232,14 +242,21 @@ def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path
     snapshot.directories[0].index = 2
     requested_name = snapshot.directories[0].directory_name
 
-    def fail_save(_snapshot, path):
-        """Simulate an interrupted metadata rewrite after content publication."""
-        assert not (manager.path_snapshot / original.directories[0].directory_name).exists()
-        assert (manager.path_snapshot / requested_name).is_dir()
-        path.write_bytes(b"partial")
-        raise OSError("save failed")
+    write_bytes = SnapshotSerializer.write_bytes
+    failed = False
 
-    with patch.object(SnapshotSerializer, "to_json", side_effect=fail_save):
+    def fail_save(path, contents):
+        """Simulate an interrupted active metadata publication after directory swaps."""
+        nonlocal failed
+        if path == manager.path_snapshot_json and not failed:
+            failed = True
+            assert not (manager.path_snapshot / original.directories[0].directory_name).exists()
+            assert (manager.path_snapshot / requested_name).is_dir()
+            path.write_bytes(b"partial")
+            raise OSError("save failed")
+        return write_bytes(path, contents)
+
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=fail_save):
         with pytest.raises(OSError, match="save failed"):
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
     assert manager.path_snapshot_json.read_bytes() == before
@@ -259,15 +276,16 @@ def test_editor_keeps_published_edit_when_metadata_durability_is_uncertain(tmp_p
     old_name = snapshot.directories[0].directory_name
     snapshot.directories[0].index = 2
     new_name = snapshot.directories[0].directory_name
-    to_json = SnapshotSerializer.to_json
+    write_bytes = SnapshotSerializer.write_bytes
     error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
 
-    def publish_then_fail(live_snapshot, path):
+    def publish_then_fail(path, contents):
         """Publish the complete JSON, then report an uncertain directory flush."""
-        to_json(live_snapshot, path)
-        raise error
+        write_bytes(path, contents)
+        if path == manager.path_snapshot_json:
+            raise error
 
-    with patch.object(SnapshotSerializer, "to_json", side_effect=publish_then_fail):
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=publish_then_fail):
         with pytest.raises(MetadataDurabilityError) as raised:
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
 
@@ -276,7 +294,51 @@ def test_editor_keeps_published_edit_when_metadata_durability_is_uncertain(tmp_p
     assert (manager.path_snapshot / new_name).is_dir()
     assert SnapshotSerializer.from_json(manager.path_snapshot_json).directories[0].directory_name == new_name
     assert snapshot.directories[0].directory_name == new_name
-    assert list(manager.path_snapshot.glob("_staging_update_*")) == []
+    workspaces = list((manager.path_snapshot / ".pyliz_transactions").iterdir())
+    assert len(workspaces) == 1
+    assert SnapshotSerializer.read_text(workspaces[0] / "journal.json")
+
+
+def test_commit_decided_edit_recovery_preserves_a_directory_name_cycle(tmp_path):
+    """Commit recovery does not confuse new entries with old source names."""
+    from pylizlib.core.os.snap.diff import get_edits_between_snapshots
+    from pylizlib.core.os.snap.storage.metadata import MetadataDurabilityError
+    from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
+
+    sources = []
+    associations = []
+    for index in range(1, 4):
+        source = tmp_path / f"cycle-source-{index}"
+        source.mkdir()
+        (source / "identity.txt").write_text(f"copy-{index}")
+        sources.append(source)
+        associations.append(SnapDirAssociation(index, str(source), f"cycle-{index}"))
+    snapshot = Snapshot("cycle-recovery", "cycle", "", directories=associations)
+    manager = SnapshotManager(snapshot, tmp_path / "cycle-catalogue", SnapshotSettings())
+    manager.create()
+    original = snapshot.clone()
+    for association, index in zip(snapshot.directories, (2, 3, 1)):
+        association.index = index
+
+    write_bytes = SnapshotSerializer.write_bytes
+    error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
+
+    def publish_then_fail(path, contents):
+        """Publish cycle metadata, then leave the committed journal for restart."""
+        write_bytes(path, contents)
+        if path == manager.path_snapshot_json:
+            raise error
+
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=publish_then_fail):
+        with pytest.raises(MetadataDurabilityError):
+            manager.update_from_actions_list(get_edits_between_snapshots(original, snapshot))
+
+    recover_storage_transactions(manager._storage())
+    by_id = {association.folder_id: association for association in snapshot.directories}
+    for index in range(1, 4):
+        association = by_id[f"cycle-{index}"]
+        assert (manager.path_snapshot / association.directory_name / "identity.txt").read_text() == f"copy-{index}"
+    assert not (manager.path_snapshot / ".pyliz_transactions").exists()
 
 
 def test_editor_retains_removed_directory_after_published_metadata_error(tmp_path):
@@ -289,22 +351,23 @@ def test_editor_retains_removed_directory_after_published_metadata_error(tmp_pat
     original = snapshot.clone()
     removed_name = snapshot.directories[0].directory_name
     snapshot.directories.clear()
-    to_json = SnapshotSerializer.to_json
+    write_bytes = SnapshotSerializer.write_bytes
     error = MetadataDurabilityError(manager.path_snapshot_json, OSError("directory fsync failed"))
 
-    def publish_then_fail(live_snapshot, path):
+    def publish_then_fail(path, contents):
         """Publish the removal, then report an uncertain directory flush."""
-        to_json(live_snapshot, path)
-        raise error
+        write_bytes(path, contents)
+        if path == manager.path_snapshot_json:
+            raise error
 
-    with patch.object(SnapshotSerializer, "to_json", side_effect=publish_then_fail):
+    with patch.object(SnapshotSerializer, "write_bytes", side_effect=publish_then_fail):
         with pytest.raises(MetadataDurabilityError):
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
 
     assert SnapshotSerializer.from_json(manager.path_snapshot_json).directories == []
     assert snapshot.directories == []
     assert not (manager.path_snapshot / removed_name).exists()
-    staged = list(manager.path_snapshot.glob("_staging_update_*"))
+    staged = list((manager.path_snapshot / ".pyliz_transactions").iterdir())
     assert len(staged) == 1
     assert (staged[0] / "original_0" / "value.txt").read_text() == "stored"
 
@@ -354,18 +417,19 @@ def test_installer_stages_all_targets_before_modifying_live_copies(tmp_path):
 
 
 def test_sync_failure_restores_copies_and_memory_without_rewriting_metadata_bytes(tmp_path):
-    """Sync preserves its existing recovery boundary, distinct from edit rollback."""
+    """A failed prepared sync leaves active JSON and stored copies untouched."""
     from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
 
     source, snapshot, manager = stored_snapshot(tmp_path)
     association = snapshot.directories[0]
+    before = manager.path_snapshot_json.read_bytes()
     old_manifest = association.integrity_manifest
     old_size = association.mb_size
     old_date = snapshot.date_last_modified
     (source / "value.txt").write_text("new live contents with a different size")
 
     def fail_save(_snapshot, path):
-        """Interrupt a sync metadata write after the model has been updated."""
+        """Interrupt preparation of the new JSON before directory publication."""
         path.write_bytes(b"partial sync metadata")
         raise OSError("sync metadata failed")
 
@@ -377,7 +441,7 @@ def test_sync_failure_restores_copies_and_memory_without_rewriting_metadata_byte
     assert association.integrity_manifest is old_manifest
     assert association.mb_size == old_size
     assert snapshot.date_last_modified == old_date
-    assert manager.path_snapshot_json.read_bytes() == b"partial sync metadata"
+    assert manager.path_snapshot_json.read_bytes() == before
     assert list(manager.path_snapshot.glob("*_bck_*")) == []
 
 
@@ -395,6 +459,180 @@ def test_lifecycle_metadata_failure_preserves_old_root_and_manifest_identity(tmp
     assert {p.relative_to(manager.path_snapshot): p.read_bytes() for p in manager.path_snapshot.rglob("*") if p.is_file()} == before
     assert snapshot.directories[0].integrity_manifest is manifest
     assert list(manager.path_catalogue.iterdir()) == [manager.path_snapshot]
+
+
+def test_snapshot_tree_journal_finishes_publication_after_process_stops(tmp_path):
+    """A crash after moving the old snapshot is completed from its journal."""
+    source, _, manager = stored_snapshot(tmp_path, "crash-create")
+    (manager.path_snapshot / "old-only.txt").write_text("old version")
+    (source / "value.txt").write_text("new version")
+    real_rename = Path.rename
+
+    def stop_after_backup(source_path, target_path):
+        """Stop after the old root reached its durable transaction backup."""
+        source_path = Path(source_path)
+        target_path = Path(target_path)
+        if source_path == manager.path_snapshot and target_path.name == "original" and target_path.parent.parent.name == ".pyliz_transactions":
+            real_rename(source_path, target_path)
+            raise SystemExit("simulated process termination")
+        return real_rename(source_path, target_path)
+
+    with patch.object(Path, "rename", autospec=True, side_effect=stop_after_backup):
+        with pytest.raises(SystemExit, match="simulated process termination"):
+            manager.create(replace_existing=True)
+
+    workspace = next((manager.path_catalogue / ".pyliz_transactions").iterdir())
+    journal = json.loads((workspace / "journal.json").read_text())
+    assert journal["state"] == "commit_decided"
+    assert (workspace / "original" / "old-only.txt").read_text() == "old version"
+    assert (workspace / "snapshot" / manager.snapshot.directories[0].directory_name / "value.txt").read_text() == "new version"
+    assert not manager.path_snapshot.exists()
+
+    catalogue = api.SnapshotCatalogue(manager.path_catalogue, manager.settings)
+    loaded = catalogue.get_all()
+    assert len(loaded) == 1
+    assert (manager.path_snapshot / loaded[0].directories[0].directory_name / "value.txt").read_text() == "new version"
+    assert not (manager.path_snapshot / "old-only.txt").exists()
+    assert not (manager.path_catalogue / ".pyliz_transactions").exists()
+
+
+def test_install_journal_restores_original_after_process_stops_mid_swap(tmp_path):
+    """A prepared install journal restores a destination moved before a crash."""
+    source, _, manager = stored_snapshot(tmp_path, "crash-install")
+    (source / "value.txt").write_text("live version")
+    real_rename = Path.rename
+
+    def stop_after_backup(source_path, target_path):
+        """Stop after the original destination has moved aside."""
+        source_path = Path(source_path)
+        target_path = Path(target_path)
+        if source_path == source and target_path.parent == source.parent and target_path.name.startswith(f"{source.name}_bck_"):
+            real_rename(source_path, target_path)
+            raise SystemExit("simulated process termination")
+        return real_rename(source_path, target_path)
+
+    with patch.object(Path, "rename", autospec=True, side_effect=stop_after_backup):
+        with pytest.raises(SystemExit, match="simulated process termination"):
+            manager.install()
+
+    workspaces = list((manager.path_snapshot / ".pyliz_transactions").iterdir())
+    assert len(workspaces) == 1
+    assert json.loads((workspaces[0] / "journal.json").read_text())["state"] == "prepared"
+    assert not source.exists()
+    assert next(source.parent.glob(f"{source.name}_bck_*"))
+
+    from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
+
+    recover_storage_transactions(manager._storage())
+    assert (source / "value.txt").read_text() == "live version"
+    assert list(source.parent.glob(f"{source.name}_bck_*")) == []
+    assert list(source.parent.glob(f"{source.name}_staging_*")) == []
+    assert not (manager.path_snapshot / ".pyliz_transactions").exists()
+
+
+def test_unreadable_install_journal_preserves_both_recovery_copies(tmp_path):
+    """An invalid journal stops recovery before deleting its backup or stage."""
+    from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError, recover_storage_transactions
+
+    source, _, manager = stored_snapshot(tmp_path, "crash-invalid-journal")
+    (source / "value.txt").write_text("live version")
+    real_rename = Path.rename
+
+    def stop_after_backup(source_path, target_path):
+        """Leave a prepared install journal after moving the live directory."""
+        source_path = Path(source_path)
+        target_path = Path(target_path)
+        if source_path == source and target_path.name.startswith(f"{source.name}_bck_"):
+            real_rename(source_path, target_path)
+            raise SystemExit("simulated process termination")
+        return real_rename(source_path, target_path)
+
+    with patch.object(Path, "rename", autospec=True, side_effect=stop_after_backup):
+        with pytest.raises(SystemExit):
+            manager.install()
+
+    workspace = next((manager.path_snapshot / ".pyliz_transactions").iterdir())
+    backup = next(source.parent.glob(f"{source.name}_bck_*"))
+    stage = next(source.parent.glob(f"{source.name}_staging_*"))
+    (workspace / "journal.json").write_text("not valid JSON")
+    with pytest.raises(TransactionRecoveryError, match="Could not recover transaction"):
+        recover_storage_transactions(manager._storage())
+    assert backup.is_dir()
+    assert stage.is_dir()
+    assert not source.exists()
+    assert (workspace / "journal.json").read_text() == "not valid JSON"
+
+
+def test_sync_journal_restores_stored_copy_after_process_stops_mid_swap(tmp_path):
+    """A prepared sync journal restores its original stored copy after restart."""
+    source, snapshot, manager = stored_snapshot(tmp_path, "crash-sync")
+    association = snapshot.directories[0]
+    stored_copy = manager.path_snapshot / association.directory_name
+    (source / "value.txt").write_text("new live version")
+    real_rename = Path.rename
+
+    def stop_after_backup(source_path, target_path):
+        """Stop after the previous stored copy has moved to its backup."""
+        source_path = Path(source_path)
+        target_path = Path(target_path)
+        if source_path == stored_copy and target_path.parent == manager.path_snapshot and target_path.name.startswith(f"{stored_copy.name}_bck_"):
+            real_rename(source_path, target_path)
+            raise SystemExit("simulated process termination")
+        return real_rename(source_path, target_path)
+
+    with patch.object(Path, "rename", autospec=True, side_effect=stop_after_backup):
+        with pytest.raises(SystemExit, match="simulated process termination"):
+            manager.update_associated_dirs_from_system()
+
+    workspaces = list((manager.path_snapshot / ".pyliz_transactions").iterdir())
+    assert len(workspaces) == 1
+    assert not stored_copy.exists()
+    assert next(manager.path_snapshot.glob(f"{stored_copy.name}_bck_*"))
+
+    from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
+
+    recover_storage_transactions(manager._storage())
+    assert (stored_copy / "value.txt").read_text() == "stored"
+    assert list(manager.path_snapshot.glob(f"{stored_copy.name}_bck_*")) == []
+    assert list(manager.path_snapshot.glob(f"{stored_copy.name}_staging_*")) == []
+    assert not (manager.path_snapshot / ".pyliz_transactions").exists()
+
+
+def test_edit_journal_restores_original_names_after_process_stops_during_staging(tmp_path):
+    """A crash while moving old edit directories is recovered before reuse."""
+    _, snapshot, manager = stored_snapshot(tmp_path, "crash-edit")
+    before_json = manager.path_snapshot_json.read_bytes()
+    old_name = snapshot.directories[0].directory_name
+    old_directory = manager.path_snapshot / old_name
+    real_rename = Path.rename
+
+    def stop_after_staging_move(source_path, target_path):
+        """Stop after the original association entered its journal workspace."""
+        source_path = Path(source_path)
+        target_path = Path(target_path)
+        if source_path == old_directory and target_path.name == "original_0" and target_path.parent.parent.name == ".pyliz_transactions":
+            real_rename(source_path, target_path)
+            raise SystemExit("simulated process termination")
+        return real_rename(source_path, target_path)
+
+    snapshot.directories[0].index = 2
+    from pylizlib.core.os.snap.utils import SnapshotUtils
+
+    actions = SnapshotUtils.get_edits_between_snapshots(SnapshotSerializer.from_json(manager.path_snapshot_json), snapshot)
+    with patch.object(Path, "rename", autospec=True, side_effect=stop_after_staging_move):
+        with pytest.raises(SystemExit, match="simulated process termination"):
+            manager.update_from_actions_list(actions)
+
+    workspace = next((manager.path_snapshot / ".pyliz_transactions").iterdir())
+    assert json.loads((workspace / "journal.json").read_text())["state"] == "prepared"
+    assert not old_directory.exists()
+
+    from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
+
+    recover_storage_transactions(manager._storage())
+    assert (old_directory / "value.txt").read_text() == "stored"
+    assert manager.path_snapshot_json.read_bytes() == before_json
+    assert not (manager.path_snapshot / ".pyliz_transactions").exists()
 
 
 def test_catalogue_import_keeps_id_only_entries_and_continues_after_bad_json(tmp_path):

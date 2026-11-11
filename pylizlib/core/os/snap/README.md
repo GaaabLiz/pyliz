@@ -25,6 +25,7 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Conversione JSON e file descriptor protetti | `storage/metadata.py` |
 | Scansione delle voci del catalogo | `storage/catalogue.py` |
 | Dipendenze di una singola operazione | `storage/context.py` |
+| Journal e recupero delle transazioni | `storage/transactions.py` |
 | Copia di un'associazione nel suo storage | `storage/association.py` |
 | Strategie di copia e sorgenti stabili | `copy_strategy.py` |
 | Validazione e confronto dei manifest | `integrity.py` |
@@ -80,19 +81,34 @@ I record `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement` e
 dizionari. I modelli contenuti restano mutabili: un record frozen non congela
 lo snapshot e non ne introduce una copia.
 
-## Fasi e confini di recupero
+## Journal e recupero dopo un arresto
 
-Ogni operazione mantiene il proprio protocollo. Non esiste una transazione
-universale che aggiunga garanzie nuove ai flussi storici.
+Le sostituzioni di snapshot, le modifiche delle associazioni, la sincronizzazione,
+l'installazione e il ripristino delle associazioni registrano le fasi in
+`.pyliz_transactions` sullo stesso storage dei dati coinvolti. Il journal viene
+pubblicato atomicamente tramite `SnapshotSerializer`; gli aggiornamenti del suo
+stato precedono le azioni che la recovery deve completare o annullare. Le rinomine
+sincronizzano le directory coinvolte quando il filesystem lo supporta. Su SMB,
+NFS e piattaforme che non offrono questa conferma, la libreria può rilevare e
+recuperare stati lasciati da un arresto del processo, ma non può attestare la
+persistenza fisica sul server.
+
+La recovery viene eseguita quando il catalogo carica gli snapshot e prima delle
+successive operazioni che modificano o copiano i relativi alberi. Lo stato
+`prepared` viene annullato; `commit_decided` viene completato; `committed` ripete
+soltanto la pulizia. Se un journal è illeggibile o una copia attesa manca, la
+recovery si ferma e conserva journal e copie disponibili invece di proseguire
+sopra dati ambigui. Le copie precedenti vengono eliminate soltanto dopo che il
+journal registra il commit.
 
 | Flusso | Ordine e limite da conservare |
 |---|---|
-| Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. |
+| Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. La recovery completa la pubblicazione se il commit era già deciso. |
 | Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; se la pubblicazione JSON non avviene, ripristinare directory, byte e modello. Se avviene ma il flush fallisce, mantenere il nuovo stato e conservare le directory rimosse ancora nello staging. |
 | Sincronizzazione | Preparare tutte le copie, sostituire, aggiornare dimensioni/manifest e salvare; ripristinare copie e metadati in memoria secondo il protocollo esistente. |
 | Installazione | Verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo il commit dei contenuti. Un errore di metadati viene distinto dal fallimento dell'installazione e conserva le copie precedenti. |
 | Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo o un rollback nuovo. |
-| Restore `_ad` | Ripristinare sequenzialmente le associazioni riconosciute; non equipararlo all'installazione. |
+| Restore `_ad` | Ripristinare le associazioni riconosciute con staging e journal; il recupero completa o annulla lo swap dopo un arresto. |
 | Pulizia dopo commit | Registrare gli errori e proseguire, senza riattivare il rollback di dati già pubblicati. |
 
 Una correzione che modifica questi limiti richiede una decisione funzionale e

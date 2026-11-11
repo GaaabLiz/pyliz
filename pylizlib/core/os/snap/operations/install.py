@@ -1,5 +1,6 @@
 """Staged snapshot installation, legacy merge and installed-copy removal."""
 
+import os
 import shutil
 import stat
 from dataclasses import dataclass
@@ -12,7 +13,12 @@ from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
-from pylizlib.core.os.snap.storage.publication import cleanup_after_commit
+from pylizlib.core.os.snap.storage.transactions import (
+    SnapshotTransactionJournal,
+    prepare_snapshot_metadata,
+    recover_storage_transactions,
+    rename_and_sync,
+)
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 from pylizlib.core.os.utils import is_critical_system_path
 
@@ -45,6 +51,8 @@ class InstallReplacement:
     install_loc: Path
     staging_dir: Path
     backup_dir: Path
+    folder_id: str
+    had_original: bool
 
 
 class SnapshotInstaller:
@@ -78,6 +86,7 @@ class SnapshotInstaller:
         """
         self.storage.snapshot.validate()
         self.storage.root_path()
+        recover_storage_transactions(self.storage)
         import platform
         import sys
 
@@ -98,22 +107,74 @@ class SnapshotInstaller:
 
         self._preflight()
 
-        rollbacks = []
+        previous_date = self.storage.snapshot.date_last_used
+        last_used = datetime.now()
+        rollbacks = self._plan_replacements()
+        staging_roots = [rb.staging_dir for rb in rollbacks]
+        journal_payload = {
+            "entries": [],
+            "staging_roots": [path.as_posix() for path in staging_roots],
+            "clear_destination": clear_destination,
+        }
+        if clear_destination:
+            journal_payload["entries"] = [
+                {
+                    "folder_id": rb.folder_id,
+                    "stage": rb.staging_dir.as_posix(),
+                    "stage_root": rb.staging_dir.as_posix(),
+                    "destination": rb.install_loc.as_posix(),
+                    "backup": rb.backup_dir.as_posix(),
+                    "had_original": rb.had_original,
+                }
+                for rb in rollbacks
+            ]
+        journal = SnapshotTransactionJournal.begin(self.storage.path_snapshot, "install", journal_payload)
         try:
+            metadata_info = prepare_snapshot_metadata(
+                self.storage,
+                journal.workspace,
+                field_name="date_last_used",
+                field_value=last_used.isoformat(),
+            )
+            journal.update_payload(metadata=metadata_info)
             self._stage_directories(rollbacks, total_dirs, progress_callback, message_callback)
 
-            self._publish_directories(rollbacks, clear_destination)
+            merge_entries = []
+            if not clear_destination:
+                merge_entries = self._plan_merge_entries(rollbacks)
+                journal.update_payload(entries=merge_entries)
+            self._publish_directories(rollbacks, clear_destination, merge_entries)
 
             self._apply_windows_permissions(rollbacks, enable_everyone_full_control, win32security, con if win32security else None)
-
-        except Exception as e:
-            # Ripristinare la vecchia directory se lo swap fallisce
-            logger.error(f"Installation failed during transaction. Rolling back. Reason: {e}")
-            self._rollback_installation(rollbacks, clear_destination)
+            journal.set_state("commit_decided")
+        except Exception as error:
+            logger.error(f"Installation failed during transaction. Rolling back. Reason: {error}")
+            try:
+                journal.decide_rollback(self.storage)
+            except Exception as rollback_error:
+                logger.error(f"Installation rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+                error.add_note(f"Persistent recovery journal retained at '{journal.path}'.")
             raise
 
-        self._record_last_used()
-        cleanup_after_commit((path for rb in rollbacks for path in (rb.backup_dir, rb.staging_dir)), "Installation")
+        try:
+            new_metadata = self.storage.metadata.read_bytes(journal.workspace / metadata_info["new"])
+            self.storage.metadata.write_bytes(self.storage.path_snapshot_json, new_metadata)
+        except Exception as error:
+            metadata_published = getattr(error, "published", None)
+            durability_confirmed = getattr(error, "durability_confirmed", None)
+            metadata_published = metadata_published if type(metadata_published) is bool else None
+            durability_confirmed = durability_confirmed if type(durability_confirmed) is bool else None
+            self.storage.snapshot.date_last_used = last_used if metadata_published is True else previous_date
+            raise SnapshotInstallMetadataError(metadata_published, durability_confirmed) from error
+
+        self.storage.snapshot.date_last_used = last_used
+        try:
+            journal.set_state("committed")
+        except Exception as error:
+            raise SnapshotInstallMetadataError(True, getattr(error, "durability_confirmed", None)) from error
+        cleanup_paths = [rb.backup_dir for rb in rollbacks]
+        cleanup_paths.extend(staging_roots)
+        journal.finalize(cleanup_paths, "Installation")
 
     def remove_installed_copies(self, message_callback=None):
         """
@@ -169,15 +230,30 @@ class SnapshotInstaller:
                     dir_assoc.folder_id,
                 )
 
-    def _stage_directories(self, rollbacks: list[InstallReplacement], total_dirs: int, progress_callback, message_callback) -> None:
-        """Prepare and verify every copy before replacing any live destination."""
-        for i, dir_assoc in enumerate(self.storage.snapshot.directories):
-            source_dir = self.storage.child_path(dir_assoc.directory_name)
-            install_location = Path(dir_assoc.original_path)
-
-            # Copiare in una directory temporanea (Staging)
+    def _plan_replacements(self) -> list[InstallReplacement]:
+        """Choose unique stage and backup names before publishing the journal."""
+        replacements = []
+        for association in self.storage.snapshot.directories:
+            install_location = Path(os.path.abspath(association.original_path))
             staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
             backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
+            if staging_dir.exists() or staging_dir.is_symlink() or backup_dir.exists() or backup_dir.is_symlink():
+                raise FileExistsError(f"Could not reserve installation staging names beside '{install_location}'.")
+            try:
+                install_location.lstat()
+                had_original = True
+            except FileNotFoundError:
+                had_original = False
+            replacements.append(InstallReplacement(install_location, staging_dir, backup_dir, association.folder_id, had_original))
+        return replacements
+
+    def _stage_directories(self, rollbacks: list[InstallReplacement], total_dirs: int, progress_callback, message_callback) -> None:
+        """Prepare and verify every copy before replacing any live destination."""
+        associations = {association.folder_id: association for association in self.storage.snapshot.directories}
+        for i, replacement in enumerate(rollbacks):
+            dir_assoc = associations[replacement.folder_id]
+            source_dir = self.storage.child_path(dir_assoc.directory_name)
+            staging_dir = replacement.staging_dir
 
             def copy_progress(copied_bytes: int, total_bytes: int) -> None:
                 """Adapt verified-copy byte counts to snapshot percentage notifications."""
@@ -205,9 +281,34 @@ class SnapshotInstaller:
 
             # La strategia ha verificato il manifest prima di pubblicare lo staging.
 
-            rollbacks.append(InstallReplacement(install_location, staging_dir, backup_dir))
+    def _plan_merge_entries(self, rollbacks: list[InstallReplacement]) -> list[dict]:
+        """Record every top-level merge replacement before modifying live copies."""
+        entries = []
+        for replacement in rollbacks:
+            for staged_item in sorted(replacement.staging_dir.iterdir()):
+                destination = replacement.install_loc / staged_item.name
+                backup = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
+                if backup.exists() or backup.is_symlink():
+                    raise FileExistsError(f"Could not reserve merge backup '{backup}'.")
+                try:
+                    destination.lstat()
+                    had_original = True
+                except FileNotFoundError:
+                    had_original = False
+                entries.append(
+                    {
+                        "folder_id": replacement.folder_id,
+                        "stage": staged_item.as_posix(),
+                        "stage_root": replacement.staging_dir.as_posix(),
+                        "destination": destination.as_posix(),
+                        "backup": backup.as_posix(),
+                        "had_original": had_original,
+                        "merge_child": True,
+                    }
+                )
+        return entries
 
-    def _publish_directories(self, rollbacks: list[InstallReplacement], clear_destination: bool) -> None:
+    def _publish_directories(self, rollbacks: list[InstallReplacement], clear_destination: bool, merge_entries: list[dict]) -> None:
         """Publish prepared copies using replacement or the legacy top-level merge."""
         # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
         for rb in rollbacks:
@@ -218,21 +319,28 @@ class SnapshotInstaller:
             install_loc.parent.mkdir(parents=True, exist_ok=True)
 
             if clear_destination:
-                if install_loc.exists():
-                    install_loc.rename(backup_dir)
-                staging_dir.rename(install_loc)
+                if rb.had_original:
+                    if not (install_loc.exists() or install_loc.is_symlink()):
+                        raise FileNotFoundError(f"Install destination '{install_loc}' disappeared before publication.")
+                    rename_and_sync(install_loc, backup_dir)
+                elif install_loc.exists() or install_loc.is_symlink():
+                    raise FileExistsError(f"Install destination '{install_loc}' appeared during staging.")
+                rename_and_sync(staging_dir, install_loc)
             else:
                 if not install_loc.exists():
                     install_loc.mkdir(parents=True, exist_ok=True)
-                # Spostamento manuale per merge
-                for item in staging_dir.iterdir():
-                    dst = install_loc / item.name
-                    if dst.exists():
-                        if dst.is_dir():
-                            shutil.rmtree(dst)
-                        else:
-                            dst.unlink()
-                    shutil.move(str(item), str(dst))
+        if not clear_destination:
+            for entry in merge_entries:
+                staged_item = Path(entry["stage"])
+                destination = Path(entry["destination"])
+                backup = Path(entry["backup"])
+                if entry["had_original"]:
+                    if not (destination.exists() or destination.is_symlink()):
+                        raise FileNotFoundError(f"Merge destination '{destination}' disappeared before publication.")
+                    rename_and_sync(destination, backup)
+                elif destination.exists() or destination.is_symlink():
+                    raise FileExistsError(f"Merge destination '{destination}' appeared during staging.")
+                rename_and_sync(staged_item, destination)
 
     def _apply_windows_permissions(self, rollbacks: list[InstallReplacement], enabled: bool, win32security, con) -> None:
         """Apply opted-in Windows ACLs, logging individual failures without aborting."""
@@ -253,43 +361,3 @@ class SnapshotInstaller:
                     win32security.SetFileSecurity(str(install_loc), win32security.DACL_SECURITY_INFORMATION, sd)
                 except Exception as e:
                     logger.error(f"Failed to set permissions on '{install_loc}': {e}")
-
-    def _rollback_installation(self, rollbacks: list[InstallReplacement], clear_destination: bool) -> None:
-        """Remove staging and restore existing backups in the original iteration order."""
-        for rb in rollbacks:
-            install_loc = rb.install_loc
-            staging_dir = rb.staging_dir
-            backup_dir = rb.backup_dir
-
-            if staging_dir.exists():
-                shutil.rmtree(staging_dir)
-
-            if clear_destination and backup_dir.exists():
-                if install_loc.exists():
-                    shutil.rmtree(install_loc)
-                backup_dir.rename(install_loc)
-
-    def _record_last_used(self) -> None:
-        """Save usage metadata after publication without obscuring the commit result."""
-        previous_date = self.storage.snapshot.date_last_used
-        last_used = datetime.now()
-        try:
-            self.storage.metadata.update_field(
-                self.storage.child_path(self.storage.settings.json_filename),
-                "date_last_used",
-                last_used.isoformat(),
-            )
-        except Exception as error:
-            metadata_published = getattr(error, "published", None)
-            durability_confirmed = getattr(error, "durability_confirmed", None)
-            if type(metadata_published) is not bool:
-                metadata_published = None
-            if type(durability_confirmed) is not bool:
-                durability_confirmed = None
-
-            # Keep the model aligned with the visible JSON when an atomic rename
-            # succeeded but the directory flush failed afterward.
-            self.storage.snapshot.date_last_used = last_used if metadata_published is True else previous_date
-            raise SnapshotInstallMetadataError(metadata_published, durability_confirmed) from error
-
-        self.storage.snapshot.date_last_used = last_used
