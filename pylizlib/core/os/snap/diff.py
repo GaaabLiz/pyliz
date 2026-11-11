@@ -17,6 +17,8 @@ def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAc
     """
     edits: list[SnapEditAction] = []
 
+    # Paths are not identities: distinct associations may share a source, and
+    # one source may have multiple spellings on case-insensitive or aliased filesystems.
     old_by_id = {assoc.folder_id: assoc for assoc in old.directories}
     new_by_id = {assoc.folder_id: assoc for assoc in new.directories}
     if len(old_by_id) != len(old.directories) or len(new_by_id) != len(new.directories):

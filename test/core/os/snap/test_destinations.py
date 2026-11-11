@@ -80,6 +80,29 @@ def test_validator_rejects_catalogue_overlap_through_a_symlink_alias(tmp_path, v
         )
 
 
+def test_validator_checks_filesystem_identity_separately_from_resolved_strings(tmp_path, monkeypatch, validate_noncritical_destinations):
+    """Equivalent existing targets are rejected even if resolution leaves both spellings intact."""
+    first = tmp_path / "target"
+    first.mkdir()
+    alias = tmp_path / "target_alias"
+    try:
+        alias.symlink_to(first, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    # Some filesystems do not canonicalize every alias in resolve(); samefile
+    # supplies a separate check against the underlying filesystem identity.
+    monkeypatch.setattr(Path, "resolve", lambda path, strict=False: path.absolute())
+
+    with pytest.raises(ValueError, match="cannot be coincident or nested"):
+        validate_noncritical_destinations(
+            [("first", first), ("alias", alias)],
+            catalogue_path=tmp_path / "catalogue",
+            origin_os=platform.system(),
+            operation="test operation",
+        )
+
+
 def test_validator_rejects_paths_that_cannot_be_resolved(tmp_path, validate_noncritical_destinations):
     """A resolution error blocks work instead of treating the path as verified."""
     with patch.object(Path, "resolve", side_effect=OSError("resolution failed")):

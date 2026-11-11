@@ -5,6 +5,7 @@ import platform
 from collections.abc import Iterable
 from pathlib import Path
 
+from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 from pylizlib.core.os.utils import is_critical_system_path
 
 
@@ -43,12 +44,16 @@ def validate_destructive_destinations(
         raise ValueError(f"Cannot verify snapshot catalogue path '{catalogue_path}': {error}") from error
 
     for identity, destination in resolved_destinations:
-        if destination == catalogue_root or destination in catalogue_root.parents or catalogue_root in destination.parents:
+        if same_filesystem_entry(destination, catalogue_root) or destination in catalogue_root.parents or catalogue_root in destination.parents:
             raise ValueError(f"Cannot {operation} at '{destination}' ({identity}): it overlaps the snapshot catalogue.")
 
     for index, (identity, destination) in enumerate(resolved_destinations):
         for other_identity, other_destination in resolved_destinations[index + 1 :]:
-            if destination == other_destination or destination in other_destination.parents or other_destination in destination.parents:
+            if (
+                same_filesystem_entry(destination, other_destination)
+                or destination in other_destination.parents
+                or other_destination in destination.parents
+            ):
                 raise ValueError(
                     f"{operation.capitalize()} destinations cannot be coincident or nested: "
                     f"'{identity}' at '{destination}' and '{other_identity}' at '{other_destination}'."
