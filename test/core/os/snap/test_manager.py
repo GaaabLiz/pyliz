@@ -876,6 +876,44 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             names = zf.namelist()
         self.assertTrue(any("snapshot.json" in n for n in names))
 
+    def test_snapshot_backup_rejects_destination_inside_snapshot(self):
+        snap = make_snapshot("BackupInsideSnapshot", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        backup_path = mgr.path_snapshot / "backups"
+
+        with self.assertRaisesRegex(ValueError, "inside archived source"):
+            mgr.create_backup(backup_path, "nested", BackupType.SNAPSHOT_DIRECTORY)
+
+        self.assertFalse(backup_path.exists())
+
+    def test_associated_backup_rejects_destination_inside_source(self):
+        snap = make_snapshot("BackupInsideSource", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        backup_path = self._src[0] / "backups"
+
+        with self.assertRaisesRegex(ValueError, "inside archived source"):
+            mgr.create_backup(backup_path, "nested", BackupType.ASSOCIATED_DIRECTORIES)
+
+        self.assertFalse(backup_path.exists())
+
+    def test_associated_backup_rejects_destination_inside_symlink_alias(self):
+        snap = make_snapshot("BackupInsideSourceAlias", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        alias = TEST_LOCAL_ROOT / "backup_source_alias"
+        try:
+            alias.symlink_to(self._src[0], target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"Directory symlinks are unavailable: {error}")
+        backup_path = alias / "backups"
+
+        with self.assertRaisesRegex(ValueError, "inside archived source"):
+            mgr.create_backup(backup_path, "nested_alias", BackupType.ASSOCIATED_DIRECTORIES)
+
+        self.assertFalse((self._src[0] / "backups").exists())
+
     def test_associated_directory_backup_preserves_empty_association_root(self):
         source = SOURCE_DATA_PATH / "empty_backup" / "nested_empty"
         source.mkdir(parents=True)
