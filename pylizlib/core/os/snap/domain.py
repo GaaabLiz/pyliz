@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import ClassVar, Optional
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
+from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, DirectoryCopyStrategy, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.integrity import IntegrityManifest, validate_integrity_manifest
 from pylizlib.core.os.utils import get_folder_size_mb
 
@@ -273,6 +273,8 @@ class SnapshotSettings:
         snap_id_length: The character length for new snapshot IDs.
         folder_id_length: The character length for new folder association IDs.
         copy_strategy: Strategy object used to copy directory trees.
+        copy_metadata_mode: Select the existing basic metadata behavior or the
+                            stricter platform-supported extended metadata copier.
         allow_unverified_legacy_snapshots: Allow installation without a content manifest.
     """
 
@@ -286,13 +288,35 @@ class SnapshotSettings:
     folder_id_length: int = 6
     copy_strategy: DirectoryCopyStrategy = field(default_factory=SequentialFileCopyStrategy)
     allow_unverified_legacy_snapshots: bool = False
+    copy_metadata_mode: CopyMetadataMode = CopyMetadataMode.BASIC
+
+    def __setattr__(self, name, value):
+        """Keep the selected copier in sync when settings are changed at runtime."""
+        if name == "copy_strategy":
+            if not isinstance(value, DirectoryCopyStrategy):
+                raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+            mode = self.__dict__.get("copy_metadata_mode", CopyMetadataMode.BASIC)
+            if mode is CopyMetadataMode.EXTENDED and not isinstance(value, ExtendedMetadataCopyStrategy):
+                value = ExtendedMetadataCopyStrategy(value)
+        elif name == "copy_metadata_mode":
+            if not isinstance(value, CopyMetadataMode):
+                raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
+            previous_mode = self.__dict__.get("copy_metadata_mode")
+            strategy = self.__dict__.get("copy_strategy")
+            if value is CopyMetadataMode.EXTENDED and isinstance(strategy, DirectoryCopyStrategy) and not isinstance(strategy, ExtendedMetadataCopyStrategy):
+                object.__setattr__(self, "copy_strategy", ExtendedMetadataCopyStrategy(strategy))
+            elif previous_mode is CopyMetadataMode.EXTENDED and value is CopyMetadataMode.BASIC and isinstance(strategy, ExtendedMetadataCopyStrategy):
+                object.__setattr__(self, "copy_strategy", strategy.delegate)
+        object.__setattr__(self, name, value)
 
     def __post_init__(self):
-        """Enforce strategy and legacy-install flag types without copying dependencies."""
+        """Validate copy configuration and the legacy-install flag."""
         if not isinstance(self.copy_strategy, DirectoryCopyStrategy):
             raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
         if type(self.allow_unverified_legacy_snapshots) is not bool:
             raise TypeError("allow_unverified_legacy_snapshots must be a boolean.")
+        if not isinstance(self.copy_metadata_mode, CopyMetadataMode):
+            raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
 
     @property
     def bck_before_install_enabled(self) -> bool:

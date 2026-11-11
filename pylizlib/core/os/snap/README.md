@@ -103,6 +103,23 @@ I contratti sono limitati alle capacità utilizzate:
 - `SnapshotLookup` permette il lookup usato dal restore delle associazioni.
 - `CatalogueQuery` espone le letture necessarie ai trasferimenti ZIP.
 
+La copia usa `SnapshotSettings.copy_metadata_mode`. Il default `BASIC` mantiene
+il comportamento corrente: contenuti con `copy2`, metadati standard dei file e
+delle sottocartelle, senza copiare gli attributi della directory radice
+associata. Si seleziona il livello esteso con
+`SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED)`. `EXTENDED`
+decora la strategia configurata e conserva anche gli
+attributi della radice, owner e group quando il processo ha i permessi
+necessari, extended attributes (inclusi gli ACL esposti come attributi), ACL
+DACL e alternate data streams su Windows, e i hardlink interni a ciascun albero
+copiato. Se un metadato richiesto non è copiabile, la copia fallisce prima della
+pubblicazione. Le caratteristiche non esposte dal sistema operativo o non
+supportate dal filesystem di destinazione non sono garantibili; hardlink che
+collegano associazioni diverse non vengono preservati perché le associazioni
+sono copiate separatamente. Symlink e junction restano rifiutati in entrambe le
+modalità. La modalità vale per le copie directory: i backup e gli export ZIP
+non trasportano owner, ACL, extended attributes, ADS o topologia dei hardlink.
+
 I record `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement` e
 `RestoreReplacement` danno nomi espliciti ai dati prima conservati in tuple o
 dizionari. I modelli contenuti restano mutabili: un record frozen non congela

@@ -7,7 +7,9 @@ architecture and the operation-specific recovery boundaries."""
 
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.copy_strategy import (
+    CopyMetadataMode,
     DirectoryCopyStrategy,
+    ExtendedMetadataCopyStrategy,
     ProviderSnapshotCopyStrategy,
     SequentialFileCopyStrategy,
     SourceChangedError,
@@ -76,4 +78,6 @@ __all__ = [
     "SnapshotSearchResult",
     "SnapshotInstallMetadataError",
     "SnapshotIncompleteError",
+    "CopyMetadataMode",
+    "ExtendedMetadataCopyStrategy",
 ]
