@@ -260,6 +260,20 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
     if operation == "snapshot_tree":
         _recover_snapshot_tree(journal, state, data)
         return
+    if operation == "restore_associations_manifest":
+        _validate_manifest_restore_entries(data, journal.workspace)
+        if state in {"prepared", "rollback_decided"}:
+            _rollback_replacements(data)
+            journal.cleanup()
+            return
+        if state in {"commit_decided", "committed"}:
+            _complete_replacements(data)
+            if state == "commit_decided":
+                journal.set_state("committed")
+            _cleanup_replacements(data)
+            journal.cleanup()
+            return
+        raise TransactionRecoveryError("Manifest restore journal has an unsupported state.")
     if storage is None:
         raise TransactionRecoveryError(f"Transaction '{operation}' requires snapshot metadata context.")
     if operation == "edit":
@@ -281,6 +295,52 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
             journal.set_state("committed")
         _cleanup_replacements(data)
         journal.cleanup()
+
+
+def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
+    """Validate self-contained AD restore records before replaying their swaps."""
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        raise TransactionRecoveryError("Manifest restore journal has no entry list.")
+    workspace = workspace.resolve(strict=False)
+    scope_root = workspace.parent.parent.resolve(strict=False)
+    transaction_root = workspace.parent.resolve(strict=False)
+    seen_ids = set()
+    destinations = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise TransactionRecoveryError("Manifest restore journal entry must be an object.")
+        folder_id = entry.get("folder_id")
+        if not isinstance(folder_id, str) or not folder_id or folder_id in seen_ids:
+            raise TransactionRecoveryError("Manifest restore journal has an invalid or duplicate association ID.")
+        seen_ids.add(folder_id)
+        for key in ("stage", "destination", "backup"):
+            if not isinstance(entry.get(key), str) or not entry[key]:
+                raise TransactionRecoveryError(f"Manifest restore journal path '{key}' must be a nonempty string.")
+        if type(entry.get("had_original")) is not bool:
+            raise TransactionRecoveryError("Manifest restore journal 'had_original' must be a boolean.")
+        stage = Path(entry["stage"])
+        destination = Path(entry["destination"])
+        backup = Path(entry["backup"])
+        if not stage.is_absolute() or not destination.is_absolute() or not backup.is_absolute():
+            raise TransactionRecoveryError("Manifest restore journal paths must be absolute.")
+        if stage.parent.resolve(strict=False) != destination.parent.resolve(strict=False):
+            raise TransactionRecoveryError("Manifest restore staging path must be beside its destination.")
+        if is_link_or_junction(stage) or not stage.name.startswith(f"{destination.name}_staging_"):
+            raise TransactionRecoveryError("Manifest restore staging path is not a generated destination sibling.")
+        if backup.parent != destination.parent or not backup.name.startswith(f"{destination.name}_bck_"):
+            raise TransactionRecoveryError("Manifest restore backup is not a generated sibling of its destination.")
+        resolved_destination = destination.resolve(strict=False)
+        if resolved_destination == scope_root or scope_root in resolved_destination.parents:
+            raise TransactionRecoveryError("Manifest restore destination overlaps catalogue transaction storage.")
+        if resolved_destination == transaction_root or transaction_root in resolved_destination.parents:
+            raise TransactionRecoveryError("Manifest restore destination overlaps its transaction workspace.")
+        destinations.append((folder_id, resolved_destination))
+
+    for index, (folder_id, destination) in enumerate(destinations):
+        for other_id, other_destination in destinations[index + 1 :]:
+            if destination == other_destination or destination in other_destination.parents or other_destination in destination.parents:
+                raise TransactionRecoveryError(f"Manifest restore destinations '{folder_id}' and '{other_id}' overlap or are nested.")
 
 
 def _validate_replacement_entries(operation: str, data: dict, storage, workspace: Path) -> None:

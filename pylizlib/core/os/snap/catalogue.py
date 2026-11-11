@@ -3,6 +3,7 @@
 This facade owns backup triggers and caller-visible orchestration. Storage
 scans and archive algorithms live in dedicated internal modules."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -66,7 +67,10 @@ class SnapshotCatalogue:
         Restores a backup archive, auto-detecting the backup type from its filename.
 
         - `_sd` backups restore the whole snapshot directory into the catalogue.
-        - `_ad` backups restore associated directories to their `original_path`.
+        - `_ad` backups restore associated directories to the origin paths recorded
+          inside the archive, without consulting current association metadata.
+          Legacy `_ad` archives without a manifest still require the snapshot
+          metadata in the catalogue.
 
         Args:
             backup_zip_path: Path of the backup .zip archive.
@@ -79,6 +83,16 @@ class SnapshotCatalogue:
             IOError: If extraction fails.
         """
         self._backups().restore_backup(backup_zip_path)
+
+    def restore_backup_with_mapping(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path]) -> None:
+        """Restore an AD backup with explicit destination overrides.
+
+        Keys are persistent association ``folder_id`` values from the archive
+        manifest. Paths not included in the mapping use their captured origin.
+        This supports restoring a backup after its snapshot has been removed or
+        when the original folders have moved.
+        """
+        self._backups().restore_backup_with_mapping(backup_zip_path, destination_mapping)
 
     def delete_backup(self, backup_zip_path: Path):
         """

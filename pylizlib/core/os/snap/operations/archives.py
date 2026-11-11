@@ -1,17 +1,18 @@
 """Snapshot backup creation and catalogue restore operations."""
 
+import json
 import os
 import stat
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Protocol
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation, Snapshot, SnapshotBackupInfo, SnapshotSettings
+from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInfo, SnapshotSettings, validate_directory_component
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
@@ -20,6 +21,19 @@ from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snap
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
+
+ASSOCIATED_DIRECTORIES_MANIFEST = ".pyliz_ad_manifest.json"
+ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT = "pyliz-associated-directories"
+
+
+@dataclass(frozen=True)
+class ArchivedAssociation:
+    """Association identity and origin path captured when an AD archive is made."""
+
+    folder_id: str
+    index: int
+    directory_name: str
+    original_path: str
 
 
 class SnapshotIncompleteError(ValueError):
@@ -84,9 +98,65 @@ class SnapshotArchiveService:
             backup_path.mkdir(parents=True, exist_ok=True)
             zip_path = backup_path.joinpath(zip_name)
 
-            return write_verified_zip(zip_path, self._files_to_archive(backup_type), message_callback)
+            entries = list(self._files_to_archive(backup_type))
+            manifest_path = None
+            if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
+                manifest_path = self._write_associations_manifest(backup_path)
+                entries.append((manifest_path, Path(ASSOCIATED_DIRECTORIES_MANIFEST)))
+            try:
+                return write_verified_zip(zip_path, entries, message_callback)
+            finally:
+                if manifest_path is not None:
+                    try:
+                        manifest_path.unlink(missing_ok=True)
+                    except OSError as error:
+                        logger.warning(f"Could not remove temporary associated-directories manifest '{manifest_path}': {error}")
         except Exception as e:
             logger.error(f"Failed to create backup for snapshot '{self.storage.snapshot.id}': {e}")
+            raise
+
+    def _write_associations_manifest(self, directory: Path) -> Path:
+        """Write a temporary manifest with the association metadata embedded in an AD ZIP."""
+        associations = []
+        for association in self.storage.snapshot.directories:
+            if association.directory_name == ASSOCIATED_DIRECTORIES_MANIFEST:
+                raise ValueError(f"Association storage name conflicts with reserved AD manifest '{ASSOCIATED_DIRECTORIES_MANIFEST}'.")
+            associations.append(
+                {
+                    "folder_id": association.folder_id,
+                    "index": association.index,
+                    "directory_name": association.directory_name,
+                    "original_path": Path(association.original_path).absolute().as_posix(),
+                }
+            )
+        data = {
+            "format": ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT,
+            "version": 1,
+            "snapshot_id": self.storage.snapshot.id,
+            "snapshot_name": self.storage.snapshot.name,
+            "snapshot_description": self.storage.snapshot.desc,
+            "associations": associations,
+        }
+        temporary_path = None
+        try:
+            temporary_file_context = tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=directory,
+                prefix=".backup_manifest_",
+                suffix=".partial",
+                delete=False,
+            )
+            with temporary_file_context as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                json.dump(data, temporary_file, ensure_ascii=False, indent=2)
+            return temporary_path
+        except Exception:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError as error:
+                    logger.warning(f"Could not remove unfinished associated-directories manifest '{temporary_path}': {error}")
             raise
 
     def _files_to_archive(self, backup_type: BackupType):
@@ -187,7 +257,9 @@ class CatalogueBackupService:
         Restores a backup archive, auto-detecting the backup type from its filename.
 
         - `_sd` backups restore the whole snapshot directory into the catalogue.
-        - `_ad` backups restore associated directories to their `original_path`.
+        - New `_ad` backups carry their own association manifest and restore to
+          the origin paths captured at backup time. Legacy `_ad` backups still
+          require the associated snapshot metadata to be present.
 
         Args:
             backup_zip_path: Path of the backup .zip archive.
@@ -199,6 +271,23 @@ class CatalogueBackupService:
                 from an associated-directories archive. Inspect ``missing_folders``.
             IOError: If extraction fails.
         """
+        self._restore_backup(backup_zip_path, None)
+
+    def restore_backup_with_mapping(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path]) -> None:
+        """Restore an AD archive while overriding destinations by association ID.
+
+        The mapping is keyed by the persistent ``folder_id`` recorded in the
+        archive manifest. Unmapped associations retain their archived origin
+        path. Legacy AD archives can be mapped when their snapshot metadata is
+        still present in the catalogue. Mapping is not supported for `_sd`
+        archives.
+        """
+        if not isinstance(destination_mapping, Mapping):
+            raise TypeError("Destination mapping must be a mapping of folder IDs to paths.")
+        self._restore_backup(backup_zip_path, destination_mapping)
+
+    def _restore_backup(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path] | None) -> None:
+        """Validate, extract and dispatch one archive, with optional AD remapping."""
         recover_pending_transactions(self.path_catalogue)
         if not backup_zip_path.is_file() or backup_zip_path.suffix != ".zip":
             raise ValueError(f"Provided path '{backup_zip_path}' is not a valid .zip file.")
@@ -212,10 +301,12 @@ class CatalogueBackupService:
             extract_zip(backup_zip_path, temp_dir_path)
 
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
+                if destination_mapping is not None:
+                    raise ValueError("Destination remapping is only supported for associated-directories backups.")
                 self._restore_snapshot_directory(temp_dir_path)
                 return
 
-            self._restore_associated_directories(info, temp_dir_path)
+            self._restore_associated_directories(info, temp_dir_path, destination_mapping)
 
     def delete_backup(self, backup_zip_path: Path):
         """
@@ -251,92 +342,196 @@ class CatalogueBackupService:
             logger.error(f"Failed to restore snapshot directory: {e}. Rolling back.")
             raise IOError(f"Failed to restore snapshot directory: {e}") from e
 
-    def _restore_associated_directories(self, info: SnapshotBackupInfo, temp_dir_path: Path) -> None:
-        """Restore matching live targets sequentially with their original rollback.
+    def _read_associations_manifest(self, manifest_path: Path, expected_snapshot_id: str | None) -> list[ArchivedAssociation]:
+        """Read and validate the versioned association manifest embedded in an AD ZIP."""
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"Associated-directories manifest '{manifest_path.name}' is invalid: {error}") from error
+        if not isinstance(data, dict) or data.get("format") != ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT or type(data.get("version")) is not int or data["version"] != 1:
+            raise ValueError("Unsupported or invalid associated-directories manifest format.")
+        snapshot_id = data.get("snapshot_id")
+        if not isinstance(snapshot_id, str) or not snapshot_id:
+            raise ValueError("Associated-directories manifest has no snapshot ID.")
+        if expected_snapshot_id is None or snapshot_id != expected_snapshot_id:
+            raise ValueError("Associated-directories manifest snapshot ID does not match the archive filename.")
+        raw_associations = data.get("associations")
+        if not isinstance(raw_associations, list):
+            raise ValueError("Associated-directories manifest has no association list.")
 
-        This is intentionally distinct from installation: it does not introduce
-        staging of all copies, new integrity checks, or new destination policy.
-        """
-        # ASSOCIATED_DIRECTORIES restore
+        associations = []
+        seen_ids = set()
+        seen_names = set()
+        for raw in raw_associations:
+            if not isinstance(raw, dict):
+                raise ValueError("Associated-directories manifest entries must be objects.")
+            folder_id = raw.get("folder_id")
+            index = raw.get("index")
+            directory_name = raw.get("directory_name")
+            original_path = raw.get("original_path")
+            if not isinstance(folder_id, str) or not folder_id:
+                raise ValueError("Associated-directories manifest contains an invalid folder ID.")
+            if type(index) is not int or index < 0:
+                raise ValueError(f"Associated-directories manifest contains an invalid index for '{folder_id}'.")
+            validate_directory_component(directory_name, "archive association directory name")
+            if directory_name == ASSOCIATED_DIRECTORIES_MANIFEST:
+                raise ValueError("Associated-directories manifest name conflicts with an archived association.")
+            if not isinstance(original_path, str) or not original_path or "\x00" in original_path:
+                raise ValueError(f"Associated-directories manifest contains an invalid original path for '{folder_id}'.")
+            if not Path(original_path).is_absolute() and not PureWindowsPath(original_path).is_absolute():
+                raise ValueError(f"Associated-directories manifest path for '{folder_id}' must be absolute.")
+            if folder_id in seen_ids or directory_name in seen_names:
+                raise ValueError("Associated-directories manifest contains duplicate association identities or names.")
+            seen_ids.add(folder_id)
+            seen_names.add(directory_name)
+            associations.append(ArchivedAssociation(folder_id, index, directory_name, original_path))
+        return associations
+
+    def _restore_associated_directories(
+        self,
+        info: SnapshotBackupInfo,
+        temp_dir_path: Path,
+        destination_mapping: Mapping[str, str | Path] | None = None,
+    ) -> None:
+        """Restore AD contents using the archive manifest, or legacy catalogue metadata."""
         if not info.snapshot_id:
             raise ValueError("Could not determine snapshot ID from associated-directories backup filename.")
 
-        snapshot = self.lookup.get_by_id(info.snapshot_id)
-        if not snapshot:
-            raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Associated-directories restore requires an existing snapshot metadata entry.")
+        manifest_path = temp_dir_path / ASSOCIATED_DIRECTORIES_MANIFEST
+        if manifest_path.is_file():
+            associations = self._read_associations_manifest(manifest_path, info.snapshot_id)
+            manifest_present = True
+        else:
+            snapshot = self.lookup.get_by_id(info.snapshot_id)
+            if not snapshot:
+                raise ValueError(f"Snapshot with ID '{info.snapshot_id}' not found. Legacy associated-directories backups require an existing snapshot metadata entry.")
+            snapshot_root = get_snapshot_path(snapshot.folder_name, self.path_catalogue)
+            storage = SnapshotStorage(
+                snapshot,
+                self.settings,
+                self.path_catalogue,
+                snapshot_root,
+                get_snapshot_json_path(snapshot.folder_name, self.path_catalogue, self.settings.json_filename),
+            )
+            recover_storage_transactions(storage)
+            associations = [
+                ArchivedAssociation(association.folder_id, association.index, association.directory_name, association.original_path)
+                for association in snapshot.directories
+            ]
+            manifest_present = False
 
-        snapshot_root = get_snapshot_path(snapshot.folder_name, self.path_catalogue)
-        storage = SnapshotStorage(
-            snapshot,
-            self.settings,
-            self.path_catalogue,
-            snapshot_root,
-            get_snapshot_json_path(snapshot.folder_name, self.path_catalogue, self.settings.json_filename),
+        self._restore_archived_associations(temp_dir_path, associations, destination_mapping, manifest_present)
+
+    def _restore_archived_associations(
+        self,
+        temp_dir_path: Path,
+        associations: list[ArchivedAssociation],
+        destination_mapping: Mapping[str, str | Path] | None,
+        manifest_present: bool,
+    ) -> None:
+        """Preflight and transactionally restore every association to its captured or mapped path."""
+        dir_name_to_assoc = {association.directory_name: association for association in associations}
+        mapping = destination_mapping or {}
+        if any(not isinstance(folder_id, str) or not folder_id for folder_id in mapping):
+            raise TypeError("Destination mapping keys must be non-empty association IDs.")
+        unknown_ids = set(mapping) - {association.folder_id for association in associations}
+        if unknown_ids:
+            raise ValueError(f"Destination mapping contains unknown association IDs: {', '.join(sorted(unknown_ids))}.")
+
+        extracted_entries = sorted(
+            (entry for entry in temp_dir_path.iterdir() if not manifest_present or entry.name != ASSOCIATED_DIRECTORIES_MANIFEST),
+            key=lambda entry: entry.name,
         )
-        recover_storage_transactions(storage)
-
-        dir_name_to_assoc: dict[str, SnapDirAssociation] = {assoc.directory_name: assoc for assoc in snapshot.directories}
-        extracted_entries = sorted(temp_dir_path.iterdir(), key=lambda entry: entry.name)
         extracted_by_name = {entry.name: entry for entry in extracted_entries}
         missing_folders = [
             association.original_path
-            for association in snapshot.directories
+            for association in associations
             if association.directory_name not in extracted_by_name or not extracted_by_name[association.directory_name].is_dir()
         ]
         unexpected_entries = [entry.name for entry in extracted_entries if entry.name not in dir_name_to_assoc or not entry.is_dir()]
-
-        if not snapshot.directories and not extracted_entries:
+        if not associations and not extracted_entries:
             raise ValueError("No associated directories were restored from the backup archive.")
         if missing_folders or unexpected_entries:
             raise SnapshotIncompleteError("Associated-directories restore", missing_folders, unexpected_entries)
 
-        # Preflight the complete set before creating a journal or staging files.
         tasks = []
-        for candidate in snapshot.directories:
-            extracted_dir = extracted_by_name[candidate.directory_name]
-            destination = Path(os.path.abspath(candidate.original_path))
+        resolved_destinations = []
+        for association in associations:
+            extracted_dir = extracted_by_name[association.directory_name]
+            raw_destination = mapping.get(association.folder_id, association.original_path)
+            if not isinstance(raw_destination, (str, os.PathLike)):
+                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a path.")
+            destination_value = os.fspath(raw_destination)
+            if not isinstance(destination_value, str):
+                raise TypeError(f"Restore destination for association '{association.folder_id}' must be a string path.")
+            if not destination_value or "\x00" in destination_value:
+                raise ValueError(f"Restore destination for association '{association.folder_id}' must be non-empty and contain no NUL characters.")
+            if association.folder_id not in mapping and not Path(destination_value).is_absolute():
+                if PureWindowsPath(destination_value).is_absolute():
+                    raise ValueError(f"Restore destination for association '{association.folder_id}' must be mapped for this platform.")
+            destination = Path(os.path.abspath(destination_value))
+            if not destination.parent.is_dir():
+                raise FileNotFoundError(f"Parent directory for restore destination '{destination}' does not exist.")
+            resolved_destinations.append((association.folder_id, destination.resolve(strict=False)))
             backup_dest = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
             try:
                 destination.lstat()
                 had_original = True
             except FileNotFoundError:
                 had_original = False
-            tasks.append(RestoreReplacement(candidate.folder_id, extracted_dir, destination, backup_dest, had_original))
+            tasks.append(RestoreReplacement(association.folder_id, extracted_dir, destination, backup_dest, had_original))
 
-        journal = SnapshotTransactionJournal.begin(snapshot_root, "restore_associations", {"entries": []})
+        catalogue_root = self.path_catalogue.resolve(strict=False)
+        transaction_root = (self.path_catalogue / ".pyliz_transactions").resolve(strict=False)
+        for index, (folder_id, destination) in enumerate(resolved_destinations):
+            if destination == catalogue_root or catalogue_root in destination.parents or destination == transaction_root or transaction_root in destination.parents:
+                raise ValueError(f"Restore destination for association '{folder_id}' overlaps catalogue transaction storage.")
+            for other_id, other_destination in resolved_destinations[index + 1 :]:
+                if destination == other_destination or destination in other_destination.parents or other_destination in destination.parents:
+                    raise ValueError(f"Restore destinations for associations '{folder_id}' and '{other_id}' overlap or are nested.")
+
+        staged_paths = []
+        for task in tasks:
+            staged_dir = task.destination.with_name(f"{task.destination.name}_staging_{gen_random_string(6)}")
+            while staged_dir.exists() or staged_dir.is_symlink():
+                staged_dir = task.destination.with_name(f"{task.destination.name}_staging_{gen_random_string(6)}")
+            backup_dest = task.backup_dest
+            while backup_dest.exists() or backup_dest.is_symlink():
+                backup_dest = task.destination.with_name(f"{task.destination.name}_bck_{gen_random_string(6)}")
+            staged_paths.append((staged_dir, backup_dest))
+
+        journal = SnapshotTransactionJournal.begin(self.path_catalogue, "restore_associations_manifest", {"entries": []})
         try:
             entries = []
             staged_tasks = []
-            for index, task in enumerate(tasks):
-                staged_dir = journal.workspace / f"restore_{index}"
-                assert_no_symlinks(task.staged_dir)
-                self.settings.copy_strategy.copy_directory(task.staged_dir, staged_dir)
-                assert_no_symlinks(staged_dir)
-                staged_task = RestoreReplacement(task.folder_id, staged_dir, task.destination, task.backup_dest, task.had_original)
-                staged_tasks.append(staged_task)
+            for task, (staged_dir, backup_dest) in zip(tasks, staged_paths, strict=True):
                 entries.append(
                     {
                         "folder_id": task.folder_id,
                         "stage": staged_dir.as_posix(),
-                        "stage_root": journal.workspace.as_posix(),
                         "destination": task.destination.as_posix(),
-                        "backup": task.backup_dest.as_posix(),
+                        "backup": backup_dest.as_posix(),
                         "had_original": task.had_original,
                     }
                 )
-            tasks = staged_tasks
             journal.update_payload(entries=entries)
+
+            for task, (staged_dir, backup_dest) in zip(tasks, staged_paths, strict=True):
+                assert_no_symlinks(task.staged_dir)
+                self.settings.copy_strategy.copy_directory(task.staged_dir, staged_dir)
+                assert_no_symlinks(staged_dir)
+                staged_task = RestoreReplacement(task.folder_id, staged_dir, task.destination, backup_dest, task.had_original)
+                staged_tasks.append(staged_task)
+            tasks = staged_tasks
             for task in tasks:
                 destination = task.destination
                 backup_dest = task.backup_dest
-
                 if task.had_original:
                     if not (destination.exists() or destination.is_symlink()):
                         raise FileNotFoundError(f"Restore destination '{destination}' disappeared before publication.")
                     rename_and_sync(destination, backup_dest)
                 elif destination.exists() or destination.is_symlink():
                     raise FileExistsError(f"Restore destination '{destination}' appeared before publication.")
-
                 rename_and_sync(task.staged_dir, destination)
 
             journal.set_state("commit_decided")
@@ -344,9 +539,12 @@ class CatalogueBackupService:
         except Exception as e:
             logger.error(f"Failed to restore associated directories: {e}. Rolling back.")
             try:
-                journal.decide_rollback(storage)
+                journal.decide_rollback()
             except Exception as rollback_error:
                 e.add_note(f"Persistent recovery journal retained at '{journal.path}': {rollback_error}")
             raise IOError(f"Failed to restore associated directories: {e}") from e
 
-        journal.finalize([task.backup_dest for task in tasks], "Associated-directories restore")
+        journal.finalize(
+            [path for task in tasks for path in (task.backup_dest, task.staged_dir)],
+            "Associated-directories restore",
+        )
