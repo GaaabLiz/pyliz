@@ -90,6 +90,30 @@ def test_zip_enumerates_before_creating_partial_archive(tmp_path):
         assert archive.read("value") == b"payload"
 
 
+def test_zip_tree_entries_preserve_empty_directories(tmp_path):
+    """Explicit directory entries survive ZIP extraction even with no files."""
+    import zipfile
+
+    from pylizlib.core.os.snap.storage.archives import write_verified_zip
+    from pylizlib.core.os.snap.storage.tree import iter_tree_entries_strict
+
+    source = tmp_path / "source"
+    nested_empty = source / "empty" / "nested"
+    nested_empty.mkdir(parents=True)
+    archive_path = tmp_path / "tree.zip"
+    entries = ((path, path.relative_to(source)) for path in iter_tree_entries_strict(source))
+
+    write_verified_zip(archive_path, entries)
+    with zipfile.ZipFile(archive_path) as archive:
+        assert archive.getinfo("empty/").is_dir()
+        assert archive.getinfo("empty/nested/").is_dir()
+
+    extracted = tmp_path / "extracted"
+    with zipfile.ZipFile(archive_path) as archive:
+        archive.extractall(extracted)
+    assert (extracted / "empty" / "nested").is_dir()
+
+
 def test_failed_publication_preparation_preserves_existing_tree(tmp_path):
     """Preparation runs before moving an original snapshot aside."""
     from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree

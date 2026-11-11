@@ -11,7 +11,7 @@ from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
-from pylizlib.core.os.snap.storage.tree import iter_files_strict
+from pylizlib.core.os.snap.storage.tree import iter_tree_entries_strict
 
 
 class CatalogueQuery(Protocol):
@@ -52,11 +52,11 @@ class CatalogueTransferService:
             return
 
         def files_to_archive():
-            """Yield catalogue-relative file entries after strict metadata enumeration."""
+            """Yield catalogue-relative tree entries after strict metadata enumeration."""
             for snap in snapshots:
                 snap_dir = get_snapshot_path(snap.id, self.path_catalogue)
-                for file_path in iter_files_strict(snap_dir):
-                    yield file_path, file_path.relative_to(self.path_catalogue)
+                for tree_entry in iter_tree_entries_strict(snap_dir):
+                    yield tree_entry, tree_entry.relative_to(self.path_catalogue)
 
         return write_verified_zip(zip_path, files_to_archive())
 

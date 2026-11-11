@@ -19,7 +19,7 @@ from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, recover_storage_transactions, rename_and_sync
-from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_files_strict
+from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
 
 class SnapshotArchiveService:
@@ -76,13 +76,14 @@ class SnapshotArchiveService:
                     continue
                 if not stat.S_ISDIR(mode):
                     raise NotADirectoryError(f"Backup source '{folder}' is not a directory.")
-                for file_path in iter_files_strict(folder):
-                    yield file_path, Path(d.directory_name) / file_path.relative_to(folder)
+                yield folder, Path(d.directory_name)
+                for tree_entry in iter_tree_entries_strict(folder):
+                    yield tree_entry, Path(d.directory_name) / tree_entry.relative_to(folder)
         else:
             snapshot_root = self.storage.root_path()
             assert_no_symlinks(snapshot_root)
-            for file_path in iter_files_strict(snapshot_root):
-                yield file_path, file_path.relative_to(self.storage.path_snapshot)
+            for tree_entry in iter_tree_entries_strict(snapshot_root):
+                yield tree_entry, tree_entry.relative_to(self.storage.path_snapshot)
 
 
 class SnapshotLookup(Protocol):

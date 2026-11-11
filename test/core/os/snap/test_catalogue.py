@@ -466,6 +466,32 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
         self.cat.import_catalogue(self._export_dir / "cat.zip")
         self.assertEqual(len(self.cat.get_all()), 3)
 
+    def test_catalogue_round_trip_preserves_empty_association_directories(self):
+        source = SOURCE_DATA_PATH / "empty_association"
+        nested = source / "empty_child" / "empty_grandchild"
+        nested.mkdir(parents=True)
+        association = SnapDirAssociation(index=1, original_path=str(source), folder_id="empty-assoc")
+        snapshot = Snapshot("EmptyAssociation", "Empty association", "", directories=[association])
+        self.cat.add(snapshot)
+        shutil.rmtree(source)
+
+        self.cat.export_catalogue(self._export_dir, "empty-association.zip")
+        archive_path = self._export_dir / "empty-association.zip"
+        with zipfile.ZipFile(archive_path) as archive:
+            names = archive.namelist()
+        self.assertIn(f"{snapshot.id}/{association.directory_name}/", names)
+        self.assertIn(f"{snapshot.id}/{association.directory_name}/empty_child/", names)
+        self.assertIn(f"{snapshot.id}/{association.directory_name}/empty_child/empty_grandchild/", names)
+
+        self.cat.delete(snapshot)
+        self.cat.import_catalogue(archive_path)
+        imported = self.cat.get_by_id(snapshot.id)
+        imported_root = CATALOGUE_PATH / imported.id / imported.directories[0].directory_name
+        self.assertTrue((imported_root / "empty_child" / "empty_grandchild").is_dir())
+
+        self.cat.install(imported)
+        self.assertTrue((source / "empty_child" / "empty_grandchild").is_dir())
+
     def test_export_catalogue_scan_failure_does_not_publish_incomplete_zip(self):
         nested = self._src[0] / "nested"
         nested.mkdir()

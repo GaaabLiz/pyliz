@@ -48,6 +48,30 @@ def iter_files_strict(root: Path) -> Iterator[Path]:
                     yield path
 
 
+def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
+    """Yield files and child directories, preserving empty directories.
+
+    The root itself is omitted. Directory entries are yielded before descent;
+    file symlinks are yielded but directory symlinks are not traversed.
+    Filesystem scan errors propagate to the caller.
+    """
+    if not stat.S_ISDIR(root.stat().st_mode):
+        raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
+    pending = [root]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                mode = entry.stat(follow_symlinks=False).st_mode
+                path = Path(entry.path)
+                if stat.S_ISDIR(mode):
+                    yield path
+                    pending.append(path)
+                elif stat.S_ISREG(mode):
+                    yield path
+                elif stat.S_ISLNK(mode) and stat.S_ISREG(entry.stat().st_mode):
+                    yield path
+
+
 def assert_no_symlinks(root: Path) -> None:
     """Reject symlinks anywhere in snapshot storage before traversing it."""
     try:

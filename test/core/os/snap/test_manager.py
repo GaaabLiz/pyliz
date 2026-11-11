@@ -842,6 +842,25 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             names = zf.namelist()
         self.assertTrue(any("snapshot.json" in n for n in names))
 
+    def test_associated_directory_backup_preserves_empty_association_root(self):
+        source = SOURCE_DATA_PATH / "empty_backup" / "nested_empty"
+        source.mkdir(parents=True)
+        snap = Snapshot(
+            id="EmptyAssocBackup",
+            name="Empty association backup",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(source.parent), folder_id="empty-backup")],
+        )
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        archive_path = mgr.create_backup(BACKUP_PATH, "empty_association", BackupType.ASSOCIATED_DIRECTORIES)
+        with zipfile.ZipFile(archive_path) as archive:
+            names = archive.namelist()
+        association_root = snap.directories[0].directory_name
+        self.assertIn(f"{association_root}/", names)
+        self.assertIn(f"{association_root}/nested_empty/", names)
+
     def test_failed_backup_preserves_existing_archive_and_removes_partial_file(self):
         snap = make_snapshot("AtomicBackup", self._src, n=1)
         mgr = self._mgr(snap)
