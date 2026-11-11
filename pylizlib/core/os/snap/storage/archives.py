@@ -36,3 +36,18 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
                 temporary_path.unlink(missing_ok=True)
             except OSError as e:
                 logger.warning(f"Could not remove unfinished backup '{temporary_path}': {e}")
+
+
+def extract_zip(zip_path: Path, destination: Path) -> None:
+    """Extract members with the existing ZIP policy and public error mapping.
+
+    The caller owns the temporary directory. Errors from the caller after this
+    function returns must not be mistaken for extraction failures.
+    """
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            archive.extractall(destination)
+    except zipfile.BadZipFile:
+        raise ValueError(f"File '{zip_path}' is not a valid zip file.")
+    except Exception as e:
+        raise IOError(f"Failed to extract zip file '{zip_path}': {e}")
