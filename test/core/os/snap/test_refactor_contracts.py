@@ -313,3 +313,38 @@ def test_catalogue_import_keeps_id_only_entries_and_continues_after_bad_json(tmp
     assert (catalogue.path_catalogue / "minimal" / "payload").read_text() == "kept"
     assert not (catalogue.path_catalogue / "bad").exists()
     assert catalogue.get_by_id("minimal") is None  # its incomplete model is still unreadable
+
+
+def test_association_copy_service_cleans_partial_destination_on_strategy_failure(tmp_path):
+    """Association storage keeps cleanup even for custom failing strategies."""
+    from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy
+    from pylizlib.core.os.snap.storage.association import copy_association
+
+    class FailingStrategy(DirectoryCopyStrategy):
+        """Create a partial destination then fail to exercise caller cleanup."""
+
+        def copy_directory(self, source, destination, progress_callback=None, message_callback=None, *, manifest=None, expected_manifest=None):
+            """Leave a deliberately incomplete directory for the association adapter."""
+            destination.mkdir()
+            (destination / "partial").write_text("partial")
+            raise OSError("custom copy failed")
+
+    source = tmp_path / "source"
+    source.mkdir()
+    association = SnapDirAssociation(1, str(source), "a")
+    storage = tmp_path / "storage"
+    with pytest.raises(OSError, match="custom copy failed"):
+        copy_association(association, storage, copy_strategy=FailingStrategy())
+    assert not (storage / association.directory_name).exists()
+
+
+def test_association_factory_keeps_public_generator_and_global_index(tmp_path):
+    """Factory extraction preserves the class-level index and path selection."""
+    from pylizlib.core.os.snap.factories import gen_random_association_list
+
+    choices = tmp_path / "choices"
+    (choices / "only").mkdir(parents=True)
+    with patch.object(SnapDirAssociation, "_current_index", 40):
+        associations = gen_random_association_list(2, choices)
+        assert [a.index for a in associations] == [41, 42]
+        assert [a.original_path for a in associations] == [(choices / "only").as_posix()] * 2

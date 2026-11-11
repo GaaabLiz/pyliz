@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.os.path import random_subfolder
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
 
 
@@ -26,3 +27,38 @@ def gen_random_snap(source_folder_for_choices: Path, id_length: int = 10) -> Sna
         directories=dirs,
         tags=["example", "test"],
     )
+
+
+def gen_random_association(
+    source_folder_for_choices: Path,
+    folder_id_length: int = 4,
+) -> "SnapDirAssociation":
+    """
+    Generates a single, random SnapDirAssociation for testing purposes.
+
+    Args:
+        source_folder_for_choices: A directory from which a random subfolder will be chosen.
+        folder_id_length: The length of the random `folder_id`.
+
+    Returns:
+        A new `SnapDirAssociation` instance with random data.
+    """
+    return SnapDirAssociation(
+        index=SnapDirAssociation.next_index(),
+        original_path=random_subfolder(source_folder_for_choices).__str__(),
+        folder_id=gen_random_string(folder_id_length),
+    )
+
+
+def gen_random_association_list(count: int, source_folder_for_choices: Path) -> list["SnapDirAssociation"]:
+    """
+    Generates a list of random SnapDirAssociation objects for testing.
+
+    Args:
+        count: The number of associations to generate.
+        source_folder_for_choices: The directory from which random subfolders will be chosen.
+
+    Returns:
+        A list of new `SnapDirAssociation` instances.
+    """
+    return [SnapDirAssociation.gen_random(source_folder_for_choices) for _ in range(count)]
