@@ -1,0 +1,130 @@
+# Manutenzione del sistema snapshot
+
+L'API pubblica rimane disponibile tramite `pylizlib.core.os.snap` e i moduli
+storici. Il refactor separa le responsabilità interne conservando formati,
+firme, valori restituiti e comportamenti in caso di errore.
+
+## Da dove iniziare
+
+| Esigenza | Modulo da leggere |
+|---|---|
+| API su uno snapshot | `manager.py` |
+| API sul catalogo e backup preventivi | `catalogue.py` |
+| Modelli, enum, configurazione e invarianti | `domain.py` |
+| Creazione, duplicazione e cancellazione | `operations/lifecycle.py` |
+| Installazione e rimozione delle copie installate | `operations/install.py` |
+| Aggiornamento delle copie interne dal sistema | `operations/sync.py` |
+| Pianificazione ed esecuzione degli edit | `operations/edits.py` |
+| Backup e ripristino | `operations/archives.py` |
+| Generazione e parsing dei nomi dei backup | `operations/backup_names.py` |
+| Import/export del catalogo | `operations/transfers.py` |
+| Percorsi contenuti nello storage | `storage/paths.py` |
+| Scansione e politiche sui link | `storage/tree.py` |
+| Pubblicazione delle directory e pulizia | `storage/publication.py` |
+| Primitive di lettura e scrittura ZIP | `storage/archives.py` |
+| Conversione JSON e file descriptor protetti | `storage/metadata.py` |
+| Scansione delle voci del catalogo | `storage/catalogue.py` |
+| Dipendenze di una singola operazione | `storage/context.py` |
+| Copia di un'associazione nel suo storage | `storage/association.py` |
+| Strategie di copia e sorgenti stabili | `copy_strategy.py` |
+| Validazione e confronto dei manifest | `integrity.py` |
+| Query, ricerca e risoluzione dei percorsi | `searcher.py` |
+| Contratti delle callback | `callbacks.py` |
+| Confronto delle associazioni e ordinamento | `diff.py`, `sorting.py` |
+| Generazione di esempi casuali | `factories.py` |
+
+`utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
+implementazioni interne usano direttamente i moduli responsabili, evitando di
+passare dall'esportazione aggregata di `snap.__init__`.
+
+## Composizione e interfacce
+
+Manager e catalogo coordinano le operazioni; non contengono più i grandi
+algoritmi di copia, pubblicazione o ripristino. I servizi ricevono dipendenze
+esplicite e non ereditano da un manager generale.
+
+`SnapshotStorage` viene costruito a ogni invocazione del manager usando i suoi
+attributi pubblici correnti. Conserva il riferimento al modello e alle
+impostazioni, senza copiarli. Le destinazioni catturate dal manager continuano
+a essere confrontate con i percorsi richiesti, per rilevare cambiamenti di ID
+o del nome del JSON.
+
+I contratti sono limitati alle capacità utilizzate:
+
+- `DirectoryCopyStrategy` e `SourceSnapshotProvider` mantengono le ABC pubbliche
+  esistenti e i controlli runtime sui tipi.
+- `SnapshotMetadata` descrive salvataggio, lettura, aggiornamento parziale e
+  accesso ai byte necessari al recupero. L'adapter predefinito è il serializer.
+- `SnapshotPathLookup` descrive l'unica capacità del catalogo richiesta dalla
+  ricerca; la firma storica del costruttore resta disponibile.
+- `SnapshotLookup` permette il lookup usato dal restore delle associazioni.
+- `CatalogueQuery` espone le letture necessarie ai trasferimenti ZIP.
+
+I record `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement` e
+`RestoreReplacement` danno nomi espliciti ai dati prima conservati in tuple o
+dizionari. I modelli contenuti restano mutabili: un record frozen non congela
+lo snapshot e non ne introduce una copia.
+
+## Fasi e confini di recupero
+
+Ogni operazione mantiene il proprio protocollo. Non esiste una transazione
+universale che aggiunga garanzie nuove ai flussi storici.
+
+| Flusso | Ordine e limite da conservare |
+|---|---|
+| Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. |
+| Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; al fallimento del salvataggio ripristinare anche i byte JSON originali. |
+| Sincronizzazione | Preparare tutte le copie, sostituire, aggiornare dimensioni/manifest e salvare; ripristinare copie e metadati in memoria secondo il protocollo esistente. |
+| Installazione | Verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo la transazione sui contenuti. |
+| Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo o un rollback nuovo. |
+| Restore `_ad` | Ripristinare sequenzialmente le associazioni riconosciute; non equipararlo all'installazione. |
+| Pulizia dopo commit | Registrare gli errori e proseguire, senza riattivare il rollback di dati già pubblicati. |
+
+Una correzione che modifica questi limiti richiede una decisione funzionale e
+propri test: non va inserita in uno spostamento di codice.
+
+## Altri vincoli di compatibilità
+
+- Le associazioni calcolano ancora `mb_size` nel costruttore quando manca;
+  `validate()` normalizza ancora `original_path` e viene chiamato dalle
+  proprietà che già lo facevano.
+- I default `SnapshotSettings()` dei due costruttori pubblici mantengono la
+  condivisione storica. Non aggiungere copie o ricostruzioni implicite.
+- Il diff usa `folder_id` come identità stabile e conserva l'ordine di aggiunte,
+  rimozioni e rinomine. Le azioni legacy vengono risolte prima delle modifiche.
+- Il JSON conserva UTF-8, indentazione, date ISO e fallback legacy. Gli
+  aggiornamenti parziali preservano campi extra senza costruire un modello.
+- Il serializer risolve i propri hook nell'ordine storico: leggere/validare,
+  preparare i dati, selezionare il converter, codificare, risolvere il writer.
+- I controlli sui link prima e dopo I/O non sono duplicazioni da eliminare.
+  Traversal per backup, storage e ricerca mantengono politiche distinte.
+- Il manifest persistito e il fingerprint interno della copia verificata
+  restano rappresentazioni differenti. La verifica per tentativi non equivale
+  a una sorgente congelata dal filesystem/provider.
+- La presenza di una callback può attivare la scansione dei byte nella copia.
+  Create mantiene l'adapter anche senza osservatore; install passa `None`.
+- Nella ricerca soltanto `False` interrompe il ciclo corrente, prima di leggere
+  quel file. La ricerca degli snapshot successivi continua.
+- L'import del catalogo gestisce gli errori per voce e legge inizialmente solo
+  l'ID; l'import singolo valida invece l'intero modello.
+
+## Verifiche prima di modificare
+
+Dalla root del repository:
+
+```sh
+.venv/bin/python -m pytest test/core/os/snap -q --disable-warnings
+.venv/bin/ruff check pylizlib/core/os/snap
+```
+
+I test di caratterizzazione sono in `test_refactor_contracts.py`; quelli dei
+moduli estratti e delle strategie sono in `test_refactor_modules.py`.
+`test_public_api.py` confronta le dichiarazioni pubbliche con la fixture della
+revisione precedente al refactor e richiede docstring per classi, funzioni e
+callback annidate.
+
+Per modifiche ai flussi filesystem verificare sia il successo sia errori di
+copia, rinomina, salvataggio e cleanup. Confrontare contenuti, JSON e stato in
+memoria. Usare copie locali isolate: gran parte dei vecchi test condivide una
+root di fixture e non è predisposta per esecuzione parallela. Le prove Windows
+nella suite simulano le API ACL; non sostituiscono una verifica su Windows reale.

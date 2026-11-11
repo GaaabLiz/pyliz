@@ -1,17 +1,7 @@
-"""
-Catalogue manager for a collection of Snapshot objects.
+"""Public catalogue API composing lookup, backup, transfer and snapshot services.
 
-Responsibilities (Single Responsibility Principle):
-    - Managing the set of snapshots stored under a catalogue directory.
-    - Providing CRUD operations (add, delete, get, update, duplicate) on the catalogue.
-    - Installing and uninstalling snapshots from their original target locations.
-    - Exporting and importing snapshots and the whole catalogue as zip archives.
-    - Creating and restoring backup archives (delegating to SnapshotManager).
-    - Parsing backup archive filenames to reconstruct SnapshotBackupInfo metadata.
-
-Classes:
-    SnapshotCatalogue – High-level catalogue API.
-"""
+This facade owns backup triggers and caller-visible orchestration. Storage
+scans and archive algorithms live in dedicated internal modules."""
 
 from pathlib import Path
 from typing import Optional
@@ -34,6 +24,11 @@ from pylizlib.core.os.snap.utils import SnapshotUtils
 
 
 class SnapshotCatalogue:
+    """Public catalogue facade coordinating lookup, backup policy and operations.
+
+    Paths and mutable settings are read for each invocation. Backup, transfer
+    and single-snapshot services own their respective filesystem workflows."""
+
     def __init__(self, path_catalogue: Path, settings: SnapshotSettings = SnapshotSettings()):
         """
         Initializes the catalogue manager for a collection of snapshots.

@@ -1,20 +1,9 @@
-"""
-Snapshot management package.
+"""Public snapshot API, retaining original exports and class identities.
 
-Re-exports all public symbols so that existing code using::
-
-    from pylizlib.core.os.snap import SnapshotCatalogue, Snapshot, ...
-
-continues to work unchanged regardless of which sub-module each class lives in.
-
-Sub-modules:
-    domain      – Pure data models (dataclasses, enums).
-    serializer  – JSON serialization / deserialization.
-    utils       – Stateless helper functions.
-    manager     – Single-snapshot lifecycle manager.
-    catalogue   – Multi-snapshot catalogue manager.
-    searcher    – Full-text / filename search across snapshots.
-"""
+operations contains lifecycle, edit, install, sync, backup and transfer flows.
+storage contains path, tree, publication, ZIP and metadata primitives.
+Models retain their legacy construction side effects; see README.md for the
+architecture and the operation-specific recovery boundaries."""
 
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.copy_strategy import (

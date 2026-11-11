@@ -52,6 +52,7 @@ class CatalogueTransferService:
             return
 
         def files_to_archive():
+            """Yield catalogue-relative file entries after strict metadata enumeration."""
             for snap in snapshots:
                 snap_dir = get_snapshot_path(snap.id, self.path_catalogue)
                 for file_path in iter_files_strict(snap_dir):
@@ -76,10 +77,10 @@ class CatalogueTransferService:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
 
-            # 1. Extract the zip to a temporary directory
+            # Extract the zip to a temporary directory
             extract_zip(zip_path, temp_dir_path)
 
-            # 2. Iterate through extracted folders and import them
+            # Iterate through extracted folders and import them
             for potential_snap_dir in temp_dir_path.iterdir():
                 self._import_entry(potential_snap_dir)
 
@@ -102,10 +103,10 @@ class CatalogueTransferService:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
 
-            # 1. Extract the zip to a temporary directory
+            # Extract the zip to a temporary directory
             extract_zip(zip_path, temp_dir_path)
 
-            # 2. Validate the content and get snapshot
+            # Validate the content and get snapshot
             json_path = temp_dir_path / self.settings.json_filename
             if not json_path.is_file():
                 raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
@@ -115,11 +116,11 @@ class CatalogueTransferService:
             except Exception as e:
                 raise ValueError(f"Failed to read snapshot data from json: {e}")
 
-            # 3. Check for ID conflict
+            # Check for ID conflict
             if self.query.exists(snapshot_to_import.id):
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
-            # 4. Copy the extracted folder to the catalogue
+            # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 temp_dir_path,
                 snapshot_to_import.id,
@@ -150,12 +151,12 @@ class CatalogueTransferService:
                 logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
                 return
 
-            # 3. Check for ID conflict
+            # Check for ID conflict
             if self.query.exists(snap_id):
                 logger.info(f"Snapshot with ID '{snap_id}' already exists. Skipping import.")
                 return
 
-            # 4. Copy the extracted folder to the catalogue
+            # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 potential_snap_dir,
                 snap_id,

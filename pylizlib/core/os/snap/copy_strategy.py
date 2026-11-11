@@ -111,6 +111,7 @@ class _FileCopySession:
         assert self.observed is not None
 
         def raise_walk_error(error: OSError) -> None:
+            """Propagate a walk failure instead of treating an incomplete scan as success."""
             raise error
 
         for current, directories, _ in os.walk(self.destination, onerror=raise_walk_error):
@@ -125,7 +126,10 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
 
     @staticmethod
     def _total_bytes(source: Path) -> int:
+        """Count source file bytes for progress, propagating walk and stat failures."""
+
         def raise_walk_error(error: OSError) -> None:
+            """Propagate a walk failure instead of treating an incomplete scan as success."""
             raise error
 
         total = 0
@@ -146,6 +150,9 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
+        """Copy to a new destination, recording/verifying content before success.
+
+        Per-call counters live in a session; failures remove only this destination."""
         source = Path(source)
         destination = Path(destination)
         if not source.is_dir():
@@ -196,6 +203,7 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
     """
 
     def __init__(self, max_attempts: int = 3, delegate: DirectoryCopyStrategy | None = None):
+        """Configure the attempt limit and delegate; keep the default sequential copier."""
         if type(max_attempts) is not int or max_attempts < 1:
             raise ValueError("max_attempts must be a positive integer.")
         self.max_attempts = max_attempts
@@ -203,6 +211,9 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
 
     @staticmethod
     def _manifest(root: Path) -> dict[str, tuple[str, int | str]]:
+        """Fingerprint source files and directories, rejecting links and special files.
+
+        This scan representation is distinct from the persisted integrity manifest."""
         root_mode = root.lstat().st_mode
         if _is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
             raise NotADirectoryError(f"Copy source '{root}' is not a real directory.")
@@ -241,6 +252,9 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
+        """Publish only when source fingerprints agree before and after a copy.
+
+        Retry source changes up to max_attempts; propagate other errors as before."""
         source = Path(source)
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
@@ -290,6 +304,7 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
     """
 
     def __init__(self, provider: SourceSnapshotProvider, delegate: DirectoryCopyStrategy | None = None):
+        """Require the existing provider ABC and keep the supplied or default delegate."""
         if not isinstance(provider, SourceSnapshotProvider):
             raise TypeError("provider must implement SourceSnapshotProvider.")
         self.provider = provider
@@ -305,6 +320,9 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
+        """Copy within the provider context, then verify and publish the staged tree.
+
+        The output manifest is updated only after successful publication."""
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
@@ -331,6 +349,7 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         message_callback: MessageCallback | None,
         observed_manifest: MutableMapping[str, dict[str, str | int | None]] | None,
     ) -> Path:
+        """Copy only while the provider context holds its stable source available."""
         with self.provider.create_snapshot(Path(source)) as stable_source:
             stable_source = Path(stable_source)
             if _is_link_or_junction(stable_source) or not stable_source.is_dir():

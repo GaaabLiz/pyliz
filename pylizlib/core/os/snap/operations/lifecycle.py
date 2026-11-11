@@ -93,6 +93,7 @@ class SnapshotLifecycle:
         new_snap.date_created = datetime.now()
 
         def prepare_duplicate(staging_path: Path) -> None:
+            """Write cloned metadata into staging before making the duplicate visible."""
             json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
             self.storage.metadata.to_json(new_snap, json_path)
 

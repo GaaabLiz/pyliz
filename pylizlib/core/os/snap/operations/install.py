@@ -83,7 +83,7 @@ class SnapshotInstaller:
             self._apply_windows_permissions(rollbacks, enable_everyone_full_control, win32security, con if win32security else None)
 
         except Exception as e:
-            # 5. Ripristinare la vecchia directory se lo swap fallisce
+            # Ripristinare la vecchia directory se lo swap fallisce
             logger.error(f"Installation failed during transaction. Rolling back. Reason: {e}")
             self._rollback_installation(rollbacks, clear_destination)
             raise
@@ -128,7 +128,7 @@ class SnapshotInstaller:
 
     def _preflight(self) -> None:
         """Validate stored sources, targets and legacy-manifest policy before copying."""
-        # 1. Preflight
+        # Preflight
         for dir_assoc in self.storage.snapshot.directories:
             source_dir = self.storage.child_path(dir_assoc.directory_name)
             if not source_dir.exists() or not source_dir.is_dir():
@@ -151,7 +151,7 @@ class SnapshotInstaller:
             source_dir = self.storage.child_path(dir_assoc.directory_name)
             install_location = Path(dir_assoc.original_path)
 
-            # 2. Copiare in una directory temporanea (Staging)
+            # Copiare in una directory temporanea (Staging)
             staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
             backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
 
@@ -179,13 +179,13 @@ class SnapshotInstaller:
                     shutil.rmtree(staging_dir)
                 raise RuntimeError(f"Failed to copy to staging '{staging_dir}': {e}") from e
 
-            # 3. La strategia ha verificato il manifest prima di pubblicare lo staging.
+            # La strategia ha verificato il manifest prima di pubblicare lo staging.
 
             rollbacks.append(InstallReplacement(install_location, staging_dir, backup_dir))
 
     def _publish_directories(self, rollbacks: list[InstallReplacement], clear_destination: bool) -> None:
         """Publish prepared copies using replacement or the legacy top-level merge."""
-        # 4. Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
+        # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
         for rb in rollbacks:
             install_loc = rb.install_loc
             staging_dir = rb.staging_dir
@@ -247,7 +247,7 @@ class SnapshotInstaller:
 
     def _record_last_used(self) -> None:
         """Save usage metadata after publication; failures do not roll back contents."""
-        # 7. Aggiornare `date_last_used` soltanto dopo commit riuscito
+        # Aggiornare `date_last_used` soltanto dopo commit riuscito
         self.storage.snapshot.date_last_used = datetime.now()
         self.storage.metadata.update_field(
             self.storage.child_path(self.storage.settings.json_filename),
