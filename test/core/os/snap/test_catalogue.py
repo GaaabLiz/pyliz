@@ -137,6 +137,27 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
         self.assertEqual(len(all_snaps), 1)
         self.assertEqual(all_snaps[0].id, snap.id)
 
+    def test_get_all_and_export_only_include_published_matching_catalogue_entries(self):
+        from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+        published = Snapshot(id="abc", name="Published", desc="")
+        self.cat.add(published)
+        for directory_name in ("_staging_create_abc_test", "abc_bck_test", "wrong-name"):
+            operational_or_mismatched = CATALOGUE_PATH / directory_name
+            operational_or_mismatched.mkdir()
+            SnapshotSerializer.to_json(published, operational_or_mismatched / "snapshot.json")
+            (operational_or_mismatched / "duplicate-payload.txt").write_text(directory_name, encoding="utf-8")
+
+        self.assertEqual([snapshot.id for snapshot in self.cat.get_all()], ["abc"])
+        self.assertEqual([snapshot.id for snapshot in self.cat.get_all(strict=True)], ["abc"])
+
+        export_dir = TEST_LOCAL_ROOT / "published_export"
+        export_dir.mkdir()
+        self.cat.export_catalogue(export_dir, "published-only.zip")
+        with zipfile.ZipFile(export_dir / "published-only.zip") as archive:
+            entries = archive.namelist()
+        self.assertEqual(entries, ["abc/snapshot.json"])
+
     def test_delete_removes_snapshot(self):
         snap = make_snapshot("DelSnap", self._src, n=1)
         self.cat.add(snap)
