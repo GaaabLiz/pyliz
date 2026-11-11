@@ -9,6 +9,7 @@ from pathlib import Path
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import remove_directory_or_move_to_temp
+from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.publication import cleanup_after_commit
@@ -155,10 +156,8 @@ class SnapshotInstaller:
             backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
 
             def copy_progress(copied_bytes: int, total_bytes: int) -> None:
-                if progress_callback:
-                    dir_pct = (copied_bytes / total_bytes) if total_bytes > 0 else 1.0
-                    overall_pct = ((i + dir_pct) / total_dirs) * 100
-                    progress_callback(int(overall_pct))
+                """Adapt verified-copy byte counts to snapshot percentage notifications."""
+                report_directory_progress(progress_callback, i, total_dirs, copied_bytes, total_bytes)
 
             logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
             try:

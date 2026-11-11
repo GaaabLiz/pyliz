@@ -348,3 +348,20 @@ def test_association_factory_keeps_public_generator_and_global_index(tmp_path):
         associations = gen_random_association_list(2, choices)
         assert [a.index for a in associations] == [41, 42]
         assert [a.original_path for a in associations] == [(choices / "only").as_posix()] * 2
+
+
+def test_create_and_install_keep_distinct_scan_behavior_without_observer(tmp_path):
+    """Create keeps its byte-scan adapter, while install passes no copy observer."""
+    from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "value").write_text("payload")
+    snapshot = Snapshot("scan", "scan", "", directories=[SnapDirAssociation(1, str(source), "a")])
+    strategy = SequentialFileCopyStrategy()
+    manager = SnapshotManager(snapshot, tmp_path / "catalogue", SnapshotSettings(copy_strategy=strategy))
+    with patch.object(strategy, "_total_bytes", wraps=strategy._total_bytes) as scan:
+        manager.create()
+        assert scan.call_count == 1
+        manager.install()
+        assert scan.call_count == 1

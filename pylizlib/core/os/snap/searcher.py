@@ -18,14 +18,14 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
-from pylizlib.core.os.snap.domain import Snapshot
 
 # Type alias for a progress callback: (filename, total_files, processed_files) -> Optional[bool]
-SnapshotProgressCallback = Callable[[str, int, int], Optional[bool]]
+from pylizlib.core.os.snap.callbacks import SnapshotProgressCallback
+from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
+from pylizlib.core.os.snap.domain import Snapshot
 
 
 class QueryType(Enum):

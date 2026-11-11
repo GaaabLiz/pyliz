@@ -236,3 +236,13 @@ def test_catalogue_scanner_skips_validation_errors_in_both_modes(tmp_path, stric
                 read_catalogue(tmp_path, SnapshotSettings(), strict=True)
         else:
             assert read_catalogue(tmp_path, SnapshotSettings()) == []
+
+
+@pytest.mark.parametrize("index,copied,total,expected", [(0, 1, 3, 16), (1, 0, 0, 100), (1, 1, 2, 75)])
+def test_directory_progress_keeps_equal_weights_and_integer_truncation(index, copied, total, expected):
+    """Percent aggregation keeps existing rounding and zero-byte behavior."""
+    from pylizlib.core.os.snap.callbacks import report_directory_progress
+
+    percentages = []
+    report_directory_progress(percentages.append, index, 2, copied, total)
+    assert percentages == [expected]

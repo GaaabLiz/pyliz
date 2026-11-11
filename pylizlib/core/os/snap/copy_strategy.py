@@ -8,19 +8,18 @@ import shutil
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import ContextManager
 
+from pylizlib.core.os.snap.callbacks import CopyProgressCallback as ProgressCallback
+from pylizlib.core.os.snap.callbacks import MessageCallback
 from pylizlib.core.os.snap.integrity import (
     IntegrityManifest,
     assert_manifest_matches,
     validate_integrity_manifest,
 )
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
-
-ProgressCallback = Callable[[int, int], None]
-MessageCallback = Callable[[str], None]
 
 
 class SourceChangedError(RuntimeError):
