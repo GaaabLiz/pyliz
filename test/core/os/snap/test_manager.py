@@ -482,6 +482,38 @@ class TestSnapshotManagerDuplicate(unittest.TestCase):
         self.assertIn("Copy", loaded.name)
         self.assertNotEqual(loaded.id, snap.id)
 
+    def test_duplicate_metadata_failure_does_not_publish_a_partial_snapshot(self):
+        snap = make_snapshot("DupMetadataFailure", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+        original_id = snap.id
+        duplicate_id = "duplicate-write-failed"
+        metadata_paths = []
+        real_to_json = SnapshotSerializer.to_json
+
+        def fail_duplicate_metadata(snapshot, path):
+            """Fail before replacement after the original tree has been staged."""
+            if snapshot.id == duplicate_id:
+                metadata_paths.append(Path(path))
+                raise OSError("duplicate metadata write interrupted")
+            return real_to_json(snapshot, path)
+
+        with patch("pylizlib.core.os.snap.operations.lifecycle.gen_random_string", return_value=duplicate_id):
+            with patch.object(SnapshotSerializer, "to_json", side_effect=fail_duplicate_metadata):
+                with self.assertRaisesRegex(OSError, "duplicate metadata write interrupted"):
+                    mgr.duplicate()
+
+        duplicate_path = CATALOGUE_PATH / duplicate_id
+        self.assertEqual(len(metadata_paths), 1)
+        self.assertEqual(metadata_paths[0].parent.name, "snapshot")
+        self.assertIn(".pyliz_transactions", metadata_paths[0].parts)
+        self.assertFalse(duplicate_path.exists())
+        self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).id, original_id)
+
+        with patch("pylizlib.core.os.snap.operations.lifecycle.gen_random_string", return_value=duplicate_id):
+            mgr.duplicate()
+        self.assertEqual(SnapshotSerializer.from_json(duplicate_path / SnapshotSettings().json_filename).id, duplicate_id)
+
     def test_duplicate_raises_when_source_path_missing(self):
         snap = make_snapshot("DupMissing", self._src, n=1)
         mgr = self._mgr(snap)

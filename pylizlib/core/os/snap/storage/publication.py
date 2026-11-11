@@ -1,11 +1,13 @@
 """Publish stored snapshot trees and clean committed transaction leftovers."""
 
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
+from pylizlib.core.os.snap.domain import Snapshot, validate_directory_component
+from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path, validate_snapshot_root
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks
@@ -24,6 +26,27 @@ def cleanup_after_commit(paths: Iterable[Path], operation: str) -> None:
                 shutil.rmtree(path)
         except OSError as e:
             logger.warning(f"{operation} completed, but could not remove temporary directory '{path}': {e}")
+
+
+def validate_staged_snapshot_tree(
+    staged_path: Path,
+    snapshot_id: str,
+    json_filename: str,
+    metadata_reader: Callable[[Path], Snapshot] | None = None,
+) -> Snapshot:
+    """Validate staged metadata identity and ensure every associated copy exists."""
+    staged_path = Path(staged_path)
+    json_path = staged_path / validate_directory_component(json_filename, "Snapshot JSON filename")
+    if not json_path.is_file():
+        raise FileNotFoundError(f"Staged snapshot metadata '{json_path}' is missing.")
+    snapshot = (metadata_reader or SnapshotSerializer.from_json)(json_path)
+    if snapshot.id != snapshot_id:
+        raise ValueError(f"Staged snapshot metadata ID '{snapshot.id}' does not match destination ID '{snapshot_id}'.")
+    for association in snapshot.directories:
+        association_path = staged_path / association.directory_name
+        if not association_path.is_dir():
+            raise FileNotFoundError(f"Staged association directory '{association_path}' is missing.")
+    return snapshot
 
 
 def publish_snapshot_tree(
@@ -60,6 +83,7 @@ def publish_snapshot_tree(
         assert_no_symlinks(staged_path)
         if prepare_staging is not None:
             prepare_staging(staged_path)
+        assert_no_symlinks(staged_path)
 
         destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
         currently_exists = destination_path.exists() or destination_path.is_symlink()

@@ -8,7 +8,7 @@ from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
-from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source
 
@@ -109,9 +109,15 @@ class SnapshotLifecycle:
         new_snap.date_created = datetime.now()
 
         def prepare_duplicate(staging_path: Path) -> None:
-            """Write cloned metadata into staging before making the duplicate visible."""
+            """Write and validate cloned metadata before making the duplicate visible."""
             json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
             self.storage.metadata.to_json(new_snap, json_path)
+            validate_staged_snapshot_tree(
+                staging_path,
+                new_snap.id,
+                self.storage.settings.json_filename,
+                metadata_reader=self.storage.metadata.from_json,
+            )
 
         publish_snapshot_tree(
             self.storage.root_path(),
