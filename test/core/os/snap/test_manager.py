@@ -666,7 +666,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         mgr.update_from_actions_list(edits)
 
         self.assertEqual((mgr.path_snapshot / "1-foo" / "foo_file.txt").read_text(), "saved copy 1")
-        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "snapshot.json"})
+        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "snapshot.json", ".snapshot.json.previous"})
         self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).directories, new.directories)
 
     def test_reordering_same_name_directories_preserves_each_copy(self):
@@ -682,7 +682,10 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
 
         for i, assoc in enumerate(new.directories):
             self.assertEqual((mgr.path_snapshot / assoc.directory_name / "foo_file.txt").read_text(), f"saved copy {i}")
-        self.assertEqual({p.name for p in mgr.path_snapshot.iterdir()}, {"1-foo", "2-foo", "3-foo", "snapshot.json"})
+        self.assertEqual(
+            {p.name for p in mgr.path_snapshot.iterdir()},
+            {"1-foo", "2-foo", "3-foo", "snapshot.json", ".snapshot.json.previous"},
+        )
 
     def test_duplicate_final_names_rejected_before_modifying_snapshot(self):
         snap = self._create_same_name_snapshot()

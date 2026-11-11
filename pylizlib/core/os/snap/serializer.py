@@ -10,8 +10,11 @@ from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 class SnapshotSerializer:
     """Compatible JSON facade preserving class hooks and protected metadata I/O.
 
-    The codec owns conversion, MetadataFile owns descriptor safety, and this
-    facade keeps hook resolution and file access in their original order."""
+    The codec owns conversion, MetadataFile owns descriptor safety and atomic
+    publication, and this facade keeps hook resolution and file access in their
+    original order. A successful atomic replace does not certify remote-server
+    stable-media persistence.
+    """
 
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:
