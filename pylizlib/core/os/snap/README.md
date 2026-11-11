@@ -33,6 +33,14 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Confronto delle associazioni e ordinamento | `diff.py`, `sorting.py` |
 | Generazione di esempi casuali | `factories.py` |
 
+Le scritture dei metadati preparano un file temporaneo nella stessa directory,
+sincronizzano i suoi contenuti, conservano i byte precedenti in un sidecar
+`.previous` e pubblicano con `os.replace`. Se il flush finale della directory
+fallisce dopo la rinomina, `MetadataDurabilityError.published` distingue il
+JSON già visibile da una scrittura non pubblicata. Su SMB/NFS un `fsync`
+completato è comunque soltanto la conferma del sistema/server: la libreria non
+può attestare che il server abbia persistito i byte su supporto stabile.
+
 `utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
 implementazioni interne usano direttamente i moduli responsabili, evitando di
 passare dall'esportazione aggregata di `snap.__init__`.
@@ -93,7 +101,9 @@ propri test: non va inserita in uno spostamento di codice.
 - Il diff usa `folder_id` come identità stabile e conserva l'ordine di aggiunte,
   rimozioni e rinomine. Le azioni legacy vengono risolte prima delle modifiche.
 - Il JSON conserva UTF-8, indentazione, date ISO e fallback legacy. Gli
-  aggiornamenti parziali preservano campi extra senza costruire un modello.
+  aggiornamenti parziali preservano campi extra senza costruire un modello;
+  tutte le scritture predefinite sono pubblicate atomicamente e conservano la
+  versione precedente nel sidecar `.previous`.
 - Il serializer risolve i propri hook nell'ordine storico: leggere/validare,
   preparare i dati, selezionare il converter, codificare, risolvere il writer.
 - I controlli sui link prima e dopo I/O non sono duplicazioni da eliminare.

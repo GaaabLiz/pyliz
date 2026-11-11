@@ -12,9 +12,12 @@ from pylizlib.core.os.snap.storage.paths import get_snapshot_child_path, validat
 class SnapshotMetadata(Protocol):
     """Persistence operations needed by snapshot publication and recovery.
 
-    The default adapter is SnapshotSerializer itself. Raw-byte access is part
-    of this contract because an edit rollback restores the original JSON bytes
-    rather than regenerating potentially different metadata from a model.
+    The default adapter is SnapshotSerializer itself, whose writes use atomic
+    same-directory publication and a previous-version sidecar. Alternate
+    adapters are responsible for equivalent write safety. A successful rename
+    still cannot prove remote-server stable-media persistence. Raw-byte access
+    is part of this contract because an edit rollback restores the original
+    JSON bytes rather than regenerating potentially different metadata.
     """
 
     def to_json(self, snapshot: Snapshot, path: Path) -> None:
