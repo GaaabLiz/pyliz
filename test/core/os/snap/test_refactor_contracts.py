@@ -250,3 +250,31 @@ def test_installer_stages_all_targets_before_modifying_live_copies(tmp_path):
     assert (second / "value.txt").read_text() == "second-live"
     assert snapshot.date_last_used is None
     assert list(tmp_path.glob("*_staging_*")) == []
+
+
+def test_sync_failure_restores_copies_and_memory_without_rewriting_metadata_bytes(tmp_path):
+    """Sync preserves its existing recovery boundary, distinct from edit rollback."""
+    from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
+
+    source, snapshot, manager = stored_snapshot(tmp_path)
+    association = snapshot.directories[0]
+    old_manifest = association.integrity_manifest
+    old_size = association.mb_size
+    old_date = snapshot.date_last_modified
+    (source / "value.txt").write_text("new live contents with a different size")
+
+    def fail_save(_snapshot, path):
+        """Interrupt a sync metadata write after the model has been updated."""
+        path.write_bytes(b"partial sync metadata")
+        raise OSError("sync metadata failed")
+
+    with patch.object(SnapshotSerializer, "to_json", side_effect=fail_save):
+        with pytest.raises(OSError, match="sync metadata failed"):
+            SnapshotSynchronizer(manager._storage()).update_associated_dirs_from_system()
+    stored = manager.path_snapshot / association.directory_name / "value.txt"
+    assert stored.read_text() == "stored"
+    assert association.integrity_manifest is old_manifest
+    assert association.mb_size == old_size
+    assert snapshot.date_last_modified == old_date
+    assert manager.path_snapshot_json.read_bytes() == b"partial sync metadata"
+    assert list(manager.path_snapshot.glob("*_bck_*")) == []

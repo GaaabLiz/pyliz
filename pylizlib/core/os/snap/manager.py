@@ -32,10 +32,10 @@ from pylizlib.core.os.snap.domain import (
 )
 from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 from pylizlib.core.os.snap.operations.install import SnapshotInstaller
+from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.utils import SnapshotUtils
-from pylizlib.core.os.utils import get_folder_size_mb
 
 
 class SnapshotManager:
@@ -262,92 +262,7 @@ class SnapshotManager:
         Updates the snapshot's internal copy of each associated directory
         with the current version from the original system path.
         """
-        self.snapshot.validate()
-        self._snapshot_root_path()
-        # 1 & 2. Validate all sources before deleting anything
-        for dir_assoc in self.snapshot.directories:
-            system_path = Path(dir_assoc.original_path)
-            if not system_path.exists() or not system_path.is_dir():
-                raise FileNotFoundError(f"Original path '{system_path}' for snapshot '{self.snapshot.id}' does not exist or is not a directory. Update aborted.")
-
-        rollbacks = []
-        updated_manifests = {}
-        original_metadata = {assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.snapshot.directories}
-        original_date_last_modified = self.snapshot.date_last_modified
-        try:
-            for dir_assoc in self.snapshot.directories:
-                system_path = Path(dir_assoc.original_path)
-                snapshot_copy_path = self._snapshot_child_path(dir_assoc.directory_name)
-
-                # 4. Copy each source to staging
-                staging_dir = self._snapshot_child_path(f"{dir_assoc.directory_name}_staging_{gen_random_string(6)}")
-                backup_dir = self._snapshot_child_path(f"{dir_assoc.directory_name}_bck_{gen_random_string(6)}")
-
-                logger.info(f"Copying '{system_path}' to staging '{staging_dir}'")
-
-                try:
-                    updated_manifests[dir_assoc.folder_id] = {}
-                    self.settings.copy_strategy.copy_directory(
-                        system_path,
-                        staging_dir,
-                        message_callback=message_callback,
-                        manifest=updated_manifests[dir_assoc.folder_id],
-                    )
-                except Exception as e:
-                    if staging_dir.exists():
-                        shutil.rmtree(staging_dir)
-                    raise RuntimeError(f"Failed to copy system path '{system_path}' to staging '{staging_dir}': {e}") from e
-
-                rollbacks.append(
-                    {
-                        "snapshot_copy_path": snapshot_copy_path,
-                        "staging_dir": staging_dir,
-                        "backup_dir": backup_dir,
-                        "dir_assoc": dir_assoc,
-                        "system_path": system_path,
-                    }
-                )
-
-            # Replace internal copy only at the end
-            for rb in rollbacks:
-                snap_path = rb["snapshot_copy_path"]
-                staging_dir = rb["staging_dir"]
-                backup_dir = rb["backup_dir"]
-
-                if snap_path.exists():
-                    snap_path.rename(backup_dir)
-
-                staging_dir.rename(snap_path)
-
-            # Update metadata while backups are still intact.
-            for rb in rollbacks:
-                dir_assoc = rb["dir_assoc"]
-                dir_assoc.mb_size = get_folder_size_mb(rb["system_path"])
-                dir_assoc.integrity_manifest = updated_manifests[dir_assoc.folder_id]
-
-            self.snapshot.date_last_modified = datetime.now()
-            self.__save_json()
-
-        except Exception as e:
-            logger.error(f"Update from system failed during transaction. Rolling back. Reason: {e}")
-            for rb in rollbacks:
-                snap_path = rb["snapshot_copy_path"]
-                staging_dir = rb["staging_dir"]
-                backup_dir = rb["backup_dir"]
-
-                if staging_dir.exists():
-                    shutil.rmtree(staging_dir)
-
-                if backup_dir.exists():
-                    if snap_path.exists():
-                        shutil.rmtree(snap_path)
-                    backup_dir.rename(snap_path)
-            for assoc in self.snapshot.directories:
-                assoc.integrity_manifest, assoc.mb_size = original_metadata[assoc.folder_id]
-            self.snapshot.date_last_modified = original_date_last_modified
-            raise
-
-        SnapshotUtils.cleanup_after_commit((rb["backup_dir"] for rb in rollbacks), "Update from system")
+        SnapshotSynchronizer(self._storage()).update_associated_dirs_from_system(message_callback=message_callback)
 
     def remove_installed_copies(self, message_callback=None):
         """
