@@ -10,6 +10,16 @@ from pylizlib.core.log.pylizLogger import logger
 
 def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback=None) -> Path:
     """Publish an archive only after complete enumeration and CRC verification."""
+    return _write_verified_zip(zip_path, files, message_callback, replace_existing=True)
+
+
+def _write_verified_zip_exclusive(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback=None) -> Path:
+    """Publish a verified archive atomically without replacing an existing path."""
+    return _write_verified_zip(zip_path, files, message_callback, replace_existing=False)
+
+
+def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback, *, replace_existing: bool) -> Path:
+    """Write a verified ZIP to a sibling temporary file before publication."""
     temporary_path = None
     try:
         zip_path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +41,13 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
             corrupted_member = archive.testzip()
             if corrupted_member is not None:
                 raise zipfile.BadZipFile(f"Backup validation failed for '{corrupted_member}'.")
-        temporary_path.replace(zip_path)
+        if replace_existing:
+            temporary_path.replace(zip_path)
+        else:
+            # A same-filesystem hard link is atomic and fails with EEXIST if a
+            # concurrent writer already published this name. Unlike replace(),
+            # it cannot truncate a completed backup.
+            zip_path.hardlink_to(temporary_path)
         return zip_path
     finally:
         if temporary_path is not None:
