@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot, validate_directory_component
+from pylizlib.core.os.snap.storage.original_paths import is_absolute_original_path
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
@@ -315,6 +316,12 @@ class SnapshotJsonCodec:
             associations = []
             for directory_data in data["directories"]:
                 association_data = dict(directory_data)
+                original_path = association_data.get("original_path")
+                if not is_absolute_original_path(original_path):
+                    raise ValueError(
+                        "Snapshot JSON association original_path must be absolute; "
+                        "relative paths cannot be resolved safely."
+                    )
                 has_storage_name = "storage_name" in association_data
                 storage_name = association_data.pop("storage_name", None)
                 association = SnapDirAssociation(**association_data)
