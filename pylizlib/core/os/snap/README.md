@@ -60,15 +60,18 @@ La destinazione di un backup deve risolversi fuori dagli alberi che verranno
 archiviati. Questo evita di includere ZIP precedenti e viene controllato anche
 quando la destinazione usa un alias o un link simbolico.
 
-I nuovi backup AD includono `.pyliz_ad_manifest.json` con ID, indice, nome
-interno, percorso originario e sistema operativo di provenienza. Prima di
+I nuovi backup AD e SD includono `.pyliz_backup_manifest.json` con versione,
+tipo, ID e nome snapshot, data, prefisso, OS di provenienza e associazioni
+(ID, indice, nome interno e percorso originario). Il restore e
+`list_backups()` leggono questi dati dall'archivio; rinominare lo ZIP non cambia
+il tipo o l'identità. Prima di
 installare, ripristinare o rimuovere copie, la libreria verifica che le
 destinazioni non siano critiche, sovrapposte al catalogo o coincidenti/annidate
 fra loro. Se un percorso non può essere risolto, l'operazione viene rifiutata.
 I backup possono essere ripristinati anche dopo aver eliminato lo snapshot dal
-catalogo. I manifest di versione 1 e gli archivi precedenti senza manifest
-usano i metadati dello snapshot per controllare l'OS di provenienza; se non
-sono disponibili, il ripristino viene rifiutato. Per cambiare destinazione,
+catalogo. I vecchi manifest AD e gli archivi precedenti senza manifest
+mantengono il percorso di compatibilità con i metadati del catalogo o col nome
+legacy. Per cambiare destinazione,
 `SnapshotCatalogue.restore_backup_with_mapping(zip_path, {folder_id: path})`
 accetta una mappa dagli ID persistenti delle associazioni ai nuovi percorsi; le
 associazioni non indicate mantengono il percorso salvato nell'archivio.

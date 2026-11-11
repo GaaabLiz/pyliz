@@ -35,7 +35,8 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
-from pylizlib.core.os.snap.operations.archives import ASSOCIATED_DIRECTORIES_MANIFEST, SnapshotIncompleteError
+from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
+from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from test.core.os.snap.conftest import (
@@ -364,6 +365,7 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
         self.assertTrue(self.cat.exists(snap.id))
         imp = self.cat.get_by_id(snap.id)
         self.assertEqual(imp.name, snap.name)
+        self.assertFalse((CATALOGUE_PATH / snap.id / BACKUP_MANIFEST_NAME).exists())
 
     def test_import_snapshot_raises_on_duplicate_id(self):
         snap = make_snapshot("DupImpSnap", self._src, n=1)
@@ -693,13 +695,16 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         archive_path = mgr.create_backup(BACKUP_PATH, "manifest", BackupType.ASSOCIATED_DIRECTORIES)
 
         with zipfile.ZipFile(archive_path) as archive:
-            manifest = json.loads(archive.read(ASSOCIATED_DIRECTORIES_MANIFEST))
+            manifest = json.loads(archive.read(BACKUP_MANIFEST_NAME))
 
         association = snap.directories[0]
-        self.assertEqual(manifest["format"], "pyliz-associated-directories")
-        self.assertEqual(manifest["version"], 2)
+        self.assertEqual(manifest["format"], "pyliz-snapshot-backup")
+        self.assertEqual(manifest["version"], 1)
+        self.assertEqual(manifest["backup_type"], "associated_directories")
         self.assertEqual(manifest["snapshot_id"], snap.id)
         self.assertEqual(manifest["os_created"], snap.os_created)
+        self.assertEqual(manifest["prefix"], "manifest")
+        self.assertTrue(manifest["created_at"])
         self.assertEqual(
             manifest["associations"],
             [
@@ -746,10 +751,12 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
 
     def test_restore_backup_ad_is_self_contained_when_snapshot_missing(self):
         snap = make_snapshot("RestoreADMissing", self._src, n=1)
+        snap.id = "snap_123"
         self.cat.add(snap)
         mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
-        mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
-        backup_zip = sorted(BACKUP_PATH.glob("*_*_ad_*.zip"))[-1]
+        original_archive = mgr.create_backup(BACKUP_PATH, "preinstall", BackupType.ASSOCIATED_DIRECTORIES)
+        backup_zip = BACKUP_PATH / "renamed_snapshot_directory_sd.backup"
+        original_archive.rename(backup_zip)
         target_file = Path(snap.directories[0].original_path) / "br1_file.txt"
         original_content = target_file.read_text()
         shutil.rmtree(CATALOGUE_PATH / snap.id)
@@ -760,6 +767,32 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         self.assertEqual(target_file.read_text(), original_content)
         self.assertFalse((CATALOGUE_PATH / snap.id).exists())
         self.assertFalse((CATALOGUE_PATH / ".pyliz_transactions").exists())
+
+    def test_snapshot_backup_type_and_identity_survive_rename(self):
+        snap = make_snapshot("RestoreSDRenamed", self._src, n=1)
+        snap.id = "snapshot_123"
+        self.cat.add(snap)
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        original_archive = mgr.create_backup(BACKUP_PATH, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
+        with zipfile.ZipFile(original_archive) as archive:
+            manifest = json.loads(archive.read(BACKUP_MANIFEST_NAME))
+        self.assertEqual(manifest["version"], 1)
+        self.assertEqual(manifest["backup_type"], "snapshot_directory")
+        self.assertEqual(manifest["snapshot_id"], "snapshot_123")
+        self.assertEqual(manifest["associations"][0]["folder_id"], snap.directories[0].folder_id)
+        renamed_archive = BACKUP_PATH / "renamed_associated_directories_ad.backup"
+        original_archive.rename(renamed_archive)
+        shutil.rmtree(CATALOGUE_PATH / snap.id)
+
+        listed = next(info for info in self.cat.list_backups(BACKUP_PATH) if info.file_name == renamed_archive.name)
+        self.assertEqual(listed.snapshot_id, "snapshot_123")
+        self.assertEqual(listed.backup_type, BackupType.SNAPSHOT_DIRECTORY)
+
+        self.cat.restore_backup(renamed_archive)
+
+        restored = self.cat.get_by_id("snapshot_123")
+        self.assertIsNotNone(restored)
+        self.assertFalse((CATALOGUE_PATH / snap.id / BACKUP_MANIFEST_NAME).exists())
 
     def test_restore_backup_ad_can_remap_destinations_by_association_id(self):
         snap = make_snapshot("RestoreADMapped", self._src, n=1)

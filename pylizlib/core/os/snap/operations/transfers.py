@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Protocol
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.domain import Snapshot, SnapshotSettings
+from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotSettings
+from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path
@@ -115,6 +116,20 @@ class CatalogueTransferService:
                 snapshot_to_import = SnapshotSerializer.from_json(json_path)
             except Exception as e:
                 raise ValueError(f"Failed to read snapshot data from json: {e}")
+
+            backup_manifest_path = temp_dir_path / BACKUP_MANIFEST_NAME
+            if backup_manifest_path.is_file():
+                try:
+                    backup_manifest = parse_backup_manifest(json.loads(backup_manifest_path.read_text(encoding="utf-8")))
+                except Exception as error:
+                    raise ValueError(f"Snapshot export contains an invalid backup manifest: {error}") from error
+                if backup_manifest.backup_type != BackupType.SNAPSHOT_DIRECTORY or backup_manifest.snapshot_id != snapshot_to_import.id:
+                    raise ValueError("Snapshot export manifest does not match its snapshot JSON.")
+                manifest_associations = {(item.folder_id, item.index, item.directory_name) for item in backup_manifest.associations}
+                snapshot_associations = {(item.folder_id, item.index, item.directory_name) for item in snapshot_to_import.directories}
+                if manifest_associations != snapshot_associations:
+                    raise ValueError("Snapshot export associations do not match its snapshot JSON.")
+                backup_manifest_path.unlink()
 
             # Check for ID conflict
             if self.query.exists(snapshot_to_import.id):
