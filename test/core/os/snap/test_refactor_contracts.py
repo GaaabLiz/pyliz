@@ -765,8 +765,8 @@ def test_association_factory_keeps_public_generator_and_global_index(tmp_path):
         assert [a.original_path for a in associations] == [(choices / "only").as_posix()] * 2
 
 
-def test_create_and_install_keep_distinct_scan_behavior_without_observer(tmp_path):
-    """Create keeps its byte-scan adapter, while install passes no copy observer."""
+def test_create_and_install_do_not_scan_for_progress_without_observer(tmp_path):
+    """Neither operation estimates progress bytes when no observer requested it."""
     from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
 
     source = tmp_path / "source"
@@ -777,9 +777,9 @@ def test_create_and_install_keep_distinct_scan_behavior_without_observer(tmp_pat
     manager = SnapshotManager(snapshot, tmp_path / "catalogue", SnapshotSettings(copy_strategy=strategy))
     with patch.object(strategy, "_total_bytes", wraps=strategy._total_bytes) as scan:
         manager.create()
-        assert scan.call_count == 1
+        assert scan.call_count == 0
         manager.install()
-        assert scan.call_count == 1
+        assert scan.call_count == 0
 
 
 @pytest.mark.parametrize("callback_result,expected_count", [(False, 0), (0, 1), (None, 1)])

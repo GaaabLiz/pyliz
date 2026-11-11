@@ -1,8 +1,9 @@
 """Snapshot models, validation rules, enum values and shared configuration.
 
-Models remain mutable. Association construction still measures missing sizes,
-validation normalizes original paths, and compatibility helpers delegate copy
-and example generation to dedicated modules without changing their timing.
+Models remain mutable. Association construction does not scan the source tree;
+captured sizes come from the copied-content manifest. Validation normalizes
+original paths, and compatibility helpers delegate copy and example generation
+to dedicated modules.
 """
 
 import hashlib
@@ -14,11 +15,9 @@ from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
 
-from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, DirectoryCopyStrategy, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
-from pylizlib.core.os.snap.integrity import IntegrityManifest, validate_integrity_manifest
+from pylizlib.core.os.snap.integrity import IntegrityManifest, integrity_manifest_size_mb, validate_integrity_manifest
 from pylizlib.core.os.snap.storage.original_paths import normalize_original_path
-from pylizlib.core.os.utils import get_folder_size_mb
 
 
 def validate_directory_component(value: str, field_name: str = "directory name", allow_empty: bool = False) -> str:
@@ -52,21 +51,17 @@ class SnapDirAssociation:
     _current_index: ClassVar[int] = 0
 
     def __post_init__(self):
-        """Validate and normalize the association, measuring its size only when absent.
-
-        Size errors keep the existing zero-size fallback and logging behavior."""
+        """Validate and normalize without scanning the possibly remote source tree."""
         self._storage_name = None
         self._storage_id = None
         self._path_initialized = False
         self.validate()
-        if self.mb_size is None:
-            try:
-                self.mb_size = get_folder_size_mb(Path(self.original_path))
-            except FileNotFoundError:
-                self.mb_size = 0.0  # Handle missing directory
-            except Exception as e:  # Catch other potential errors from os.walk/getsize
-                logger.error(f"Error calculating size for {self.original_path}: {e}")
-                self.mb_size = 0.0
+
+    def record_captured_content(self, manifest: IntegrityManifest) -> None:
+        """Store the verified manifest and size of the content just captured."""
+        validate_integrity_manifest(manifest)
+        self.integrity_manifest = {path: dict(entry) for path, entry in manifest.items()}
+        self.mb_size = integrity_manifest_size_mb(self.integrity_manifest)
 
     def validate(self) -> None:
         """Validate the fields that define this association's stored path."""
@@ -91,6 +86,10 @@ class SnapDirAssociation:
             if self.mb_size < 0 or (type(self.mb_size) is float and not math.isfinite(self.mb_size)):
                 raise ValueError("Snapshot directory mb_size must be finite and non-negative.")
         validate_integrity_manifest(self.integrity_manifest)
+        if self.integrity_manifest is not None:
+            # The captured tree is authoritative; a copied source-size estimate
+            # from older metadata must not override the stored content size.
+            self.mb_size = integrity_manifest_size_mb(self.integrity_manifest)
 
     @classmethod
     def next_index(cls):
@@ -366,6 +365,8 @@ class Snapshot:
         date_last_modified: The timestamp when the snapshot's contents were last updated
                             from the source directories.
         data: A dictionary for storing custom, arbitrary key-value data.
+        capture_started_at: The UTC start time of the last complete content acquisition.
+        capture_completed_at: The UTC completion time of the last complete content acquisition.
     """
 
     id: str
@@ -380,6 +381,8 @@ class Snapshot:
     date_last_modified: datetime | None = None
     os_created: str = field(default_factory=platform.system)
     data: dict[str, str] = field(default_factory=dict)
+    capture_started_at: datetime | None = None
+    capture_completed_at: datetime | None = None
 
     def __post_init__(self):
         """Validate a new mutable snapshot and every contained association."""
@@ -399,6 +402,15 @@ class Snapshot:
             value = getattr(self, name)
             if value is not None and not isinstance(value, datetime):
                 raise TypeError(f"Snapshot {name} must be a datetime or None.")
+        for name in ("capture_started_at", "capture_completed_at"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, datetime):
+                raise TypeError(f"Snapshot {name} must be a timezone-aware datetime or None.")
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+                raise ValueError(f"Snapshot {name} must include an explicit timezone.")
+        if self.capture_started_at is not None and self.capture_completed_at is not None:
+            if self.capture_completed_at < self.capture_started_at:
+                raise ValueError("Snapshot capture_completed_at cannot precede capture_started_at.")
         if not isinstance(self.directories, list) or any(not isinstance(item, SnapDirAssociation) for item in self.directories):
             raise TypeError("Snapshot directories must be a list of SnapDirAssociation objects.")
         for association in self.directories:
@@ -539,6 +551,8 @@ class Snapshot:
             date_last_modified=self.date_last_modified,
             os_created=self.os_created,
             data=dict(self.data),
+            capture_started_at=self.capture_started_at,
+            capture_completed_at=self.capture_completed_at,
         )
 
     @staticmethod

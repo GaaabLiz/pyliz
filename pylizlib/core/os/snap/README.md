@@ -80,6 +80,27 @@ contesto non sono garantiti. Solo `False` interrompe la ricerca dello snapshot
 corrente; la callback viene richiamata anche durante la lettura, così può
 interrompere un file molto grande.
 
+## Dimensioni e tempi di acquisizione
+
+`SnapDirAssociation` non misura la sorgente nel costruttore o durante il
+caricamento del JSON. Se `mb_size` manca resta `None`, così un lookup non avvia
+scansioni potenzialmente lente su percorsi di rete. Dopo una copia riuscita,
+create, aggiunta, edit e sincronizzazione calcolano `mb_size` dal manifest della
+copia effettivamente acquisita. Una directory vuota acquisita ha dimensione
+zero; un valore legacy sconosciuto resta distinto da zero fino alla prossima
+acquisizione.
+
+Le callback di copia non superano il 100% e ricevono un aggiornamento terminale
+anche per alberi vuoti o quando la sorgente cambia dimensione durante la copia.
+Senza callback, create non esegue la scansione preliminare dei byte per stimare
+il progresso.
+
+`date_created` conserva il significato storico di creazione dell'oggetto
+metadata. `capture_started_at` e `capture_completed_at` registrano invece
+l'inizio e la fine dell'ultima acquisizione completa eseguita da create o sync,
+come timestamp UTC con offset esplicito (`+00:00`). Gli snapshot legacy hanno
+entrambi i campi a `None` finché non vengono acquisiti di nuovo.
+
 La destinazione di un backup deve risolversi fuori dagli alberi che verranno
 archiviati. Questo evita di includere ZIP precedenti e viene controllato anche
 quando la destinazione usa un alias o un link simbolico.
@@ -184,8 +205,9 @@ propri test: non va inserita in uno spostamento di codice.
 
 ## Altri vincoli di compatibilità
 
-- Le associazioni calcolano ancora `mb_size` nel costruttore quando manca;
-  `validate()` normalizza `original_path` in un percorso assoluto ancorato alla
+- Le associazioni mantengono `mb_size=None` finché il contenuto non è acquisito;
+  le misure salvate derivano dai manifest della copia. `validate()` normalizza
+  `original_path` in un percorso assoluto ancorato alla
   directory corrente al momento della costruzione e viene chiamato dalle
   proprietà che già lo facevano. La normalizzazione è lessicale e non segue i
   link simbolici. Il JSON rifiuta percorsi relativi; su Windows i drive di rete
@@ -205,8 +227,9 @@ propri test: non va inserita in uno spostamento di codice.
 - Il manifest persistito e il fingerprint interno della copia verificata
   restano rappresentazioni differenti. La verifica per tentativi non equivale
   a una sorgente congelata dal filesystem/provider.
-- La presenza di una callback può attivare la scansione dei byte nella copia.
-  Create mantiene l'adapter anche senza osservatore; install passa `None`.
+- Una callback attiva la stima dei byte e riceve il completamento dei percorsi
+  vuoti. Create passa `None` quando non c'è un osservatore, evitando la scansione
+  preliminare; install passa `None` allo stesso modo.
 - Nella ricerca soltanto `False` interrompe lo snapshot corrente; la callback
   viene chiamata prima di ciascun file e durante le letture a blocchi.
 - L'import del catalogo gestisce gli errori per voce e legge inizialmente solo

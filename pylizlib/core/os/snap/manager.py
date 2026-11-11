@@ -146,7 +146,6 @@ class SnapshotManager:
             copy_strategy=self.settings.copy_strategy,
             manifest=manifest,
         )
-        new_dir.integrity_manifest = manifest
         self.snapshot.directories.append(new_dir)
         self.__save_json()
 

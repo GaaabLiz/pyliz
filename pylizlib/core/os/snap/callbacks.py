@@ -13,13 +13,15 @@ SnapshotProgressCallback = Callable[[str, int, int], Optional[bool]]
 
 
 def report_directory_progress(callback: SnapshotPercentCallback | None, index: int, directory_count: int, copied_bytes: int, total_bytes: int) -> None:
-    """Report the existing equal-directory-weight progress rounded down to int.
+    """Report equal-directory-weight progress, clamped to its valid range.
 
-    Empty directories count as complete if the copy strategy notifies progress.
-    This function does not invent notifications, suppress observer exceptions or
-    alter when a strategy performs its preliminary total-byte scan.
+    A zero-byte directory counts as complete when the copy strategy emits its
+    terminal callback. A stale byte estimate cannot make the reported value
+    exceed 100 percent. Observer exceptions are allowed to propagate.
     """
-    if callback:
-        directory_fraction = (copied_bytes / total_bytes) if total_bytes > 0 else 1.0
-        overall_percentage = ((index + directory_fraction) / directory_count) * 100
-        callback(int(overall_percentage))
+    if not callback or directory_count <= 0:
+        return
+    directory_fraction = (copied_bytes / total_bytes) if total_bytes > 0 else 1.0
+    directory_fraction = min(1.0, max(0.0, directory_fraction))
+    overall_percentage = ((index + directory_fraction) / directory_count) * 100
+    callback(int(min(100.0, max(0.0, overall_percentage))))

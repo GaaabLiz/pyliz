@@ -61,39 +61,61 @@ class TestSnapDirAssociationConstruction(unittest.TestCase):
         assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="x")
         self.assertEqual(assoc.original_path, d.as_posix())
 
-    def test_mb_size_calculated_when_none(self):
+    def test_mb_size_remains_unknown_until_content_is_captured(self):
         d = SOURCE_DATA_PATH / "sizeddir"
         d.mkdir()
         (d / "bigfile.txt").write_text("x" * 10_000, encoding="utf-8")
         assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="sz")
-        self.assertIsNotNone(assoc.mb_size)
-        self.assertGreater(assoc.mb_size, 0.0)
+        self.assertIsNone(assoc.mb_size)
 
-    def test_mb_size_zero_when_directory_missing(self):
+    def test_missing_source_does_not_masquerade_as_a_zero_byte_capture(self):
         assoc = SnapDirAssociation(
             index=1,
             original_path=str(SOURCE_DATA_PATH / "ghost_dir"),
             folder_id="g",
         )
-        self.assertEqual(assoc.mb_size, 0.0)
+        self.assertIsNone(assoc.mb_size)
 
-    @patch("pylizlib.core.os.snap.domain.get_folder_size_mb")
-    def test_mb_size_file_not_found(self, mock_get_size):
-        mock_get_size.side_effect = FileNotFoundError()
-        assoc = SnapDirAssociation(index=1, original_path="/dummy", folder_id="g")
-        self.assertEqual(assoc.mb_size, 0.0)
-
-    @patch("pylizlib.core.os.snap.domain.get_folder_size_mb")
-    def test_mb_size_exception(self, mock_get_size):
-        mock_get_size.side_effect = Exception("General error")
-        assoc = SnapDirAssociation(index=1, original_path="/dummy", folder_id="g")
-        self.assertEqual(assoc.mb_size, 0.0)
+    def test_association_construction_does_not_walk_a_remote_source(self):
+        with patch("os.walk", side_effect=AssertionError("source tree was scanned")) as walk:
+            assoc = SnapDirAssociation(index=1, original_path="/remote/share/data", folder_id="remote")
+        walk.assert_not_called()
+        self.assertIsNone(assoc.mb_size)
 
     def test_mb_size_preserved_when_explicitly_provided(self):
         d = SOURCE_DATA_PATH / "preserved"
         d.mkdir()
         assoc = SnapDirAssociation(index=1, original_path=str(d), folder_id="p", mb_size=42.0)
         self.assertEqual(assoc.mb_size, 42.0)
+
+    def test_manifest_size_overrides_a_stale_association_estimate(self):
+        assoc = SnapDirAssociation(
+            index=1,
+            original_path="/source",
+            folder_id="captured-size",
+            mb_size=42.0,
+            integrity_manifest={
+                ".": {"type": "directory", "size": 0, "sha256": None},
+                "value": {"type": "file", "size": 1_048_576, "sha256": "a" * 64},
+            },
+        )
+
+        self.assertEqual(assoc.mb_size, 1.0)
+
+    def test_capture_interval_requires_timezone_and_ordered_timestamps(self):
+        from datetime import datetime, timezone
+
+        with self.assertRaisesRegex(ValueError, "explicit timezone"):
+            Snapshot("naive-capture", "naive", "", capture_started_at=datetime(2026, 1, 1))
+
+        with self.assertRaisesRegex(ValueError, "cannot precede"):
+            Snapshot(
+                "reversed-capture",
+                "reversed",
+                "",
+                capture_started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+                capture_completed_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+            )
 
     def test_next_index_increments(self):
         reset_index()

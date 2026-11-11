@@ -77,6 +77,58 @@ class TestSnapshotManagerCreate(unittest.TestCase):
             self.assertIsNotNone(assoc.integrity_manifest)
             self.assertIn(".", assoc.integrity_manifest)
 
+    def test_create_records_captured_size_and_utc_acquisition_interval(self):
+        snap = make_snapshot("CapturedMetadata", self._src, n=1)
+        created_at = snap.date_created
+        source_file = self._src[0] / "m1_file.txt"
+        source_file.write_bytes(b"changed after association construction")
+        progress = []
+        mgr = self._mgr(snap)
+
+        mgr.create(progress_callback=progress.append)
+
+        association = snap.directories[0]
+        expected_bytes = sum(
+            entry["size"] for entry in association.integrity_manifest.values() if entry["type"] == "file"
+        )
+        self.assertEqual(association.mb_size, expected_bytes / (1024 * 1024))
+        self.assertEqual(snap.date_created, created_at)
+        self.assertIsNotNone(snap.capture_started_at)
+        self.assertIsNotNone(snap.capture_completed_at)
+        self.assertEqual(snap.capture_started_at.utcoffset().total_seconds(), 0)
+        self.assertEqual(snap.capture_completed_at.utcoffset().total_seconds(), 0)
+        self.assertLessEqual(snap.capture_started_at, snap.capture_completed_at)
+        loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
+        self.assertEqual(loaded.capture_started_at, snap.capture_started_at)
+        self.assertEqual(loaded.capture_completed_at, snap.capture_completed_at)
+        self.assertEqual(loaded.directories[0].mb_size, association.mb_size)
+        self.assertEqual(progress[-1], 100)
+
+    def test_empty_association_reports_completion_and_zero_captured_size(self):
+        empty_source = SOURCE_DATA_PATH / "empty_capture"
+        empty_source.mkdir()
+        snap = Snapshot(
+            id="EmptyCapture",
+            name="Empty capture",
+            desc="",
+            directories=[SnapDirAssociation(index=1, original_path=str(empty_source), folder_id="empty")],
+        )
+        progress = []
+
+        self._mgr(snap).create(progress_callback=progress.append)
+
+        self.assertEqual(progress, [100])
+        self.assertEqual(snap.directories[0].mb_size, 0.0)
+
+    def test_create_without_progress_observer_does_not_pre_scan_source_bytes(self):
+        snap = make_snapshot("NoProgressScan", self._src, n=1)
+        mgr = self._mgr(snap)
+
+        with patch.object(SequentialFileCopyStrategy, "_total_bytes", side_effect=AssertionError("unneeded byte scan")):
+            mgr.create()
+
+        self.assertTrue(mgr.path_snapshot.is_dir())
+
     def test_create_rejects_linked_sources_before_publishing_a_snapshot(self):
         snap = make_snapshot("CreateWithSymlink", self._src, n=1)
         mgr = self._mgr(snap)
@@ -576,6 +628,15 @@ class TestSnapshotManagerUpdateAssocDirs(unittest.TestCase):
         loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
         self.assertIsNotNone(loaded.date_last_modified)
         self.assertIn("new_file.txt", loaded.directories[0].integrity_manifest)
+        expected_bytes = sum(
+            entry["size"] for entry in loaded.directories[0].integrity_manifest.values() if entry["type"] == "file"
+        )
+        self.assertEqual(loaded.directories[0].mb_size, expected_bytes / (1024 * 1024))
+        self.assertIsNotNone(loaded.capture_started_at)
+        self.assertIsNotNone(loaded.capture_completed_at)
+        self.assertEqual(loaded.capture_started_at.utcoffset().total_seconds(), 0)
+        self.assertEqual(loaded.capture_completed_at.utcoffset().total_seconds(), 0)
+        self.assertLessEqual(loaded.capture_started_at, loaded.capture_completed_at)
 
     def test_missing_source_aborts_update(self):
         snap = make_snapshot("AssocMissing", self._src, n=1)

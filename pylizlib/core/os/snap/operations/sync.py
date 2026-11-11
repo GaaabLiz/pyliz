@@ -2,7 +2,7 @@
 
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
@@ -12,7 +12,6 @@ from pylizlib.core.os.snap.integrity import IntegrityManifest
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, prepare_snapshot_metadata, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
-from pylizlib.core.os.utils import get_folder_size_mb
 
 
 @dataclass(frozen=True)
@@ -48,6 +47,7 @@ class SnapshotSynchronizer:
         updated_manifests = {}
         original_metadata = {assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.storage.snapshot.directories}
         original_date_last_modified = self.storage.snapshot.date_last_modified
+        original_capture_times = (self.storage.snapshot.capture_started_at, self.storage.snapshot.capture_completed_at)
         rollbacks = self._plan_replacements()
         journal = SnapshotTransactionJournal.begin(
             self.storage.path_snapshot,
@@ -67,6 +67,8 @@ class SnapshotSynchronizer:
             },
         )
         try:
+            self.storage.snapshot.capture_started_at = datetime.now(timezone.utc)
+            self.storage.snapshot.capture_completed_at = None
             self._stage_system_copies(rollbacks, updated_manifests, message_callback)
             self._update_model_metadata(rollbacks, updated_manifests)
             metadata = prepare_snapshot_metadata(self.storage, journal.workspace)
@@ -77,7 +79,7 @@ class SnapshotSynchronizer:
             logger.error(f"Update from system failed during transaction. Rolling back. Reason: {error}")
             try:
                 journal.decide_rollback(self.storage)
-                self._restore_model_metadata(original_metadata, original_date_last_modified)
+                self._restore_model_metadata(original_metadata, original_date_last_modified, original_capture_times)
             except Exception as rollback_error:
                 logger.error(f"Sync rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
                 raise RuntimeError(f"Sync rollback is incomplete; journal retained at '{journal.path}'.") from error
@@ -91,7 +93,7 @@ class SnapshotSynchronizer:
                 raise
             try:
                 journal.decide_rollback(self.storage)
-                self._restore_model_metadata(original_metadata, original_date_last_modified)
+                self._restore_model_metadata(original_metadata, original_date_last_modified, original_capture_times)
             except Exception as rollback_error:
                 logger.error(f"Sync rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
                 raise RuntimeError(f"Sync rollback is incomplete; journal retained at '{journal.path}'.") from error
@@ -163,13 +165,19 @@ class SnapshotSynchronizer:
         """Update in-memory manifests and sizes before staging the new JSON."""
         for rb in rollbacks:
             dir_assoc = rb.dir_assoc
-            dir_assoc.mb_size = get_folder_size_mb(rb.system_path)
-            dir_assoc.integrity_manifest = updated_manifests[dir_assoc.folder_id]
+            dir_assoc.record_captured_content(updated_manifests[dir_assoc.folder_id])
 
         self.storage.snapshot.date_last_modified = datetime.now()
+        self.storage.snapshot.capture_completed_at = datetime.now(timezone.utc)
 
-    def _restore_model_metadata(self, original_metadata: dict, original_date_last_modified: datetime | None) -> None:
+    def _restore_model_metadata(
+        self,
+        original_metadata: dict,
+        original_date_last_modified: datetime | None,
+        original_capture_times: tuple[datetime | None, datetime | None],
+    ) -> None:
         """Restore only in-memory size, manifest and timestamp fields."""
         for assoc in self.storage.snapshot.directories:
             assoc.integrity_manifest, assoc.mb_size = original_metadata[assoc.folder_id]
         self.storage.snapshot.date_last_modified = original_date_last_modified
+        self.storage.snapshot.capture_started_at, self.storage.snapshot.capture_completed_at = original_capture_times
