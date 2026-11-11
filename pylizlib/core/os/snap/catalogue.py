@@ -13,10 +13,6 @@ Classes:
     SnapshotCatalogue – High-level catalogue API.
 """
 
-import json
-import stat
-import tempfile
-import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -32,7 +28,8 @@ from pylizlib.core.os.snap.domain import (
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
-from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
+from pylizlib.core.os.snap.storage.catalogue import read_catalogue
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
 
@@ -114,7 +111,7 @@ class SnapshotCatalogue:
         Raises:
             FileExistsError: If the snapshot's ID is already present.
         """
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         snap_manager.create(progress_callback=progress_callback, message_callback=message_callback)
 
     def delete(self, snap: Snapshot, message_callback=None):
@@ -126,7 +123,7 @@ class SnapshotCatalogue:
         Args:
             snap: The Snapshot object to delete.
         """
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         if self.settings.bck_before_delete_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.delete(message_callback=message_callback)
@@ -141,20 +138,7 @@ class SnapshotCatalogue:
         Returns:
             A list of Snapshot objects found in the catalogue.
         """
-        self.path_catalogue.mkdir(parents=True, exist_ok=True)
-        snapshots: list[Snapshot] = []
-        for current_dir in self.path_catalogue.iterdir():
-            is_directory = stat.S_ISDIR(current_dir.stat().st_mode) if strict else current_dir.is_dir()
-            if is_directory:
-                try:
-                    snap = SnapshotUtils.get_snapshot_from_path(current_dir, self.settings.json_filename)
-                    if snap is not None:
-                        snapshots.append(snap)
-                except Exception as e:
-                    if strict and isinstance(e, OSError):
-                        raise
-                    logger.error(f"Failed to load snapshot from {current_dir}: {e}. Skipping corrupted entry.")
-        return snapshots
+        return read_catalogue(self.path_catalogue, self.settings, strict=strict)
 
     def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
         """
@@ -194,7 +178,7 @@ class SnapshotCatalogue:
             snap: The Snapshot object to update.
             edits: A list of SnapEditAction objects to apply.
         """
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         if self.settings.bck_before_modify_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_json_base_fields()
@@ -214,7 +198,7 @@ class SnapshotCatalogue:
         snap = self.get_by_id(snap_id)
         if snap is None:
             raise ValueError(f"No snapshot found with ID {snap_id}")
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         snap_manager.duplicate(message_callback=message_callback)
 
     def export_assoc_dirs(self, snap_id: str, destination_path: Path, message_callback=None):
@@ -225,11 +209,9 @@ class SnapshotCatalogue:
             snap_id: The ID of the snapshot to export.
             destination_path: The folder where the exported zip file will be saved.
         """
-        snap = self.get_by_id(snap_id)
-        if not snap:
-            raise ValueError(f"No snapshot found with ID {snap_id}")
+        snap = self._require_snapshot(snap_id)
 
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         # Use the existing create_backup method with a specific prefix for export
         snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES, is_export=True, message_callback=message_callback)
 
@@ -241,11 +223,9 @@ class SnapshotCatalogue:
             snap_id: The ID of the snapshot to export.
             destination_path: The folder where the exported zip file will be saved.
         """
-        snap = self.get_by_id(snap_id)
-        if not snap:
-            raise ValueError(f"No snapshot found with ID {snap_id}")
+        snap = self._require_snapshot(snap_id)
 
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         snap_manager.create_backup(destination_path, "export_snap", BackupType.SNAPSHOT_DIRECTORY, is_export=True, message_callback=message_callback)
 
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
@@ -256,21 +236,7 @@ class SnapshotCatalogue:
             destination_path: The folder where the exported zip file will be saved.
             file_name: The name for the output zip file.
         """
-        destination_path.mkdir(parents=True, exist_ok=True)
-        zip_path = destination_path.joinpath(file_name)
-
-        snapshots = self.get_all(strict=True)
-        if not snapshots:
-            logger.warning("Catalogue is empty. Nothing to export.")
-            return
-
-        def files_to_archive():
-            for snap in snapshots:
-                snap_dir = SnapshotUtils.get_snapshot_path(snap.id, self.path_catalogue)
-                for file_path in SnapshotUtils.iter_files_strict(snap_dir):
-                    yield file_path, file_path.relative_to(self.path_catalogue)
-
-        return SnapshotUtils.write_verified_zip(zip_path, files_to_archive())
+        return self._transfers().export_catalogue(destination_path, file_name)
 
     def import_catalogue(self, zip_path: Path):
         """
@@ -283,56 +249,7 @@ class SnapshotCatalogue:
             ValueError: If the provided path is not a valid .zip file.
             IOError: If the zip file fails to extract.
         """
-        if not zip_path.is_file() or zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_dir_path = Path(temp_dir)
-
-            # 1. Extract the zip to a temporary directory
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    zf.extractall(temp_dir_path)
-            except zipfile.BadZipFile:
-                raise ValueError(f"File '{zip_path}' is not a valid zip file.")
-            except Exception as e:
-                raise IOError(f"Failed to extract zip file '{zip_path}': {e}")
-
-            # 2. Iterate through extracted folders and import them
-            for potential_snap_dir in temp_dir_path.iterdir():
-                if not potential_snap_dir.is_dir():
-                    continue
-
-                json_path = potential_snap_dir / self.settings.json_filename
-                if not json_path.is_file():
-                    logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
-                    continue
-
-                try:
-                    # Read just the ID to avoid loading the whole object unnecessarily
-                    data = json.loads(SnapshotSerializer.read_text(json_path))
-                    snap_id = data.get("id")
-                    if not snap_id:
-                        logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
-                        continue
-
-                    # 3. Check for ID conflict
-                    if self.exists(snap_id):
-                        logger.info(f"Snapshot with ID '{snap_id}' already exists. Skipping import.")
-                        continue
-
-                    # 4. Copy the extracted folder to the catalogue
-                    SnapshotUtils.publish_snapshot_tree(
-                        potential_snap_dir,
-                        snap_id,
-                        self.path_catalogue,
-                        copy_strategy=self.settings.copy_strategy,
-                        operation="Catalogue import",
-                    )
-                    logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
-
-                except Exception as e:
-                    logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
+        self._transfers().import_catalogue(zip_path)
 
     def import_snapshot(self, zip_path: Path):
         """
@@ -347,54 +264,16 @@ class SnapshotCatalogue:
                         already exists.
             IOError: If the zip file fails to extract.
         """
-        if not zip_path.is_file() or zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_dir_path = Path(temp_dir)
-
-            # 1. Extract the zip to a temporary directory
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    zf.extractall(temp_dir_path)
-            except zipfile.BadZipFile:
-                raise ValueError(f"File '{zip_path}' is not a valid zip file.")
-            except Exception as e:
-                raise IOError(f"Failed to extract zip file '{zip_path}': {e}")
-
-            # 2. Validate the content and get snapshot
-            json_path = temp_dir_path / self.settings.json_filename
-            if not json_path.is_file():
-                raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
-
-            try:
-                snapshot_to_import = SnapshotSerializer.from_json(json_path)
-            except Exception as e:
-                raise ValueError(f"Failed to read snapshot data from json: {e}")
-
-            # 3. Check for ID conflict
-            if self.exists(snapshot_to_import.id):
-                raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
-
-            # 4. Copy the extracted folder to the catalogue
-            SnapshotUtils.publish_snapshot_tree(
-                temp_dir_path,
-                snapshot_to_import.id,
-                self.path_catalogue,
-                copy_strategy=self.settings.copy_strategy,
-                operation="Snapshot import",
-            )
+        self._transfers().import_snapshot(zip_path)
 
     def update_assoc_with_installed(self, snap_id: str, message_callback=None):
         """
         Updates the snapshot's internal copy of associated directories
         with the current state of those directories on the filesystem.
         """
-        snap = self.get_by_id(snap_id)
-        if not snap:
-            raise ValueError(f"No snapshot found with ID {snap_id}")
+        snap = self._require_snapshot(snap_id)
 
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         if self.settings.bck_before_modify_enabled:
             snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
         snap_manager.update_associated_dirs_from_system(message_callback=message_callback)
@@ -410,7 +289,7 @@ class SnapshotCatalogue:
         if not snap:
             logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
             return
-        snap_manager = SnapshotManager(snap, self.path_catalogue, self.settings)
+        snap_manager = self._manager(snap)
         snap_manager.remove_installed_copies(message_callback=message_callback)
 
     def install(self, snap: Snapshot, clear_destination: bool = True, progress_callback=None, message_callback=None):
@@ -430,7 +309,7 @@ class SnapshotCatalogue:
 
         # The caller may hold a model loaded before the snapshot was updated.
         # Installation must use the persisted manifest that matches on-disk data.
-        snap_manager = SnapshotManager(stored_snapshot, self.path_catalogue, self.settings)
+        snap_manager = self._manager(stored_snapshot)
         if self.settings.bck_before_install_enabled:
             snap_manager.create_backup(
                 self.settings.backup_path,
@@ -469,3 +348,18 @@ class SnapshotCatalogue:
     def _backups(self) -> CatalogueBackupService:
         """Build backup dependencies from the current path, settings and lookup."""
         return CatalogueBackupService(self.path_catalogue, self.settings, self, self._parse_backup_info)
+
+    def _transfers(self) -> CatalogueTransferService:
+        """Build transfer dependencies from the current catalogue path/settings."""
+        return CatalogueTransferService(self.path_catalogue, self.settings, self)
+
+    def _manager(self, snapshot: Snapshot) -> SnapshotManager:
+        """Construct a manager using current shared settings without copying them."""
+        return SnapshotManager(snapshot, self.path_catalogue, self.settings)
+
+    def _require_snapshot(self, snap_id: str) -> Snapshot:
+        """Resolve an ID for operations whose existing contract rejects absence."""
+        snapshot = self.get_by_id(snap_id)
+        if not snapshot:
+            raise ValueError(f"No snapshot found with ID {snap_id}")
+        return snapshot
