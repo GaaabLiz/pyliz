@@ -368,6 +368,71 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
             self.cat.import_snapshot(empty_zip)
         self.assertIn("snapshot json file", str(ctx.exception))
 
+    def test_import_snapshot_does_not_publish_staging_missing_an_association(self):
+        from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
+
+        class MetadataOnlyStrategy(DirectoryCopyStrategy):
+            """Return a copy that silently omitted an association directory."""
+
+            def copy_directory(self, source, destination, progress_callback=None, message_callback=None, *, manifest=None, expected_manifest=None):
+                """Copy only metadata to expose incomplete staging validation."""
+                destination.mkdir(parents=True)
+                shutil.copy2(Path(source) / "snapshot.json", Path(destination) / "snapshot.json")
+                return Path(destination)
+
+        snap = make_snapshot("IncompleteImport", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.export_snapshot(snap.id, self._export_dir)
+        archive = next(self._export_dir.glob("*.zip"))
+        self.cat.delete(snap)
+        self.cat.settings.copy_strategy = MetadataOnlyStrategy()
+
+        with self.assertRaisesRegex(FileNotFoundError, "association directory"):
+            self.cat.import_snapshot(archive)
+
+        destination = CATALOGUE_PATH / snap.id
+        self.assertFalse(destination.exists())
+        self.assertFalse(self.cat.exists(snap.id))
+
+        self.cat.settings.copy_strategy = SequentialFileCopyStrategy()
+        self.cat.import_snapshot(archive)
+        self.assertTrue(self.cat.exists(snap.id))
+        imported = self.cat.get_by_id(snap.id)
+        self.assertTrue((destination / imported.directories[0].directory_name / "ie1_file.txt").is_file())
+
+    def test_catalogue_import_failure_after_metadata_copy_leaves_no_conflicting_entry(self):
+        from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
+        from pylizlib.core.os.snap.serializer import SnapshotSerializer
+
+        class FailAfterMetadataStrategy(DirectoryCopyStrategy):
+            """Copy the visible metadata and fail before any payload is copied."""
+
+            def copy_directory(self, source, destination, progress_callback=None, message_callback=None, *, manifest=None, expected_manifest=None):
+                """Leave an incomplete staging tree, then simulate an I/O error."""
+                destination.mkdir(parents=True)
+                shutil.copy2(Path(source) / "snapshot.json", Path(destination) / "snapshot.json")
+                raise OSError("payload copy interrupted")
+
+        source = TEST_LOCAL_ROOT / "partial_catalogue_entry"
+        source.mkdir()
+        SnapshotSerializer.to_json(Snapshot("partial-import", "Partial import", ""), source / "snapshot.json")
+        (source / "important.bin").write_bytes(b"payload")
+        archive = self._export_dir / "partial_catalogue.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.write(source / "snapshot.json", "partial-import/snapshot.json")
+            output.write(source / "important.bin", "partial-import/important.bin")
+
+        self.cat.settings.copy_strategy = FailAfterMetadataStrategy()
+        self.cat.import_catalogue(archive)
+        destination = CATALOGUE_PATH / "partial-import"
+        self.assertFalse(destination.exists())
+        self.assertFalse(self.cat.exists("partial-import"))
+
+        self.cat.settings.copy_strategy = SequentialFileCopyStrategy()
+        self.cat.import_catalogue(archive)
+        self.assertTrue(self.cat.exists("partial-import"))
+        self.assertEqual((destination / "important.bin").read_bytes(), b"payload")
+
     def test_export_and_import_full_catalogue(self):
         for i in range(3):
             self.cat.add(make_snapshot(f"CatExp{i}", self._src, n=1))

@@ -10,7 +10,7 @@ from pylizlib.core.os.snap.domain import Snapshot, SnapshotSettings
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path
-from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.tree import iter_files_strict
 
 
@@ -120,11 +120,16 @@ class CatalogueTransferService:
             if self.query.exists(snapshot_to_import.id):
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
+            def validate_import(staged_path: Path) -> None:
+                """Check copied metadata and association directories before publication."""
+                validate_staged_snapshot_tree(staged_path, snapshot_to_import.id, self.settings.json_filename)
+
             # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 temp_dir_path,
                 snapshot_to_import.id,
                 self.path_catalogue,
+                prepare_staging=validate_import,
                 copy_strategy=self.settings.copy_strategy,
                 operation="Snapshot import",
             )
