@@ -281,6 +281,10 @@ class TestSnapshotUtilsSort(unittest.TestCase):
         snap_s = make_snapshot("Small", [src[0]], n=1)
         snap_m = make_snapshot("Medium", [src[1]], n=1)
         snap_l = make_snapshot("Large", [src[2]], n=1)
+        # Sorting consumes recorded snapshot sizes; it does not inspect the live sources.
+        snap_s.directories[0].mb_size = 100 / (1024 * 1024)
+        snap_m.directories[0].mb_size = 5_000 / (1024 * 1024)
+        snap_l.directories[0].mb_size = 100_000 / (1024 * 1024)
 
         sorted_asc = SnapshotUtils.sort_snapshots([snap_l, snap_m, snap_s], SnapshotSortKey.ASSOC_DIR_MB_SIZE)
         self.assertEqual([s.name for s in sorted_asc], ["Small", "Medium", "Large"])

@@ -257,8 +257,9 @@ class MetadataFile:
 class SnapshotJsonCodec:
     """Convert snapshot metadata in memory without choosing a file I/O policy.
 
-    Decoding retains legacy defaults and invokes the domain constructors, whose
-    size calculation and validation side effects remain part of compatibility.
+    Decoding retains legacy defaults and invokes the domain constructors. A
+    missing captured size remains unknown; loading metadata never scans source
+    paths, which may refer to remote storage.
     """
 
     @staticmethod
@@ -305,6 +306,8 @@ class SnapshotJsonCodec:
             "date_modified",
             "date_last_used",
             "date_last_modified",
+            "capture_started_at",
+            "capture_completed_at",
         ]:
             if key in data and data[key] is not None:
                 data[key] = datetime.fromisoformat(data[key])

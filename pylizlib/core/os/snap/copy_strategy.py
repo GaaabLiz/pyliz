@@ -92,6 +92,7 @@ class _FileCopySession:
         self.copied_bytes = 0
         self.progress_callback = progress_callback
         self.message_callback = message_callback
+        self.last_progress: tuple[int, int] | None = None
 
     def copy_file(self, src: str, dst: str, *, follow_symlinks: bool = True) -> str:
         """Copy and optionally hash exactly the bytes written, then report progress."""
@@ -114,8 +115,16 @@ class _FileCopySession:
             result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
         if self.progress_callback:
             self.copied_bytes += Path(dst).stat().st_size
-            self.progress_callback(self.copied_bytes, self.total_bytes)
+            total_bytes = max(self.total_bytes, self.copied_bytes)
+            self.progress_callback(self.copied_bytes, total_bytes)
+            self.last_progress = (self.copied_bytes, total_bytes)
         return result
+
+    def finish(self) -> None:
+        """Report the exact completed total, including when no files were copied."""
+        if self.progress_callback and self.last_progress != (self.copied_bytes, self.copied_bytes):
+            self.progress_callback(self.copied_bytes, self.copied_bytes)
+            self.last_progress = (self.copied_bytes, self.copied_bytes)
 
     def record_directories(self) -> None:
         """Record stored directories, including empty ones, after file copying."""
@@ -207,9 +216,11 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
                 validate_integrity_manifest(observed)
                 if expected_manifest is not None:
                     assert_manifest_matches(dict(expected_manifest), observed)
-                if manifest is not None:
-                    manifest.clear()
-                    manifest.update(observed)
+            session.finish()
+            if capture_integrity and manifest is not None:
+                assert observed is not None
+                manifest.clear()
+                manifest.update(observed)
         except Exception:
             _remove_tree(destination)
             raise

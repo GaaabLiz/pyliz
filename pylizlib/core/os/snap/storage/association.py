@@ -65,3 +65,6 @@ def copy_association(
         raise
     if destination.is_symlink() or destination.resolve(strict=False) != expected_destination or not destination.is_dir():
         raise ValueError(f"Snapshot directory '{destination}' changed during copy.")
+    captured_manifest = manifest if manifest is not None else expected_manifest
+    if captured_manifest is not None:
+        association.record_captured_content(captured_manifest)

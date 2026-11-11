@@ -157,7 +157,6 @@ class SnapshotEditor:
                     copy_strategy=self.storage.settings.copy_strategy,
                     manifest=manifest,
                 )
-                assoc.integrity_manifest = manifest
             metadata = prepare_snapshot_metadata(self.storage, staging_path)
             journal.update_payload(metadata=metadata)
 

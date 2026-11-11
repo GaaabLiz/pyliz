@@ -12,9 +12,10 @@ Covers:
 
 import json
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from unittest.mock import patch
 
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -59,6 +60,7 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         self.assertEqual(loaded.data, snap.data)
         self.assertEqual(len(loaded.directories), len(snap.directories))
         self.assertEqual(loaded.directories[0].integrity_manifest, snap.directories[0].integrity_manifest)
+        self.assertEqual(loaded.directories[0].mb_size, 3 / (1024 * 1024))
         self.assertEqual(loaded.directories[0].directory_name, snap.directories[0].directory_name)
         self.assertIsNotNone(loaded.date_modified)
 
@@ -94,6 +96,43 @@ class TestSnapshotSerializerRoundTrip(unittest.TestCase):
         self.assertIsNone(loaded.date_modified)
         self.assertIsNone(loaded.date_last_used)
         self.assertIsNone(loaded.date_last_modified)
+        self.assertIsNone(loaded.capture_started_at)
+        self.assertIsNone(loaded.capture_completed_at)
+
+    def test_capture_timestamps_round_trip_as_timezone_aware_values(self):
+        source = list(SOURCE_DATA_PATH.iterdir())
+        snapshot = make_snapshot("CaptureTimes", source, n=1)
+        snapshot.capture_started_at = datetime(2026, 11, 12, 10, 0, tzinfo=timezone.utc)
+        snapshot.capture_completed_at = datetime(2026, 11, 12, 10, 1, tzinfo=timezone.utc)
+        json_path = TEST_LOCAL_ROOT / "capture_times.json"
+
+        SnapshotSerializer.to_json(snapshot, json_path)
+        loaded = SnapshotSerializer.from_json(json_path)
+
+        self.assertEqual(loaded.capture_started_at, snapshot.capture_started_at)
+        self.assertEqual(loaded.capture_completed_at, snapshot.capture_completed_at)
+        raw = json.loads(json_path.read_text(encoding="utf-8"))
+        self.assertTrue(raw["capture_started_at"].endswith("+00:00"))
+
+    def test_legacy_missing_size_does_not_scan_original_path(self):
+        json_path = TEST_LOCAL_ROOT / "legacy_missing_size.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "id": "LegacyNoSize",
+                    "name": "Legacy without size",
+                    "desc": "",
+                    "directories": [{"index": 1, "original_path": "/remote/share/data", "folder_id": "remote"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("os.walk", side_effect=AssertionError("source tree was scanned")) as walk:
+            loaded = SnapshotSerializer.from_json(json_path)
+
+        walk.assert_not_called()
+        self.assertIsNone(loaded.directories[0].mb_size)
 
     def test_bug3_date_last_used_survives_round_trip(self):
         """BUG-3: date_last_used must be preserved across JSON serialisation."""

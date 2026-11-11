@@ -50,6 +50,13 @@ def validate_integrity_manifest(manifest: IntegrityManifest | None) -> None:
         raise ValueError("Snapshot integrity manifest must contain a root directory entry.")
 
 
+def integrity_manifest_size_mb(manifest: IntegrityManifest) -> float:
+    """Return the captured file-content size in MiB from a validated manifest."""
+    validate_integrity_manifest(manifest)
+    total_bytes = sum(entry["size"] for entry in manifest.values() if entry["type"] == "file")
+    return total_bytes / (1024 * 1024)
+
+
 def assert_manifest_matches(expected: IntegrityManifest, observed: IntegrityManifest) -> None:
     """Raise a useful error if expected and copied tree entries differ."""
     validate_integrity_manifest(expected)

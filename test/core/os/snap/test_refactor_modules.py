@@ -355,14 +355,52 @@ def test_catalogue_scanner_skips_validation_errors_in_both_modes(tmp_path, stric
             assert read_catalogue(tmp_path, SnapshotSettings()) == []
 
 
-@pytest.mark.parametrize("index,copied,total,expected", [(0, 1, 3, 16), (1, 0, 0, 100), (1, 1, 2, 75)])
+@pytest.mark.parametrize("index,copied,total,expected", [(0, 1, 3, 16), (1, 0, 0, 100), (1, 1, 2, 75), (0, 4, 2, 50)])
 def test_directory_progress_keeps_equal_weights_and_integer_truncation(index, copied, total, expected):
-    """Percent aggregation keeps existing rounding and zero-byte behavior."""
+    """Percent aggregation keeps equal weights and clamps stale size estimates."""
     from pylizlib.core.os.snap.callbacks import report_directory_progress
 
     percentages = []
     report_directory_progress(percentages.append, index, 2, copied, total)
     assert percentages == [expected]
+
+
+def test_empty_sequential_copy_reports_terminal_progress(tmp_path):
+    """An empty tree still notifies observers that copying has completed."""
+    from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+
+    source = tmp_path / "source"
+    source.mkdir()
+    progress = []
+
+    SequentialFileCopyStrategy().copy_directory(source, tmp_path / "copy", lambda copied, total: progress.append((copied, total)))
+
+    assert progress == [(0, 0)]
+
+
+def test_sequential_copy_progress_finishes_against_actual_captured_size(tmp_path):
+    """A stale larger pre-scan total cannot leave progress below completion."""
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.callbacks import report_directory_progress
+    from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "value").write_bytes(b"new")
+    byte_events = []
+    percentages = []
+
+    with patch.object(SequentialFileCopyStrategy, "_total_bytes", return_value=30):
+        SequentialFileCopyStrategy().copy_directory(
+            source,
+            tmp_path / "copy",
+            lambda copied, total: (byte_events.append((copied, total)), report_directory_progress(percentages.append, 0, 1, copied, total)),
+        )
+
+    assert byte_events == [(3, 30), (3, 3)]
+    assert percentages[-1] == 100
+    assert all(0 <= percentage <= 100 for percentage in percentages)
 
 
 def test_reused_sequential_strategy_keeps_copy_state_per_destination(tmp_path):
