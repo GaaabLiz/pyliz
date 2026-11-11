@@ -1,13 +1,18 @@
 """Unit tests for pluggable snapshot directory-copy strategies."""
 
+import os
 import shutil
+import stat
 import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from pylizlib.core.os.snap.copy_strategy import (
+    CopyMetadataMode,
     DirectoryCopyStrategy,
+    ExtendedMetadataCopyStrategy,
     ProviderSnapshotCopyStrategy,
     SequentialFileCopyStrategy,
     SourceChangedError,
@@ -129,6 +134,67 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
                     strategy.copy_directory(self.source, destination)
                 self.assertFalse(destination.exists())
 
+    def test_extended_metadata_strategy_preserves_root_attributes_and_internal_hardlinks(self):
+        payload = self.source / "a.txt"
+        hardlink = self.source / "b.txt"
+        hardlink.unlink()
+        try:
+            os.link(payload, hardlink)
+        except OSError as error:
+            self.skipTest(f"Hard links are unavailable: {error}")
+        self.source.chmod(0o710)
+        expected_mtime_ns = 1_650_000_000_000_000_000
+        os.utime(self.source, ns=(expected_mtime_ns, expected_mtime_ns))
+
+        settings = SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED)
+        self.assertIsInstance(settings.copy_strategy, ExtendedMetadataCopyStrategy)
+        destination = self.root / "extended-copy"
+        settings.copy_strategy.copy_directory(self.source, destination)
+
+        self.assertEqual(destination.stat().st_mtime_ns, expected_mtime_ns)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(destination.stat().st_mode), stat.S_IMODE(self.source.stat().st_mode))
+        self.assertTrue(os.path.samefile(destination / "a.txt", destination / "b.txt"))
+        self.assertFalse(os.path.samefile(self.source / "a.txt", destination / "a.txt"))
+
+    def test_extended_metadata_strategy_copies_available_extended_attributes(self):
+        if not all(hasattr(os, name) for name in ("setxattr", "getxattr")):
+            self.skipTest("Extended attributes are unavailable")
+        attribute_name = "user.pyliz_snapshot_test"
+        source_file = self.source / "a.txt"
+        try:
+            os.setxattr(source_file, attribute_name, b"metadata")
+        except OSError as error:
+            self.skipTest(f"Extended attributes are unavailable on this filesystem: {error}")
+
+        destination = self.root / "extended-xattr-copy"
+        SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED).copy_strategy.copy_directory(self.source, destination)
+
+        self.assertEqual(os.getxattr(destination / "a.txt", attribute_name), b"metadata")
+
+    def test_extended_attribute_copy_uses_platform_attribute_apis(self):
+        source = self.root / "xattr-source"
+        destination = self.root / "xattr-destination"
+        with (
+            patch("pylizlib.core.os.snap.copy_strategy.os.listxattr", return_value=["user.sample"], create=True),
+            patch("pylizlib.core.os.snap.copy_strategy.os.getxattr", return_value=b"value", create=True),
+            patch("pylizlib.core.os.snap.copy_strategy.os.setxattr", create=True) as set_xattr,
+        ):
+            ExtendedMetadataCopyStrategy._copy_extended_attributes(source, destination)
+
+        set_xattr.assert_called_once_with(destination, "user.sample", b"value", follow_symlinks=False)
+
+    def test_extended_metadata_failure_does_not_publish_a_partial_copy(self):
+        strategy = ExtendedMetadataCopyStrategy(SequentialFileCopyStrategy())
+        destination = self.root / "extended-failed-copy"
+
+        with patch("pylizlib.core.os.snap.copy_strategy.ExtendedMetadataCopyStrategy._preserve_metadata", side_effect=OSError("metadata denied")):
+            with self.assertRaisesRegex(OSError, "metadata denied"):
+                strategy.copy_directory(self.source, destination)
+
+        self.assertFalse(destination.exists())
+        self.assertFalse(list(self.root.glob(".extended_metadata_*")))
+
     def test_sequential_strategy_records_and_checks_a_content_manifest(self):
         (self.source / "empty").mkdir()
         manifest = {}
@@ -208,6 +274,28 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
         self.assertEqual((destination / "b.txt").read_text(), "old-b")
         self.assertEqual(manifest["a.txt"]["size"], 5)
 
+    def test_extended_metadata_uses_the_provider_snapshot_not_the_live_source(self):
+        expected_mtime_ns = 1_650_000_000_000_000_000
+
+        class MetadataSnapshotProvider(SourceSnapshotProvider):
+            @contextmanager
+            def create_snapshot(provider_self, source):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    frozen = Path(temporary_directory) / "frozen"
+                    shutil.copytree(source, frozen)
+                    frozen.chmod(0o711)
+                    os.utime(frozen, ns=(expected_mtime_ns, expected_mtime_ns))
+                    Path(source).chmod(0o755)
+                    os.utime(Path(source), ns=(expected_mtime_ns + 1_000_000_000, expected_mtime_ns + 1_000_000_000))
+                    yield frozen
+
+        provider_strategy = ProviderSnapshotCopyStrategy(MetadataSnapshotProvider())
+        settings = SnapshotSettings(copy_strategy=provider_strategy, copy_metadata_mode=CopyMetadataMode.EXTENDED)
+        destination = self.root / "provider-extended-copy"
+        settings.copy_strategy.copy_directory(self.source, destination)
+
+        self.assertEqual(destination.stat().st_mtime_ns, expected_mtime_ns)
+
     def test_snapshot_provider_strategy_rejects_a_symlinked_snapshot_root(self):
         link = self.root / "frozen-link"
         link.symlink_to(self.source, target_is_directory=True)
@@ -226,6 +314,7 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
     def test_snapshot_settings_defaults_to_sequential_and_accepts_a_strategy(self):
         settings = SnapshotSettings()
         self.assertIsInstance(settings.copy_strategy, SequentialFileCopyStrategy)
+        self.assertIs(settings.copy_metadata_mode, CopyMetadataMode.BASIC)
 
         strategy = VerifiedFileCopyStrategy(max_attempts=5)
         configured = SnapshotSettings(copy_strategy=strategy)

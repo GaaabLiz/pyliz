@@ -17,8 +17,14 @@ FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "public_api.json").re
 
 
 def test_original_exports_and_class_locations_are_preserved():
-    """Old exports remain stable while new documented errors can be added."""
-    assert snap.__all__ == [*FIXTURE["exports"], "SnapshotInstallMetadataError", "SnapshotIncompleteError"]
+    """Old exports remain stable while documented features extend the package API."""
+    assert snap.__all__ == [
+        *FIXTURE["exports"],
+        "SnapshotInstallMetadataError",
+        "SnapshotIncompleteError",
+        "CopyMetadataMode",
+        "ExtendedMetadataCopyStrategy",
+    ]
     for qualified_name in FIXTURE["classes"]:
         module_name, class_name = qualified_name.split(".")
         module = importlib.import_module(f"pylizlib.core.os.snap.{module_name}")

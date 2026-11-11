@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -238,7 +238,28 @@ class TestSnapshotSettings(unittest.TestCase):
         self.assertEqual(s.snap_id_length, 20)
         self.assertEqual(s.folder_id_length, 6)
         self.assertIsInstance(s.copy_strategy, SequentialFileCopyStrategy)
+        self.assertIs(s.copy_metadata_mode, CopyMetadataMode.BASIC)
         self.assertFalse(s.allow_unverified_legacy_snapshots)
+
+    def test_extended_metadata_setting_decorates_the_selected_copy_strategy(self):
+        settings = SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED)
+
+        self.assertIsInstance(settings.copy_strategy, ExtendedMetadataCopyStrategy)
+        self.assertIsInstance(settings.copy_strategy.delegate, SequentialFileCopyStrategy)
+
+    def test_metadata_mode_can_be_changed_after_settings_are_created(self):
+        settings = SnapshotSettings()
+        original_strategy = settings.copy_strategy
+
+        settings.copy_metadata_mode = CopyMetadataMode.EXTENDED
+        self.assertIsInstance(settings.copy_strategy, ExtendedMetadataCopyStrategy)
+        settings.copy_metadata_mode = CopyMetadataMode.BASIC
+
+        self.assertIs(settings.copy_strategy, original_strategy)
+
+    def test_copy_metadata_mode_must_be_an_enum_value(self):
+        with self.assertRaises(TypeError):
+            SnapshotSettings(copy_metadata_mode="extended")
 
     def test_legacy_integrity_override_must_be_a_boolean(self):
         with self.assertRaises(TypeError):

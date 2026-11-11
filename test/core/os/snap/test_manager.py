@@ -18,6 +18,7 @@ Covers every public method of SnapshotManager:
 import errno
 import os
 import shutil
+import stat
 import types
 import unittest
 import zipfile
@@ -27,7 +28,7 @@ from unittest.mock import MagicMock, patch
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
-from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -126,6 +127,18 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         mgr.create()
 
         self.assertEqual(strategy.sources, [Path(assoc.original_path) for assoc in snap.directories])
+
+    def test_create_uses_extended_metadata_mode_from_settings(self):
+        snap = make_snapshot("ExtendedMetadata", self._src, n=1)
+        source = Path(snap.directories[0].original_path)
+        source.chmod(0o710)
+        mgr = self._mgr(snap, SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED))
+
+        mgr.create()
+
+        stored_copy = mgr.path_snapshot / snap.directories[0].directory_name
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(stored_copy.stat().st_mode), stat.S_IMODE(source.stat().st_mode))
 
     def test_create_explicitly_replaces_existing_contents(self):
         snap = make_snapshot("MgrRecreate", self._src, n=1)
