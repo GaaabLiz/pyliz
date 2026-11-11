@@ -219,3 +219,34 @@ def test_storage_context_rejects_mutated_snapshot_identity_and_json_filename(tmp
     with pytest.raises(ValueError, match="JSON path changed"):
         manager._storage().save_json()
     assert not (manager.path_snapshot / "different.json").exists()
+
+
+def test_installer_stages_all_targets_before_modifying_live_copies(tmp_path):
+    """Failure on the second staged copy leaves both live directories untouched."""
+    from pylizlib.core.os.snap.operations.install import SnapshotInstaller
+
+    first, snapshot, manager = stored_snapshot(tmp_path)
+    second = tmp_path / "second-source"
+    second.mkdir()
+    (second / "value.txt").write_text("second-stored")
+    manager.install_directory(second)
+    (first / "value.txt").write_text("first-live")
+    (second / "value.txt").write_text("second-live")
+    strategy = manager.settings.copy_strategy
+    original_copy = strategy.copy_directory
+    calls = []
+
+    def fail_second(source, destination, *args, **kwargs):
+        """Copy the first staging normally, then simulate a second-copy failure."""
+        calls.append(source)
+        if len(calls) == 2:
+            raise OSError("second staging failed")
+        return original_copy(source, destination, *args, **kwargs)
+
+    with patch.object(strategy, "copy_directory", side_effect=fail_second):
+        with pytest.raises(RuntimeError, match="second staging failed"):
+            SnapshotInstaller(manager._storage()).install()
+    assert (first / "value.txt").read_text() == "first-live"
+    assert (second / "value.txt").read_text() == "second-live"
+    assert snapshot.date_last_used is None
+    assert list(tmp_path.glob("*_staging_*")) == []
