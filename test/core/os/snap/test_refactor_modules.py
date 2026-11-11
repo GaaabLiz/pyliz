@@ -183,6 +183,104 @@ def test_zip_enumerates_before_creating_partial_archive(tmp_path):
         assert archive.read("value") == b"payload"
 
 
+def test_zip_writer_clamps_pre_1980_file_timestamps(tmp_path):
+    """The ZIP writer accepts old filesystem dates and clamps them to the format epoch."""
+    import os
+    import zipfile
+    from pathlib import Path
+
+    from pylizlib.core.os.snap.storage.archives import write_verified_zip
+
+    source = tmp_path / "old"
+    source.write_text("old data")
+    os.utime(source, (0, 0))
+    archive_path = write_verified_zip(tmp_path / "old.zip", [(source, Path("old"))])
+
+    with zipfile.ZipFile(archive_path) as archive:
+        assert archive.getinfo("old").date_time == (1980, 1, 1, 0, 0, 0)
+
+
+@pytest.mark.parametrize(
+    "member_names,limits,error",
+    [
+        (["one", "two"], {"max_entries": 1}, "entries"),
+        (["large"], {"max_uncompressed_bytes": 3}, "configured limit"),
+    ],
+)
+def test_zip_preflight_rejects_entry_and_expanded_size_limits(tmp_path, member_names, limits, error):
+    """Resource caps reject an archive before writing any extracted member."""
+    import zipfile
+
+    from pylizlib.core.os.snap.storage.archives import extract_zip
+
+    archive_path = tmp_path / "bounded.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for name in member_names:
+            archive.writestr(name, "payload")
+    destination = tmp_path / "extracted"
+
+    with pytest.raises(ValueError, match=error):
+        extract_zip(archive_path, destination, **limits)
+
+    assert not destination.exists() or not list(destination.iterdir())
+
+
+def test_zip_preflight_checks_required_free_space_before_extraction(tmp_path):
+    """The extraction volume must have room for the temp tree and publish copy."""
+    import zipfile
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.storage.archives import extract_zip
+
+    archive_path = tmp_path / "space.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("value", "payload")
+    destination = tmp_path / "extracted"
+
+    with patch("pylizlib.core.os.snap.storage.archives.shutil.disk_usage", return_value=SimpleNamespace(free=10)):
+        with pytest.raises(OSError, match="requires 14 bytes.*only 10 bytes"):
+            extract_zip(archive_path, destination, additional_space_paths=[tmp_path])
+
+    assert not destination.exists() or not list(destination.iterdir())
+
+
+def test_zip_preflight_checks_additional_publish_space_before_extraction(tmp_path):
+    """Publish-space requirements are checked before any archive member is written."""
+    import zipfile
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from pylizlib.core.os.snap.storage.archives import extract_zip
+
+    archive_path = tmp_path / "publish-space.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("value", "payload")
+    destination = tmp_path / "extracted"
+    destination.mkdir()
+
+    with patch("pylizlib.core.os.snap.storage.archives.shutil.disk_usage", return_value=SimpleNamespace(free=20)):
+        with pytest.raises(OSError, match="requires 107 bytes.*only 20 bytes"):
+            extract_zip(archive_path, destination, additional_space_requirements=[(tmp_path, 100)])
+
+    assert not list(destination.iterdir())
+
+
+def test_zip_preflight_rejects_traversal_before_extraction(tmp_path):
+    """A member path cannot escape the chosen extraction root."""
+    import zipfile
+
+    from pylizlib.core.os.snap.storage.archives import extract_zip
+
+    archive_path = tmp_path / "traversal.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("../outside.txt", "unsafe")
+
+    with pytest.raises(ValueError, match="escapes its extraction directory"):
+        extract_zip(archive_path, tmp_path / "extracted")
+    assert not (tmp_path / "outside.txt").exists()
+
+
 def test_zip_tree_entries_preserve_empty_directories(tmp_path):
     """Explicit directory entries survive ZIP extraction even with no files."""
     import zipfile

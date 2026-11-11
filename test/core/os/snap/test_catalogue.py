@@ -164,7 +164,7 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
 
         published = Snapshot(id="abc", name="Published", desc="")
         self.cat.add(published)
-        for directory_name in ("_staging_create_abc_test", "abc_bck_test", "wrong-name"):
+        for directory_name in ("_staging_create_abc_test", ".archive_staging_test", "abc_bck_test", "wrong-name"):
             operational_or_mismatched = CATALOGUE_PATH / directory_name
             operational_or_mismatched.mkdir()
             SnapshotSerializer.to_json(published, operational_or_mismatched / "snapshot.json")
@@ -383,6 +383,42 @@ class TestSnapshotCatalogueImportExport(unittest.TestCase):
         imp = self.cat.get_by_id(snap.id)
         self.assertEqual(imp.name, snap.name)
         self.assertFalse((CATALOGUE_PATH / snap.id / BACKUP_MANIFEST_NAME).exists())
+
+    def test_import_snapshot_uses_configured_staging_volume(self):
+        from unittest.mock import patch
+
+        from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+
+        snap = make_snapshot("ImportConfiguredTemp", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.export_snapshot(snap.id, self._export_dir)
+        archive = next(self._export_dir.glob("*.zip"))
+        self.cat.delete(snap)
+        configured_temp = TEST_LOCAL_ROOT / "archive_staging"
+        self.cat.settings.archive_temp_directory = configured_temp
+
+        with patch(
+            "pylizlib.core.os.snap.operations.transfers.publish_snapshot_tree",
+            wraps=publish_snapshot_tree,
+        ) as publish:
+            self.cat.import_snapshot(archive)
+
+        extracted_root = publish.call_args.args[0]
+        self.assertEqual(extracted_root.parent, configured_temp)
+        self.assertTrue(self.cat.exists(snap.id))
+
+    def test_import_snapshot_enforces_configured_archive_entry_limit(self):
+        snap = make_snapshot("ImportEntryLimit", self._src, n=1)
+        self.cat.add(snap)
+        self.cat.export_snapshot(snap.id, self._export_dir)
+        archive = next(self._export_dir.glob("*.zip"))
+        self.cat.delete(snap)
+        self.cat.settings.max_archive_entries = 0
+
+        with self.assertRaisesRegex(ValueError, "configured limit is 0"):
+            self.cat.import_snapshot(archive)
+
+        self.assertFalse(self.cat.exists(snap.id))
 
     def test_import_snapshot_raises_on_duplicate_id(self):
         snap = make_snapshot("DupImpSnap", self._src, n=1)
@@ -731,6 +767,42 @@ class TestSnapshotCatalogueBackupAndRestore(unittest.TestCase):
         target_file.write_text("CORRUPTED")
         self.cat.restore_backup(backup_zip)
         self.assertEqual(target_file.read_text(), original_content)
+
+    def test_restore_uses_configured_archive_staging_volume(self):
+        from unittest.mock import patch
+
+        from pylizlib.core.os.snap.storage.archives import extract_zip
+
+        snap = make_snapshot("RestoreConfiguredTemp", self._src, n=1)
+        self.cat.add(snap)
+        manager = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        archive = manager.create_backup(BACKUP_PATH, "configured_temp", BackupType.ASSOCIATED_DIRECTORIES)
+        configured_temp = TEST_LOCAL_ROOT / "restore_staging"
+        self.settings.archive_temp_directory = configured_temp
+
+        with patch("pylizlib.core.os.snap.operations.archives.extract_zip", wraps=extract_zip) as extract:
+            self.cat.restore_backup(archive)
+
+        extraction_root = extract.call_args.args[1]
+        self.assertEqual(extraction_root.parent, configured_temp)
+        self.assertTrue(extract.call_args.kwargs["additional_space_requirements"])
+
+    def test_associated_restore_defaults_staging_to_a_target_volume(self):
+        from unittest.mock import patch
+
+        from pylizlib.core.os.snap.storage.archives import extract_zip
+
+        snap = make_snapshot("RestoreTargetVolume", self._src, n=1)
+        self.cat.add(snap)
+        manager = SnapshotManager(snap, CATALOGUE_PATH, self.settings)
+        archive = manager.create_backup(BACKUP_PATH, "target_volume", BackupType.ASSOCIATED_DIRECTORIES)
+        destination = Path(snap.directories[0].original_path)
+
+        with patch("pylizlib.core.os.snap.operations.archives.extract_zip", wraps=extract_zip) as extract:
+            self.cat.restore_backup(archive)
+
+        extraction_root = extract.call_args.args[1]
+        self.assertEqual(extraction_root.parent, destination.parent)
 
     def test_associated_backup_contains_identity_path_and_index_manifest(self):
         snap = make_snapshot("RestoreADManifest", self._src, n=1)
