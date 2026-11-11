@@ -10,6 +10,7 @@ from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
+from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source
 
 
 class SnapshotLifecycle:
@@ -33,6 +34,8 @@ class SnapshotLifecycle:
         self.storage.snapshot.validate()
         validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
         self.storage.root_path()
+        for association in self.storage.snapshot.directories:
+            assert_destination_outside_source(association.original_path, self.storage.path_catalogue)
         self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
         recover_storage_transactions(self.storage)
         if not replace_existing and (self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()):

@@ -8,7 +8,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path, validate_snapshot_root
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
-from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
+from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks
 
 
 def cleanup_after_commit(paths: Iterable[Path], operation: str) -> None:
@@ -38,9 +38,10 @@ def publish_snapshot_tree(
     operation: str = "Snapshot copy",
 ) -> Path:
     """Copy to private staging, validate it, then publish with directory renames."""
+    catalogue_root = Path(catalogue_path).resolve(strict=False)
+    assert_destination_outside_source(source, catalogue_root)
     destination_path = get_snapshot_path(snapshot_id, catalogue_path)
     catalogue_path.mkdir(parents=True, exist_ok=True)
-    catalogue_root = catalogue_path.resolve(strict=False)
     recover_pending_transactions(catalogue_root)
     had_original = destination_path.exists() or destination_path.is_symlink()
     journal = SnapshotTransactionJournal.begin(catalogue_root, "snapshot_tree", {"snapshot_id": snapshot_id, "had_original": had_original})

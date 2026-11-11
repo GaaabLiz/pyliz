@@ -53,6 +53,53 @@ def test_public_exports_keep_original_class_identity():
     assert api.Snapshot is Snapshot
 
 
+@pytest.mark.parametrize("source_alias", [False, True])
+def test_create_rejects_catalogue_inside_source_before_creating_staging(tmp_path, source_alias):
+    """Catalogue staging cannot become part of an association source tree."""
+    source = tmp_path / "project"
+    source.mkdir()
+    important = source / "important.txt"
+    important.write_text("preserve")
+    source_path = source
+    if source_alias:
+        source_path = tmp_path / "project-alias"
+        try:
+            source_path.symlink_to(source, target_is_directory=True)
+        except (NotImplementedError, OSError) as error:
+            pytest.skip(f"symlink creation is unavailable: {error}")
+
+    catalogue = source / "snapshots"
+    snapshot = Snapshot(
+        f"nested-catalogue-{source_alias}",
+        "nested catalogue",
+        "",
+        directories=[SnapDirAssociation(1, str(source_path), "project")],
+    )
+    manager = SnapshotManager(snapshot, catalogue, SnapshotSettings())
+
+    with pytest.raises(ValueError, match="Copy destination .* is inside source directory"):
+        manager.create()
+
+    assert important.read_text() == "preserve"
+    assert not catalogue.exists()
+
+
+def test_snapshot_tree_publication_rejects_catalogue_inside_source(tmp_path):
+    """Whole-tree publication rejects recursive catalogues before journaling."""
+    from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+
+    source = tmp_path / "project"
+    source.mkdir()
+    (source / "important.txt").write_text("preserve")
+    catalogue = source / "snapshots"
+
+    with pytest.raises(ValueError, match="Copy destination .* is inside source directory"):
+        publish_snapshot_tree(source, "copy", catalogue)
+
+    assert (source / "important.txt").read_text() == "preserve"
+    assert not catalogue.exists()
+
+
 def test_partial_metadata_update_preserves_unknown_fields(tmp_path):
     """Updating a field must not deserialize or discard extension fields."""
     _, _, manager = stored_snapshot(tmp_path)
