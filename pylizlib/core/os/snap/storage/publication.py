@@ -1,13 +1,13 @@
 """Publish stored snapshot trees and clean committed transaction leftovers."""
 
 import shutil
-import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.storage.paths import get_snapshot_path, validate_snapshot_root
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 
 
@@ -41,16 +41,16 @@ def publish_snapshot_tree(
     destination_path = get_snapshot_path(snapshot_id, catalogue_path)
     catalogue_path.mkdir(parents=True, exist_ok=True)
     catalogue_root = catalogue_path.resolve(strict=False)
-    transaction_path = Path(tempfile.mkdtemp(prefix="_staging_snapshot_", dir=catalogue_root))
+    recover_pending_transactions(catalogue_root)
+    had_original = destination_path.exists() or destination_path.is_symlink()
+    journal = SnapshotTransactionJournal.begin(catalogue_root, "snapshot_tree", {"snapshot_id": snapshot_id, "had_original": had_original})
+    transaction_path = journal.workspace
     staged_path = transaction_path / "snapshot"
     backup_path = transaction_path / "original"
     selected_strategy = copy_strategy or SequentialFileCopyStrategy()
     if not isinstance(selected_strategy, DirectoryCopyStrategy):
-        shutil.rmtree(transaction_path)
+        journal.cleanup()
         raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
-    original_moved = False
-    published = False
-    preserve_transaction = False
     try:
         # Copy symlink objects into staging instead of following them. The
         # scan rejects them before any copy can become visible in storage.
@@ -61,42 +61,35 @@ def publish_snapshot_tree(
             prepare_staging(staged_path)
 
         destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
-        if destination_path.exists() or destination_path.is_symlink():
+        currently_exists = destination_path.exists() or destination_path.is_symlink()
+        if currently_exists != had_original:
+            raise FileExistsError(f"Snapshot destination '{destination_path}' changed during publication.")
+        if currently_exists:
             if not replace_existing:
                 raise FileExistsError(f"Snapshot destination '{destination_path}' already exists.")
-            destination_path.rename(backup_path)
-            original_moved = True
+        journal.set_state("commit_decided")
+        if currently_exists:
+            rename_and_sync(destination_path, backup_path)
 
         # Revalidate after the old entry has moved. rename() publishes the
         # staged directory itself and never writes through a destination link.
         destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
         if destination_path.exists() or destination_path.is_symlink():
             raise FileExistsError(f"Snapshot destination '{destination_path}' was recreated during publication.")
-        staged_path.rename(destination_path)
-        published = True
-    except Exception:
-        if published:
-            if destination_path.is_symlink():
-                destination_path.unlink()
-            elif destination_path.exists():
-                shutil.rmtree(destination_path)
-        if original_moved and backup_path.exists():
-            current_destination = catalogue_root / snapshot_id
-            try:
-                if current_destination.is_symlink():
-                    current_destination.unlink()
-                if not current_destination.exists():
-                    backup_path.rename(current_destination)
-                else:
-                    preserve_transaction = True
-            except OSError:
-                preserve_transaction = True
-            if preserve_transaction:
-                logger.error(f"{operation} rollback could not restore '{backup_path}' to '{current_destination}'.")
+        rename_and_sync(staged_path, destination_path)
+        if not destination_path.is_dir():
+            raise FileNotFoundError(f"Published snapshot '{destination_path}' is not visible after its rename.")
+        journal.set_state("committed")
+    except Exception as error:
+        try:
+            journal.decide_rollback()
+        except Exception as rollback_error:
+            logger.error(f"{operation} rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+            error.add_note(f"Persistent recovery journal retained at '{journal.path}'.")
         raise
-    finally:
-        if published:
-            cleanup_after_commit([transaction_path], operation)
-        elif transaction_path.exists() and not preserve_transaction:
-            shutil.rmtree(transaction_path)
+    journal.finalize([backup_path], operation)
+    try:
+        (catalogue_root / ".pyliz_transactions").rmdir()
+    except OSError:
+        pass
     return destination_path

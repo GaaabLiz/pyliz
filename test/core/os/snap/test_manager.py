@@ -192,9 +192,9 @@ class TestSnapshotManagerCreate(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 mgr.create(replace_existing=True)
 
-        transaction = next(CATALOGUE_PATH.glob(f"_staging_create_{snap.id}_*"))
+        transaction = next((CATALOGUE_PATH / ".pyliz_transactions").iterdir())
         original = transaction / "original"
-        prepared = transaction / "new"
+        prepared = transaction / "snapshot"
         self.assertEqual({p.relative_to(original): p.read_bytes() for p in original.rglob("*") if p.is_file()}, before)
         self.assertEqual((prepared / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
         self.assertEqual(SnapshotSerializer.from_json(prepared / "snapshot.json").id, snap.id)
@@ -208,7 +208,7 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         damaged_backups = []
 
         def fail_cleanup(path, *args, **kwargs):
-            backup = Path(path) / "original"
+            backup = Path(path)
             if backup.is_dir():
                 next(p for p in backup.rglob("*") if p.is_file()).unlink()
                 damaged_backups.append(backup)
@@ -224,6 +224,9 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
         self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "m1_file.txt").read_text(), "content of m1")
         self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).id, snap.id)
+        # The committed journal remains so a later catalogue scan can finish
+        # removing this now partially deleted old tree.
+        self.assertTrue((damaged_backups[0].parent / "journal.json").is_file())
 
 
 class TestSnapshotManagerDelete(unittest.TestCase):
@@ -297,8 +300,8 @@ class TestSnapshotManagerJsonUpdates(unittest.TestCase):
             mgr.create()
 
         # Ensure that no partial directory or staging directory is left behind
-        staging_dirs = list(mgr.path_catalogue.glob(f"_staging_create_{snap.id}_*"))
-        self.assertEqual(len(staging_dirs), 0)
+        transaction_dir = mgr.path_catalogue / ".pyliz_transactions"
+        self.assertFalse(transaction_dir.exists())
         self.assertFalse(mgr.path_snapshot.exists())
 
 

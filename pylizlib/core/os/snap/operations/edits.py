@@ -1,7 +1,5 @@
 """Plan and apply directory-association changes using stable folder IDs."""
 
-import shutil
-import tempfile
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -10,7 +8,13 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
-from pylizlib.core.os.snap.storage.publication import cleanup_after_commit
+from pylizlib.core.os.snap.storage.transactions import (
+    SnapshotTransactionJournal,
+    TransactionRecoveryError,
+    prepare_snapshot_metadata,
+    recover_storage_transactions,
+    rename_and_sync,
+)
 
 
 @dataclass(frozen=True)
@@ -118,7 +122,7 @@ class SnapshotEditPlanner:
 
 
 class SnapshotEditor:
-    """Stage and publish association edits with the existing byte-level rollback."""
+    """Stage and publish association edits with persistent crash recovery."""
 
     def __init__(self, storage: SnapshotStorage):
         """Bind one invocation's model, paths, copy strategy and metadata adapter."""
@@ -126,69 +130,84 @@ class SnapshotEditor:
 
     def apply(self, edits: list[SnapEditAction], message_callback=None) -> None:
         """Build a complete plan before staging or publishing any association."""
+        recover_storage_transactions(self.storage)
         plan = SnapshotEditPlanner(self.storage).build(edits)
         self._apply_plan(plan, message_callback)
 
     def _apply_plan(self, plan: EditPlan, message_callback=None) -> None:
-        """Keep originals until JSON save; restore moves and bytes on failure."""
-        staging_path = Path(tempfile.mkdtemp(prefix="_staging_update_", dir=self.storage.path_snapshot))
-        staged_originals = []
-        publications = []
-        published = []
-        saving_json = False
+        """Journal staged moves and the proposed JSON before final publication."""
+        moves = [
+            {"source": move.source.name, "target": move.target.name if move.target is not None else None, "staged": f"original_{index}"}
+            for index, move in enumerate(plan.moves)
+        ]
+        additions = [{"target": association.directory_name, "staged": f"addition_{index}"} for index, association in enumerate(plan.additions)]
+        journal = SnapshotTransactionJournal.begin(
+            self.storage.path_snapshot,
+            "edit",
+            {"phase": "staging", "moves": moves, "additions": additions},
+        )
+        staging_path = journal.workspace
         try:
-            for i, move in enumerate(plan.moves):
-                source, target = move.source, move.target
-                staged = staging_path / f"original_{i}"
-                source.rename(staged)
-                staged_originals.append((staged, source))
-                if target is not None:
-                    publications.append((staged, target))
-            for assoc in plan.additions:
+            for index, assoc in enumerate(plan.additions):
                 manifest = {}
                 assoc.copy_install_to(
-                    staging_path / "additions",
+                    staging_path / additions[index]["staged"],
                     message_callback=message_callback,
                     copy_strategy=self.storage.settings.copy_strategy,
                     manifest=manifest,
                 )
                 assoc.integrity_manifest = manifest
-                publications.append((staging_path / "additions" / assoc.directory_name, self.storage.child_path(assoc.directory_name)))
+            metadata = prepare_snapshot_metadata(self.storage, staging_path)
+            journal.update_payload(metadata=metadata)
 
+            for index, move in enumerate(plan.moves):
+                rename_and_sync(move.source, staging_path / f"original_{index}")
+
+            journal.update_payload(phase="publishing")
+            publications = [
+                (staging_path / move["staged"], self.storage.child_path(move["target"]))
+                for move in moves
+                if move["target"] is not None
+            ]
+            publications.extend(
+                (staging_path / addition["staged"], self.storage.child_path(addition["target"]))
+                for addition in additions
+            )
             for staged, target in publications:
-                if target.exists():
+                if target.exists() or target.is_symlink():
                     raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
-                staged.rename(target)
-                published.append((staged, target))
+                rename_and_sync(staged, target)
 
             for assoc in self.storage.snapshot.directories:
                 expected_path = self.storage.child_path(assoc.directory_name)
                 if not expected_path.is_dir():
                     raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
-            saving_json = True
-            self.storage.save_json()
+            journal.set_state("commit_decided")
         except Exception as error:
-            if saving_json and getattr(error, "published", False) is True:
-                if any(staged.exists() for staged, _source in staged_originals):
-                    logger.warning(
-                        "Snapshot edit metadata was published but its durability is uncertain; "
-                        f"staged removed directories were retained at '{staging_path}'."
-                    )
-                else:
-                    cleanup_after_commit([staging_path], "Snapshot update")
-                raise
-            for staged, target in reversed(published):
-                target.rename(staged)
-            for staged, source in reversed(staged_originals):
-                staged.rename(source)
-            if saving_json:
-                self.storage.metadata.write_bytes(self.storage.child_path(self.storage.settings.json_filename), plan.old_json)
-            self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
-            shutil.rmtree(staging_path)
+            try:
+                journal.decide_rollback(self.storage)
+                self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
+            except Exception as rollback_error:
+                logger.error(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+                raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
             raise
 
-        # Deletions only affect staged originals after the new state is committed.
-        cleanup_after_commit([staging_path], "Snapshot update")
+        try:
+            new_metadata = self.storage.metadata.read_bytes(staging_path / metadata["new"])
+            self.storage.metadata.write_bytes(self.storage.path_snapshot_json, new_metadata)
+        except Exception as error:
+            if getattr(error, "published", False) is True:
+                raise
+            try:
+                journal.decide_rollback(self.storage)
+                self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
+            except Exception as rollback_error:
+                logger.error(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+                raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
+            raise
+
+        journal.set_state("committed")
+        journal.finalize(operation="Snapshot update")
 
     @staticmethod
     def _restore_snapshot_model(snapshot: Snapshot, previous: Snapshot) -> None:

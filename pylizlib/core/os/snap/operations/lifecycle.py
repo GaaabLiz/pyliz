@@ -1,7 +1,5 @@
 """Lifecycle operations on complete stored snapshot trees."""
 
-import shutil
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -10,7 +8,8 @@ from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
-from pylizlib.core.os.snap.storage.publication import cleanup_after_commit, publish_snapshot_tree
+from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
 
 
 class SnapshotLifecycle:
@@ -34,14 +33,20 @@ class SnapshotLifecycle:
         self.storage.snapshot.validate()
         validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
         self.storage.root_path()
+        self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
+        recover_storage_transactions(self.storage)
         if not replace_existing and (self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()):
             raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
 
-        self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
-        transaction_path = Path(tempfile.mkdtemp(prefix=f"_staging_create_{self.storage.snapshot.id}_", dir=self.storage.path_catalogue))
-        staging_path = transaction_path / "new"
+        had_original = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
+        journal = SnapshotTransactionJournal.begin(
+            self.storage.path_catalogue,
+            "snapshot_tree",
+            {"snapshot_id": self.storage.snapshot.id, "had_original": had_original},
+        )
+        transaction_path = journal.workspace
+        staging_path = transaction_path / "snapshot"
         backup_path = transaction_path / "original"
-        original_moved = False
         previous_manifests = {assoc.folder_id: assoc.integrity_manifest for assoc in self.storage.snapshot.directories}
         try:
             staging_path.mkdir()
@@ -52,28 +57,35 @@ class SnapshotLifecycle:
             json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
             self.storage.metadata.to_json(self.storage.snapshot, json_path)
 
-            if self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink():
+            currently_exists = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
+            if currently_exists != had_original:
+                raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' changed during creation.")
+            if currently_exists:
                 if not replace_existing:
                     raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
-                self.storage.path_snapshot.rename(backup_path)
-                original_moved = True
-            staging_path.rename(self.storage.path_snapshot)
-        except Exception:
+            journal.set_state("commit_decided")
+            if currently_exists:
+                rename_and_sync(self.storage.path_snapshot, backup_path)
+            rename_and_sync(staging_path, self.storage.path_snapshot)
+            if not self.storage.path_snapshot.is_dir():
+                raise FileNotFoundError(f"Published snapshot '{self.storage.path_snapshot}' is not visible after its rename.")
+            journal.set_state("committed")
+        except Exception as error:
             for assoc in self.storage.snapshot.directories:
                 assoc.integrity_manifest = previous_manifests[assoc.folder_id]
-            if original_moved:
-                # If rollback itself fails, preserve both copies in the
-                # transaction directory instead of deleting recoverable data.
-                backup_path.rename(self.storage.path_snapshot)
-            shutil.rmtree(transaction_path, ignore_errors=True)
+            try:
+                journal.decide_rollback()
+            except Exception as rollback_error:
+                error.add_note(f"Persistent recovery journal retained at '{journal.path}': {rollback_error}")
             raise
 
-        cleanup_after_commit([transaction_path], "Snapshot creation")
+        journal.finalize([backup_path], "Snapshot creation")
 
     def delete(self, message_callback=None):
         """
         Deletes the snapshot's directory, propagating filesystem failures.
         """
+        recover_storage_transactions(self.storage)
         remove_directory_or_move_to_temp(self.storage.root_path(), message_callback=message_callback)
 
     def duplicate(self, message_callback=None):
@@ -84,6 +96,7 @@ class SnapshotLifecycle:
         Raises:
             FileNotFoundError: If the original snapshot path does not exist.
         """
+        recover_storage_transactions(self.storage)
         self.storage.root_path()
         if not self.storage.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.storage.path_snapshot} does not exist.")
