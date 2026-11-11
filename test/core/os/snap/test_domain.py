@@ -45,11 +45,15 @@ class TestSnapDirAssociationConstruction(unittest.TestCase):
     def tearDown(self):
         teardown_test_dirs()
 
-    def test_directory_name_format(self):
+    def test_directory_name_is_stable_and_independent_of_presentation_fields(self):
         d = SOURCE_DATA_PATH / "mydir"
         d.mkdir()
         assoc = SnapDirAssociation(index=5, original_path=str(d), folder_id="abc")
-        self.assertEqual(assoc.directory_name, "5-mydir")
+        stored_name = assoc.directory_name
+        assoc.index = 1
+        assoc.original_path = "/a/different-basename"
+        self.assertEqual(assoc.directory_name, stored_name)
+        self.assertNotEqual(SnapDirAssociation(index=1, original_path=str(d), folder_id="different-id").directory_name, stored_name)
 
     def test_original_path_normalised_to_posix(self):
         d = SOURCE_DATA_PATH / "normdir"

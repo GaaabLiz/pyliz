@@ -222,6 +222,7 @@ class SnapshotEditor:
             else:
                 for name in association_fields:
                     setattr(association, name, deepcopy(getattr(old_association, name)))
+                association._set_storage_name(old_association.directory_name)
             restored_directories.append(association)
 
         for model_field in fields(Snapshot):

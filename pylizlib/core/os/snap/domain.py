@@ -5,6 +5,7 @@ validation normalizes original paths, and compatibility helpers delegate copy
 and example generation to dedicated modules without changing their timing.
 """
 
+import hashlib
 import math
 import platform
 from dataclasses import dataclass, field
@@ -53,6 +54,8 @@ class SnapDirAssociation:
         """Validate and normalize the association, measuring its size only when absent.
 
         Size errors keep the existing zero-size fallback and logging behavior."""
+        self._storage_name = None
+        self._storage_id = None
         self.validate()
         if self.mb_size is None:
             try:
@@ -96,12 +99,28 @@ class SnapDirAssociation:
 
     @property
     def directory_name(self) -> str:
-        """The name of the directory when copied into the snapshot folder."""
+        """Return the persistent physical name for this association's stored copy."""
+        self.validate()
+        stored_name = getattr(self, "_storage_name", None)
+        stored_id = getattr(self, "_storage_id", None)
+        if stored_name is not None and stored_id == self.folder_id:
+            return validate_directory_component(stored_name, "snapshot association storage name")
+        digest = hashlib.sha256(self.folder_id.encode("utf-8")).hexdigest()
+        return f"assoc-{digest}"
+
+    @property
+    def _legacy_directory_name(self) -> str:
+        """Return the index-and-basename name used by snapshots before storage IDs."""
         self.validate()
         basename = Path(self.original_path).name
         if not basename:
             raise ValueError("Snapshot directory original_path must have a final path component.")
         return validate_directory_component(f"{self.index}-{basename}")
+
+    def _set_storage_name(self, storage_name: str) -> None:
+        """Retain a physical name loaded from metadata or copied from a clone."""
+        self._storage_name = validate_directory_component(storage_name, "snapshot association storage name")
+        self._storage_id = self.folder_id
 
     @staticmethod
     def gen_random(
@@ -473,13 +492,7 @@ class Snapshot:
             desc=self.desc,
             author=self.author,
             directories=[
-                SnapDirAssociation(
-                    index=dir_assoc.index,
-                    original_path=dir_assoc.original_path,
-                    folder_id=dir_assoc.folder_id,
-                    mb_size=dir_assoc.mb_size,
-                    integrity_manifest=({path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()} if dir_assoc.integrity_manifest is not None else None),
-                )
+                self._clone_association(dir_assoc)
                 for dir_assoc in self.directories
             ],
             tags=list(self.tags),
@@ -490,3 +503,20 @@ class Snapshot:
             os_created=self.os_created,
             data=dict(self.data),
         )
+
+    @staticmethod
+    def _clone_association(dir_assoc: SnapDirAssociation) -> SnapDirAssociation:
+        """Clone all association metadata while retaining its stable storage path."""
+        clone = SnapDirAssociation(
+            index=dir_assoc.index,
+            original_path=dir_assoc.original_path,
+            folder_id=dir_assoc.folder_id,
+            mb_size=dir_assoc.mb_size,
+            integrity_manifest=(
+                {path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()}
+                if dir_assoc.integrity_manifest is not None
+                else None
+            ),
+        )
+        clone._set_storage_name(dir_assoc.directory_name)
+        return clone

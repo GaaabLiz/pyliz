@@ -10,8 +10,8 @@ from pylizlib.core.os.snap.sorting import sort_snapshots
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
-def test_diff_orders_additions_removals_then_renames():
-    """Identity, not reused path names, determines the operation ordering."""
+def test_diff_orders_additions_and_removals_without_renaming_stable_storage_paths():
+    """Association IDs determine identity while labels and indices can change."""
     old = Snapshot(
         "id",
         "name",
@@ -34,8 +34,8 @@ def test_diff_orders_additions_removals_then_renames():
     assert [(e.folder_id, e.action_type) for e in edits] == [
         ("added", SnapEditType.ADD_DIR),
         ("removed", SnapEditType.REMOVE_DIR),
-        ("kept", SnapEditType.RENAME_DIR),
     ]
+    assert old.directories[1].directory_name == new.directories[0].directory_name
 
 
 def test_sort_keeps_none_last_even_in_reverse_and_does_not_mutate():

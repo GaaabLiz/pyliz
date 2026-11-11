@@ -211,7 +211,7 @@ class TestSnapshotUtilsEdits(unittest.TestCase):
         self.assertIn(SnapEditType.ADD_DIR, types)
         self.assertIn(SnapEditType.REMOVE_DIR, types)
 
-    def test_renames_follow_stable_ids_when_original_paths_are_shared(self):
+    def test_index_changes_do_not_rename_stable_ids_when_original_paths_are_shared(self):
         source = SOURCE_DATA_PATH / "e1"
         old = make_snapshot("SharedSource", [source, source], n=2)
         new = old.clone()
@@ -222,8 +222,8 @@ class TestSnapshotUtilsEdits(unittest.TestCase):
 
         self.assertEqual({edit.folder_id: edit.action_type for edit in edits}, {
             old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
-            old.directories[1].folder_id: SnapEditType.RENAME_DIR,
         })
+        self.assertEqual(new.directories[0].directory_name, old.directories[1].directory_name)
 
     def test_replacing_association_at_same_path_is_remove_and_add(self):
         old = make_snapshot("ReplaceIdentity", [SOURCE_DATA_PATH / "e1"], n=1)

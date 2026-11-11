@@ -289,31 +289,24 @@ def test_metadata_updates_keep_separate_ordered_writes(tmp_path):
     ]
 
 
-def test_edit_planner_resolves_legacy_rename_without_touching_storage(tmp_path):
-    """Planning resolves names using persisted IDs and performs no publication."""
-    from pylizlib.core.os.snap.domain import SnapEditAction, SnapEditType
+def test_edit_planner_keeps_storage_path_when_presentation_index_changes(tmp_path):
+    """Changing an index does not create a stored-directory move."""
     from pylizlib.core.os.snap.operations.edits import SnapshotEditPlanner
 
     _, snapshot, manager = stored_snapshot(tmp_path)
     before = manager.path_snapshot_json.read_bytes()
     original_name = snapshot.directories[0].directory_name
     snapshot.directories[0].index = 2
-    plan = SnapshotEditPlanner(manager._storage()).build(
-        [
-            SnapEditAction(SnapEditType.RENAME_DIR, old_directory_name=original_name),
-        ]
-    )
+    plan = SnapshotEditPlanner(manager._storage()).build([])
     assert plan.old_json == before
-    assert len(plan.moves) == 1
-    assert plan.moves[0].source.name == original_name
-    assert plan.moves[0].target.name == snapshot.directories[0].directory_name
-    assert plan.moves[0].source.is_dir()
-    assert not plan.moves[0].target.exists()
+    assert plan.moves == []
+    assert snapshot.directories[0].directory_name == original_name
+    assert (manager.path_snapshot / original_name).is_dir()
     assert manager.path_snapshot_json.read_bytes() == before
 
 
 def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path):
-    """A failed JSON rewrite restores whitespace as well as association names."""
+    """A failed JSON rewrite restores exact bytes without moving stable copies."""
     from pylizlib.core.os.snap.diff import get_edits_between_snapshots
     from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 
@@ -332,7 +325,7 @@ def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path
         nonlocal failed
         if path == manager.path_snapshot_json and not failed:
             failed = True
-            assert not (manager.path_snapshot / original.directories[0].directory_name).exists()
+            assert (manager.path_snapshot / original.directories[0].directory_name).is_dir()
             assert (manager.path_snapshot / requested_name).is_dir()
             path.write_bytes(b"partial")
             raise OSError("save failed")
@@ -343,12 +336,12 @@ def test_editor_restores_exact_metadata_bytes_when_save_partially_fails(tmp_path
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
     assert manager.path_snapshot_json.read_bytes() == before
     assert (manager.path_snapshot / original.directories[0].directory_name).is_dir()
-    assert not (manager.path_snapshot / requested_name).exists()
+    assert requested_name == original.directories[0].directory_name
     assert snapshot.directories[0].index == original.directories[0].index
 
 
 def test_editor_keeps_published_edit_when_metadata_durability_is_uncertain(tmp_path):
-    """A published edit remains aligned with its renamed directory."""
+    """A published index edit retains its stable directory path."""
     from pylizlib.core.os.snap.diff import get_edits_between_snapshots
     from pylizlib.core.os.snap.operations.edits import SnapshotEditor
     from pylizlib.core.os.snap.storage.metadata import MetadataDurabilityError
@@ -372,7 +365,8 @@ def test_editor_keeps_published_edit_when_metadata_durability_is_uncertain(tmp_p
             SnapshotEditor(manager._storage()).apply(get_edits_between_snapshots(original, snapshot))
 
     assert raised.value.published is True
-    assert not (manager.path_snapshot / old_name).exists()
+    assert old_name == new_name
+    assert (manager.path_snapshot / old_name).is_dir()
     assert (manager.path_snapshot / new_name).is_dir()
     assert SnapshotSerializer.from_json(manager.path_snapshot_json).directories[0].directory_name == new_name
     assert snapshot.directories[0].directory_name == new_name
@@ -697,7 +691,7 @@ def test_edit_journal_restores_original_names_after_process_stops_during_staging
             raise SystemExit("simulated process termination")
         return real_rename(source_path, target_path)
 
-    snapshot.directories[0].index = 2
+    snapshot.directories.clear()
     from pylizlib.core.os.snap.utils import SnapshotUtils
 
     actions = SnapshotUtils.get_edits_between_snapshots(SnapshotSerializer.from_json(manager.path_snapshot_json), snapshot)

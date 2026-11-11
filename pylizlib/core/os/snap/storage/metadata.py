@@ -312,7 +312,15 @@ class SnapshotJsonCodec:
         if "directories" in data and isinstance(data["directories"], list):
             if any(not isinstance(directory, dict) for directory in data["directories"]):
                 raise ValueError("Snapshot JSON directories must contain objects.")
-            data["directories"] = [SnapDirAssociation(**directory) for directory in data["directories"]]
+            associations = []
+            for directory_data in data["directories"]:
+                association_data = dict(directory_data)
+                has_storage_name = "storage_name" in association_data
+                storage_name = association_data.pop("storage_name", None)
+                association = SnapDirAssociation(**association_data)
+                association._set_storage_name(storage_name if has_storage_name else association._legacy_directory_name)
+                associations.append(association)
+            data["directories"] = associations
         elif "directories" in data:
             raise ValueError("Snapshot JSON directories must be a list.")
 
@@ -339,7 +347,10 @@ class SnapshotJsonCodec:
     def snapshot_data(snapshot: Snapshot) -> dict:
         """Validate before conversion, preserving public serializer hook timing."""
         snapshot.validate()
-        return asdict(snapshot)
+        data = asdict(snapshot)
+        for association_data, association in zip(data["directories"], snapshot.directories):
+            association_data["storage_name"] = association.directory_name
+        return data
 
     @staticmethod
     def updated_data(contents: str, field_name: str, new_value) -> dict:
