@@ -82,6 +82,53 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
         self.assertEqual(progress[-1], (10, 10))
         self.assertEqual(len(messages), 2)
 
+    def test_sequential_strategy_rejects_file_directory_broken_and_cyclic_links(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        important = outside / "important.txt"
+        important.write_text("keep me", encoding="utf-8")
+        links = (
+            ("file-link", important, False),
+            ("directory-link", outside, True),
+            ("broken-link", self.root / "missing", False),
+            ("cycle-link", self.source, True),
+        )
+
+        for name, target, is_directory in links:
+            with self.subTest(name=name):
+                link = self.source / name
+                try:
+                    link.symlink_to(target, target_is_directory=is_directory)
+                except OSError as error:
+                    self.skipTest(f"symlink creation is unavailable: {error}")
+
+                destination = self.root / f"copy-{name}"
+                with self.assertRaisesRegex(ValueError, "symbolic link"):
+                    SequentialFileCopyStrategy().copy_directory(self.source, destination)
+
+                self.assertFalse(destination.exists())
+                self.assertEqual(important.read_text(encoding="utf-8"), "keep me")
+                link.unlink()
+
+    def test_verified_and_provider_strategies_reject_source_links(self):
+        class ExistingTreeProvider(SourceSnapshotProvider):
+            @contextmanager
+            def create_snapshot(provider_self, source):
+                yield Path(source)
+
+        link = self.source / "directory-link"
+        try:
+            link.symlink_to(self.root, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"symlink creation is unavailable: {error}")
+
+        for strategy in (VerifiedFileCopyStrategy(), ProviderSnapshotCopyStrategy(ExistingTreeProvider())):
+            with self.subTest(strategy=type(strategy).__name__):
+                destination = self.root / f"copy-{type(strategy).__name__}"
+                with self.assertRaisesRegex(ValueError, "symbolic link"):
+                    strategy.copy_directory(self.source, destination)
+                self.assertFalse(destination.exists())
+
     def test_sequential_strategy_records_and_checks_a_content_manifest(self):
         (self.source / "empty").mkdir()
         manifest = {}

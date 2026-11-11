@@ -33,11 +33,7 @@ class SnapshotUtils:
 
     @staticmethod
     def iter_files_strict(root: Path) -> Iterator[Path]:
-        """Enumerate files without suppressing scan or metadata errors.
-
-        Directory symlinks are not traversed, matching the previous rglob
-        policy. File symlinks are read; failures resolving them propagate.
-        """
+        """Enumerate regular files, rejecting links and propagating scan errors."""
         return _storage_tree.iter_files_strict(root)
 
     @staticmethod
@@ -57,7 +53,7 @@ class SnapshotUtils:
 
     @staticmethod
     def assert_no_symlinks(root: Path) -> None:
-        """Reject symlinks anywhere in snapshot storage before traversing it."""
+        """Reject symlinks and junctions anywhere in a tree before traversing it."""
         return _storage_tree.assert_no_symlinks(root)
 
     @staticmethod

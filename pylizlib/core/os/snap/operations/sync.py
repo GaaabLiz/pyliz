@@ -11,6 +11,7 @@ from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import IntegrityManifest
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, prepare_snapshot_metadata, recover_storage_transactions, rename_and_sync
+from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 from pylizlib.core.os.utils import get_folder_size_mb
 
 
@@ -106,6 +107,7 @@ class SnapshotSynchronizer:
             system_path = Path(dir_assoc.original_path)
             if not system_path.exists() or not system_path.is_dir():
                 raise FileNotFoundError(f"Original path '{system_path}' for snapshot '{self.storage.snapshot.id}' does not exist or is not a directory. Update aborted.")
+            assert_no_symlinks(system_path)
 
     def _plan_replacements(self) -> list[SyncReplacement]:
         """Create the complete same-filesystem swap plan before copying sources."""

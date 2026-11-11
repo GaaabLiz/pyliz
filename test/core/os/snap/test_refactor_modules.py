@@ -59,20 +59,38 @@ def test_entry_check_distinguishes_real_and_dangling_link(tmp_path):
     assert is_link_or_junction(link)
 
 
-def test_tree_enumeration_reads_file_links_but_not_directory_links(tmp_path):
-    """Archive traversal and strict storage validation keep distinct link policies."""
-    from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_files_strict
+@pytest.mark.parametrize("link_kind", ["file", "directory", "broken", "cycle"])
+def test_tree_enumeration_rejects_symbolic_links_consistently(tmp_path, link_kind):
+    """Copy and archive enumerators reject links instead of following or skipping them."""
+    from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_files_strict, iter_tree_entries_strict
 
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
-    (outside / "value").write_text("value")
-    (root / "file-link").symlink_to(outside / "value")
-    (root / "directory-link").symlink_to(outside, target_is_directory=True)
-    assert [p.name for p in iter_files_strict(root)] == ["file-link"]
+    important = outside / "important.txt"
+    important.write_text("keep me")
+
+    link = root / "link"
+    if link_kind == "file":
+        target, is_directory = important, False
+    elif link_kind == "directory":
+        target, is_directory = outside, True
+    elif link_kind == "broken":
+        target, is_directory = tmp_path / "missing", False
+    else:
+        target, is_directory = root, True
+    try:
+        link.symlink_to(target, target_is_directory=is_directory)
+    except OSError as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    for enumerate_tree in (iter_files_strict, iter_tree_entries_strict):
+        with pytest.raises(ValueError, match="symbolic link"):
+            list(enumerate_tree(root))
     with pytest.raises(ValueError, match="symbolic link"):
         assert_no_symlinks(root)
+    assert important.read_text() == "keep me"
 
 
 def test_zip_enumerates_before_creating_partial_archive(tmp_path):
