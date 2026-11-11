@@ -13,9 +13,7 @@ Classes:
     SnapshotManager – Manages all filesystem operations for one Snapshot.
 """
 
-import shutil
 import stat
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +30,7 @@ from pylizlib.core.os.snap.domain import (
 )
 from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 from pylizlib.core.os.snap.operations.install import SnapshotInstaller
+from pylizlib.core.os.snap.operations.lifecycle import SnapshotLifecycle
 from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
@@ -84,69 +83,13 @@ class SnapshotManager:
         Raises:
             FileExistsError: If the destination exists and replacement is disabled.
         """
-        self.snapshot.validate()
-        validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
-        self._snapshot_root_path()
-        if not replace_existing and (self.path_snapshot.exists() or self.path_snapshot.is_symlink()):
-            raise FileExistsError(f"Snapshot destination '{self.path_snapshot}' already exists.")
-
-        self.path_catalogue.mkdir(parents=True, exist_ok=True)
-        transaction_path = Path(tempfile.mkdtemp(prefix=f"_staging_create_{self.snapshot.id}_", dir=self.path_catalogue))
-        staging_path = transaction_path / "new"
-        backup_path = transaction_path / "original"
-        original_moved = False
-        previous_manifests = {assoc.folder_id: assoc.integrity_manifest for assoc in self.snapshot.directories}
-        try:
-            staging_path.mkdir()
-
-            # We need to distribute the progress among directories if there are multiple.
-            total_dirs = len(self.snapshot.directories)
-            for i, snap_dir in enumerate(self.snapshot.directories):
-
-                def dir_progress(copied, total):
-                    if progress_callback:
-                        # Calculate overall percentage based on dir index and dir progress
-                        dir_pct = (copied / total) if total > 0 else 1.0
-                        overall_pct = ((i + dir_pct) / total_dirs) * 100
-                        progress_callback(int(overall_pct))
-
-                manifest = {}
-                snap_dir.copy_install_to(
-                    staging_path,
-                    progress_callback=dir_progress,
-                    message_callback=message_callback,
-                    copy_strategy=self.settings.copy_strategy,
-                    manifest=manifest,
-                )
-                snap_dir.integrity_manifest = manifest
-
-            # Write json to staging BEFORE making it the final destination
-            json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
-            SnapshotSerializer.to_json(self.snapshot, json_path)
-
-            if self.path_snapshot.exists() or self.path_snapshot.is_symlink():
-                if not replace_existing:
-                    raise FileExistsError(f"Snapshot destination '{self.path_snapshot}' already exists.")
-                self.path_snapshot.rename(backup_path)
-                original_moved = True
-            staging_path.rename(self.path_snapshot)
-        except Exception:
-            for assoc in self.snapshot.directories:
-                assoc.integrity_manifest = previous_manifests[assoc.folder_id]
-            if original_moved:
-                # If rollback itself fails, preserve both copies in the
-                # transaction directory instead of deleting recoverable data.
-                backup_path.rename(self.path_snapshot)
-            shutil.rmtree(transaction_path, ignore_errors=True)
-            raise
-
-        SnapshotUtils.cleanup_after_commit([transaction_path], "Snapshot creation")
+        SnapshotLifecycle(self._storage()).create(progress_callback, message_callback, replace_existing=replace_existing)
 
     def delete(self, message_callback=None):
         """
         Deletes the snapshot's directory, propagating filesystem failures.
         """
-        remove_directory_or_move_to_temp(self._snapshot_root_path(), message_callback=message_callback)
+        SnapshotLifecycle(self._storage()).delete(message_callback=message_callback)
 
     def update_json_data_fields(self):
         """
@@ -235,27 +178,7 @@ class SnapshotManager:
         Raises:
             FileNotFoundError: If the original snapshot path does not exist.
         """
-        self._snapshot_root_path()
-        if not self.path_snapshot.exists():
-            raise FileNotFoundError(f"The snapshot path {self.path_snapshot} does not exist.")
-        new_snap = self.snapshot.clone()
-        new_snap.id = gen_random_string(self.settings.snap_id_length)
-        new_snap.name = self.snapshot.name + " Copy"
-        new_snap.date_created = datetime.now()
-
-        def prepare_duplicate(staging_path: Path) -> None:
-            json_path = staging_path / validate_directory_component(self.settings.json_filename, "Snapshot JSON filename")
-            SnapshotSerializer.to_json(new_snap, json_path)
-
-        SnapshotUtils.publish_snapshot_tree(
-            self._snapshot_root_path(),
-            new_snap.folder_name,
-            self.path_catalogue,
-            prepare_staging=prepare_duplicate,
-            copy_strategy=self.settings.copy_strategy,
-            message_callback=message_callback,
-            operation="Snapshot duplication",
-        )
+        SnapshotLifecycle(self._storage()).duplicate(message_callback=message_callback)
 
     def update_associated_dirs_from_system(self, message_callback=None):
         """
