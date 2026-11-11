@@ -16,7 +16,7 @@ from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInf
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
+from pylizlib.core.os.snap.storage.archives import _write_verified_zip_exclusive, extract_zip
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
@@ -95,10 +95,9 @@ class SnapshotArchiveService:
                 raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
+            base_zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
 
             backup_path.mkdir(parents=True, exist_ok=True)
-            zip_path = backup_path.joinpath(zip_name)
 
             entries = list(self._files_to_archive(backup_type))
             manifest_path = None
@@ -106,7 +105,20 @@ class SnapshotArchiveService:
                 manifest_path = self._write_associations_manifest(backup_path)
                 entries.append((manifest_path, Path(ASSOCIATED_DIRECTORIES_MANIFEST)))
             try:
-                return write_verified_zip(zip_path, entries, message_callback)
+                collision_index = 0
+                while True:
+                    collision_suffix = f"_{collision_index}" if collision_index else ""
+                    zip_name = f"{base_zip_name[:-4]}{collision_suffix}.zip"
+                    zip_path = backup_path / zip_name
+                    if zip_path.exists() or zip_path.is_symlink():
+                        collision_index += 1
+                        continue
+                    try:
+                        return _write_verified_zip_exclusive(zip_path, entries, message_callback)
+                    except FileExistsError:
+                        if not (zip_path.exists() or zip_path.is_symlink()):
+                            raise
+                        collision_index += 1
             finally:
                 if manifest_path is not None:
                     try:

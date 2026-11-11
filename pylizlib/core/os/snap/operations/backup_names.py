@@ -29,8 +29,9 @@ def parse_backup_filename(backup_path: Path) -> SnapshotBackupInfo:
     created_at = None
     backup_type: BackupType | None = None
 
-    # Expected timestamp suffix: _YYYYMMDD_HHMMSS
-    time_match = re.search(r"_(\d{8}_\d{6})$", stem)
+    # Expected timestamp suffix: _YYYYMMDD_HHMMSS, optionally followed by a
+    # numeric collision suffix selected during exclusive backup publication.
+    time_match = re.search(r"_(\d{8}_\d{6})(?:_\d+)?$", stem)
     core = stem
     if time_match:
         time_value = time_match.group(1)

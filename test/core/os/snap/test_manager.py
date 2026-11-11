@@ -934,6 +934,33 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         self.assertEqual(published.read_bytes(), original_bytes)
         self.assertEqual(list(BACKUP_PATH.iterdir()), [published])
 
+    def test_create_backup_same_second_preserves_previous_archive(self):
+        snap = make_snapshot("BackupNameCollision", self._src, n=1)
+        mgr = self._mgr(snap)
+        mgr.create()
+
+        with patch("pylizlib.core.os.snap.operations.archives.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "20261105_120000"
+            first = mgr.create_backup(BACKUP_PATH, "same_second", BackupType.SNAPSHOT_DIRECTORY)
+            first_bytes = first.read_bytes()
+            new_content = mgr.path_snapshot / "created_after_first_backup.txt"
+            new_content.write_text("second backup data")
+            second = mgr.create_backup(BACKUP_PATH, "same_second", BackupType.SNAPSHOT_DIRECTORY)
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(second.name.endswith("_20261105_120000_1.zip"))
+        self.assertEqual(first.read_bytes(), first_bytes)
+        with zipfile.ZipFile(second) as archive:
+            self.assertEqual(archive.read("created_after_first_backup.txt"), b"second backup data")
+
+        from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+
+        parsed = parse_backup_filename(second)
+        self.assertEqual(parsed.snapshot_id, snap.id)
+        self.assertEqual(parsed.prefix, "same_second")
+        self.assertEqual(parsed.backup_type, BackupType.SNAPSHOT_DIRECTORY)
+        self.assertEqual(parsed.created_at.strftime("%Y%m%d_%H%M%S"), "20261105_120000")
+
     def test_backup_validation_failure_prevents_publication(self):
         snap = make_snapshot("InvalidBackup", self._src, n=1)
         mgr = self._mgr(snap)
@@ -950,7 +977,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
         mgr = self._mgr(snap)
         mgr.create()
 
-        with patch.object(Path, "replace", side_effect=PermissionError("backup publication denied")):
+        with patch.object(Path, "hardlink_to", side_effect=PermissionError("backup publication denied")):
             with self.assertRaisesRegex(PermissionError, "backup publication denied"):
                 mgr.create_backup(BACKUP_PATH, "unpublished", BackupType.SNAPSHOT_DIRECTORY)
 
