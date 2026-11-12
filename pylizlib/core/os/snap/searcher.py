@@ -141,6 +141,7 @@ class SnapshotSearcher:
 
         snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
         self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress, page)
+        logger.debug("Finished snapshot search snapshot=%s results=%s", snapshot.id, len(page.results))
         return page.results
 
     def search_list(
@@ -258,7 +259,7 @@ class SnapshotSearcher:
         """Scan a file in chunks; return True when the callback cancels the snapshot."""
         from pylizlib.core.os.snap.searching import SnapshotMatchPage, SnapshotTextOptions
 
-        on_chunk = (lambda: on_progress(file_path.name, total_files, processed_files)) if on_progress else None
+        on_chunk = None if on_progress is None else (lambda: on_progress(file_path.name, total_files, processed_files) if on_progress else None)
         return TextFileSearcher(self._DETECTION_SAMPLE_BYTES).search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
 
     def _detect_encoding(self, file_path: Path, preferred_encoding: str | None) -> tuple[str, bool, bool]:

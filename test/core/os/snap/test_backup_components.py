@@ -16,6 +16,8 @@ from pylizlib.core.os.snap.operations.backup.planning import RestorePlanner
 from pylizlib.core.os.snap.operations.backup.restore import AssociationRestorer
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, ArchivedAssociation, build_backup_manifest
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
+from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
 
 def test_inspector_uses_embedded_identity_and_preserves_strict_precedence(tmp_path, caplog):
@@ -123,3 +125,20 @@ def test_each_metadata_format_retains_its_decode_error(tmp_path, member, message
     with pytest.raises(ValueError, match=message + " is invalid") as error:
         inspector.read(archive)
     assert isinstance(error.value.__cause__, UnicodeDecodeError)
+
+
+def test_import_metadata_phase_keeps_valid_manifest_cleanup_and_type_errors(tmp_path):
+    """A matching SD manifest is removed; an AD manifest is retained and rejected."""
+    snapshot = Snapshot("id", "name", "")
+    SnapshotSerializer.to_json(snapshot, tmp_path / "snapshot.json")
+    manifest = build_backup_manifest(snapshot, BackupType.ASSOCIATED_DIRECTORIES, "", False, "20260101_000000")
+    manifest_path = tmp_path / BACKUP_MANIFEST_NAME
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    service = CatalogueTransferService(tmp_path, SnapshotSettings(), query=None)
+    with pytest.raises(ValueError, match="does not match its snapshot JSON"):
+        service._read_imported_snapshot(tmp_path)
+    assert manifest_path.is_file()
+    manifest["backup_type"] = "snapshot_directory"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert service._read_imported_snapshot(tmp_path).id == "id"
+    assert not manifest_path.exists()

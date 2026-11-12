@@ -7,6 +7,7 @@ from typing import Protocol
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotSettings
+from pylizlib.core.os.snap.operations.backup.associations import association_identities
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
@@ -124,28 +125,7 @@ class CatalogueTransferService:
             )
 
             # Validate the content and get snapshot
-            json_path = temp_dir_path / self.settings.json_filename
-            if not json_path.is_file():
-                raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
-
-            try:
-                snapshot_to_import = SnapshotSerializer.from_json(json_path)
-            except Exception as e:
-                raise ValueError(f"Failed to read snapshot data from json: {e}")
-
-            backup_manifest_path = temp_dir_path / BACKUP_MANIFEST_NAME
-            if backup_manifest_path.is_file():
-                try:
-                    backup_manifest = parse_backup_manifest(json.loads(backup_manifest_path.read_text(encoding="utf-8")))
-                except Exception as error:
-                    raise ValueError(f"Snapshot export contains an invalid backup manifest: {error}") from error
-                if backup_manifest.backup_type != BackupType.SNAPSHOT_DIRECTORY or backup_manifest.snapshot_id != snapshot_to_import.id:
-                    raise ValueError("Snapshot export manifest does not match its snapshot JSON.")
-                manifest_associations = {(item.folder_id, item.index, item.directory_name) for item in backup_manifest.associations}
-                snapshot_associations = {(item.folder_id, item.index, item.directory_name) for item in snapshot_to_import.directories}
-                if manifest_associations != snapshot_associations:
-                    raise ValueError("Snapshot export associations do not match its snapshot JSON.")
-                backup_manifest_path.unlink()
+            snapshot_to_import = self._read_imported_snapshot(temp_dir_path)
 
             # Check for ID conflict
             if self.query.exists(snapshot_to_import.id):
@@ -164,6 +144,7 @@ class CatalogueTransferService:
                 copy_strategy=self.settings.copy_strategy,
                 operation="Snapshot import",
             )
+        logger.info("Imported snapshot id=%s", snapshot_to_import.id)
 
     def _import_entry(self, potential_snap_dir: Path) -> None:
         """Import one extracted entry; log and skip per-entry failures as before.
@@ -204,3 +185,42 @@ class CatalogueTransferService:
 
         except Exception as e:
             logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
+
+    def _read_imported_snapshot(self, temp_dir_path: Path) -> Snapshot:
+        """Read extracted metadata and validate its optional SD export manifest.
+
+        Args:
+            temp_dir_path (Path): Extraction root owned by import_snapshot.
+
+        Returns:
+            Snapshot: Parsed domain model after identity/association checks. A valid
+            export manifest is removed so it does not enter stored snapshot content.
+
+        Raises:
+            ValueError: If JSON is missing/invalid or the optional export manifest
+                disagrees with its type, ID or association set.
+            OSError: If reading or removing a manifest fails outside the mapped errors.
+        """
+        json_path = temp_dir_path / self.settings.json_filename
+        if not json_path.is_file():
+            raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")
+
+        try:
+            snapshot_to_import = SnapshotSerializer.from_json(json_path)
+        except Exception as e:
+            raise ValueError(f"Failed to read snapshot data from json: {e}")
+
+        backup_manifest_path = temp_dir_path / BACKUP_MANIFEST_NAME
+        if backup_manifest_path.is_file():
+            try:
+                backup_manifest = parse_backup_manifest(json.loads(backup_manifest_path.read_text(encoding="utf-8")))
+            except Exception as error:
+                raise ValueError(f"Snapshot export contains an invalid backup manifest: {error}") from error
+            if backup_manifest.backup_type != BackupType.SNAPSHOT_DIRECTORY or backup_manifest.snapshot_id != snapshot_to_import.id:
+                raise ValueError("Snapshot export manifest does not match its snapshot JSON.")
+            manifest_associations = association_identities(backup_manifest.associations)
+            snapshot_associations = association_identities(snapshot_to_import.directories)
+            if manifest_associations != snapshot_associations:
+                raise ValueError("Snapshot export associations do not match its snapshot JSON.")
+            backup_manifest_path.unlink()
+        return snapshot_to_import
