@@ -485,7 +485,7 @@ class PathMatcher:
         """
         self.working_path = path
         self.working_path_items = get_path_items(path, recursive)
-        self.working_path_items_rel = [str(p.relative_to(self.working_path)) for p in self.working_path_items]
+        self.working_path_items_rel = [p.relative_to(self.working_path).as_posix() for p in self.working_path_items]
 
     def match_with_list(self, path_str_list: list[str]):
         """Compare the loaded relative paths with another path list.

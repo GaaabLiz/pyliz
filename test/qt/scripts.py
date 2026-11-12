@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 from pylizlib.qt.scripts import exec_gen_css_py, exec_gen_qrc, exec_gen_res_py
@@ -13,7 +14,8 @@ class GenerateQrcTestCase(unittest.TestCase):
     def test_escapes_names_and_resolves_files_from_qrc_directory(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            asset_dir = root / "assets" / 'icons & "symbols"'
+            folder_name = "icons & symbols" if sys.platform == "win32" else 'icons & "symbols"'
+            asset_dir = root / "assets" / folder_name
             asset_dir.mkdir(parents=True)
             asset = asset_dir / "logo & café.svg"
             asset.write_text("<svg />", encoding="utf-8")
@@ -24,7 +26,7 @@ class GenerateQrcTestCase(unittest.TestCase):
             resource = ET.parse(qrc_path).getroot().find("qresource")
             self.assertEqual(resource.get("prefix"), asset_dir.name)
             generated_path = resource.findtext("file")
-            self.assertEqual(generated_path, 'assets/icons & "symbols"/logo & café.svg')
+            self.assertEqual(generated_path, f"assets/{folder_name}/logo & café.svg")
             self.assertTrue((qrc_path.parent / generated_path).is_file())
 
     def test_invalid_xml_character_does_not_replace_existing_qrc(self):
@@ -32,12 +34,13 @@ class GenerateQrcTestCase(unittest.TestCase):
             root = Path(temporary_directory)
             assets = root / "assets"
             assets.mkdir()
-            (assets / "bad\x01.svg").write_text("<svg />", encoding="utf-8")
+            invalid_asset = assets / "bad\x01.svg"
             qrc_path = root / "resources.qrc"
             qrc_path.write_text("existing qrc", encoding="utf-8")
 
-            with self.assertRaises(ET.ParseError):
-                exec_gen_qrc(qrc_path, [assets])
+            with patch.object(Path, "rglob", return_value=[invalid_asset]), patch.object(Path, "is_file", return_value=True):
+                with self.assertRaises(ET.ParseError):
+                    exec_gen_qrc(qrc_path, [assets])
 
             self.assertEqual(qrc_path.read_text(encoding="utf-8"), "existing qrc")
 

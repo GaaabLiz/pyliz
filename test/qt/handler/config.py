@@ -81,7 +81,7 @@ class ConfigQtHandlerTestCase(unittest.TestCase):
             item = QtConfigItem("key", str, "")
 
             ConfigQtHandler.qt_write(item, "val", setting)
-            self.assertEqual(ConfigQtHandler.get_qt_file_path(setting), str(settings_path))
+            self.assertEqual(Path(ConfigQtHandler.get_qt_file_path(setting)), settings_path)
             self.assertIn("key", setting.allKeys())
 
             ConfigQtHandler.qt_clear_all(setting)

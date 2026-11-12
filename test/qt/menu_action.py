@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -125,13 +126,14 @@ class MenuActionDomainAndUtilsTestCase(unittest.TestCase):
         self.assertEqual(triggered, ["Option 1"])
 
     def test_create_action_text_path(self):
-        p = Path("/tmp")
-        clicked = []
-        act = create_action_text_path(p, self.parent, on_clicked=lambda: clicked.append(True))
-        self.assertEqual(act.text(), str(p))
-        self.assertTrue(act.isEnabled())
-        act.trigger()
-        self.assertEqual(clicked, [True])
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory)
+            clicked = []
+            action = create_action_text_path(path, self.parent, on_clicked=lambda: clicked.append(True))
+            self.assertEqual(action.text(), str(path))
+            self.assertTrue(action.isEnabled())
+            action.trigger()
+            self.assertEqual(clicked, [True])
 
     def test_create_action_contextual(self):
         clicked = []

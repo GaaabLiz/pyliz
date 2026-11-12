@@ -131,9 +131,13 @@ class IsCommandAvailableTestCase(unittest.TestCase):
     def test_availability_check_does_not_execute_program(self):
         with tempfile.TemporaryDirectory() as td:
             marker = Path(td) / "executed.txt"
-            command = Path(td) / "dangerous-command"
-            command.write_text(f"#!/bin/sh\nprintf executed > '{marker}'\nexit 2\n", encoding="utf-8")
-            command.chmod(0o755)
+            if os.name == "nt":
+                command = Path(td) / "dangerous-command.cmd"
+                command.write_text(f'@echo off\r\necho executed > "{marker}"\r\nexit /b 2\r\n', encoding="utf-8")
+            else:
+                command = Path(td) / "dangerous-command"
+                command.write_text(f"#!/bin/sh\nprintf executed > '{marker}'\nexit 2\n", encoding="utf-8")
+                command.chmod(0o755)
 
             with patch.dict(os.environ, {"PATH": td}):
                 self.assertTrue(is_command_available_with_run(command.name))
@@ -167,7 +171,8 @@ class GetSystemUsernameTestCase(unittest.TestCase):
 
 class IsSoftwareInstalledTestCase(unittest.TestCase):
     def test_executable_file(self):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".sh") as tmp:
+        suffix = ".exe" if os.name == "nt" else ".sh"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_name = tmp.name
         try:
             os.chmod(tmp_name, os.stat(tmp_name).st_mode | stat.S_IEXEC)

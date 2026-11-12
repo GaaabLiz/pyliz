@@ -24,4 +24,10 @@ def is_software_installed(exe_path: Path) -> bool:
     :param exe_path: The path of the executable file
     :return: True if the software is installed, False otherwise
     """
-    return os.path.isfile(exe_path.__str__()) and os.access(exe_path.__str__(), os.X_OK)
+    path = exe_path.__str__()
+    if not os.path.isfile(path):
+        return False
+    if os.name == "nt":
+        path_extensions = os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep)
+        return Path(path).suffix.casefold() in {extension.casefold() for extension in path_extensions}
+    return os.access(path, os.X_OK)

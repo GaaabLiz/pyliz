@@ -260,7 +260,7 @@ class TestLizMedia(unittest.TestCase):
 
         payload = json.loads(media.to_json())
 
-        self.assertEqual(payload["path"], "/path/to/test_image.jpg")
+        self.assertEqual(payload["path"], str(self.mock_path))
         self.assertEqual(payload["file_name"], "test_image.jpg")
         self.assertEqual(payload["extension"], ".jpg")
         self.assertEqual(payload["creation_time"], creation_dt.isoformat())
@@ -311,7 +311,7 @@ class TestLizMedia(unittest.TestCase):
         media = LizMedia(Path("/path/to/test_audio.mp3"))
         payload = json.loads(media.to_json())
 
-        self.assertEqual(payload["path"], "/path/to/test_audio.mp3")
+        self.assertEqual(payload["path"], str(Path("/path/to/test_audio.mp3")))
         self.assertEqual(payload["creation_time"], creation_dt.isoformat())
         self.assertEqual(payload["type"], FileType.AUDIO.value)
         self.assertFalse(payload["is_image"])
