@@ -100,6 +100,8 @@ class Operation(QRunnable):
         self.progress = 0
         self.running = False
         self.error = None
+        self.task_errors: list[str] = []
+        self._is_cancelled = False
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(tasks))
         self.finished_callback: Callable | None = None
         self.op_progress_update_callback: Callable | None = None
@@ -119,6 +121,10 @@ class Operation(QRunnable):
 
     def execute_tasks(self):
         for task in self.tasks:
+            if self._is_cancelled or task.is_cancelled:
+                task.update_task_status(OperationStatus.Cancelled)
+                self.signals.task_finished.emit(task.name)
+                continue
             try:
                 task.on_progress_changed = self.on_task_progress_update
                 self.signals.task_start.emit(task.name)
@@ -127,12 +133,16 @@ class Operation(QRunnable):
                 self.current_task = task
                 result = task.execute()
                 task.result = result
-                task.update_task_progress(100)
-                task.update_task_status(OperationStatus.Completed)
+                if self._is_cancelled or task.is_cancelled:
+                    task.update_task_status(OperationStatus.Cancelled)
+                else:
+                    task.update_task_progress(100)
+                    task.update_task_status(OperationStatus.Completed)
             except Exception as e:
                 task.update_task_status(OperationStatus.Failed)
                 logger.error("Error in task %s: %s", task.name, e)
                 self.signals.task_failed.emit(task.name, str(e))
+                self.task_errors.append(f"Task {task.name} failed: {e}")
                 if task.abort_all_on_error:
                     raise RuntimeError(f"Task {task.name} failed: {e}")
             finally:
@@ -145,7 +155,13 @@ class Operation(QRunnable):
             self.set_operation_started()
             self.update_op_status(OperationStatus.InProgress)
             self.execute_tasks()
-            self.update_op_status(OperationStatus.Completed)
+            if self.task_errors:
+                self.error = "; ".join(self.task_errors)
+                self.update_op_status(OperationStatus.Failed)
+            elif self._is_cancelled or any(task.is_cancelled for task in self.tasks):
+                self.update_op_status(OperationStatus.Cancelled)
+            else:
+                self.update_op_status(OperationStatus.Completed)
         except Exception as e:
             self.update_op_status(OperationStatus.Failed)
             self.signals.op_failed.emit(self.id, str(e))
@@ -162,6 +178,7 @@ class Operation(QRunnable):
         self.execute()
 
     def stop(self):
+        self._is_cancelled = True
         for task in self.tasks:
             task.cancel()
 
@@ -251,6 +268,9 @@ class Operation(QRunnable):
 
     def is_failed(self):
         return self.status == OperationStatus.Failed
+
+    def is_cancelled(self):
+        return self.status == OperationStatus.Cancelled or self._is_cancelled or any(task.is_cancelled for task in self.tasks)
 
     def is_in_progress(self):
         return self.status == OperationStatus.InProgress

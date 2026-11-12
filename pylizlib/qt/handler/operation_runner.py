@@ -1,7 +1,6 @@
-import time
 from typing import Callable
 
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, Signal
 
 from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
 from pylizlib.core.log.pylizLogger import logger
@@ -15,6 +14,7 @@ class RunnerStatistics:
         self.total_operations = len(operations)
         self.completed_operations = 0
         self.failed_operations = 0
+        self.cancelled_operations = 0
         self.pending_operations = 0
         self.total_progress = 0
 
@@ -23,6 +23,8 @@ class RunnerStatistics:
                 self.completed_operations += 1
             elif operation.is_failed():
                 self.failed_operations += 1
+            elif operation.status == OperationStatus.Cancelled:
+                self.cancelled_operations += 1
             elif operation.is_in_progress():
                 self.total_progress += operation.progress
             elif operation.is_pending():
@@ -59,6 +61,7 @@ class OperationRunner(QObject):
     task_update_message = Signal(str, str)
     task_failed = Signal(str, str)
     task_finished = Signal(str)
+    _operation_completed = Signal(object)
 
     def __init__(
         self,
@@ -68,7 +71,7 @@ class OperationRunner(QObject):
     ):
         super().__init__()
         self.max_threads = max_threads
-        self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool = QThreadPool(self)
         self.thread_pool.setMaxThreadCount(self.max_threads)
         self.operation_pool: list[Operation] = []
         self.active_operations = 0
@@ -76,6 +79,12 @@ class OperationRunner(QObject):
         self.abort_all_on_error = abort_all_on_error
         self.on_runner_finished = on_runner_finished
         self._all_operations: list[Operation] = []
+        self._stopping = False
+        self._finished_emitted = False
+        self._operation_completed.connect(
+            self.on_operation_finished,
+            Qt.ConnectionType.QueuedConnection,
+        )
 
     def add(self, operation: Operation):
         self.operation_pool.append(operation)
@@ -111,33 +120,52 @@ class OperationRunner(QObject):
         self.progress_obj = None
 
     def start(self):
+        self._stopping = False
+        self._finished_emitted = False
         self.runner_start.emit()
         self.progress_obj = QueueProgress(QueueProgressMode.SINGLE, len(self.operation_pool))
         for op in self.operation_pool:
             self.progress_obj.add_single(op.id)
-        for _ in self.operation_pool:
+        initial_slots = min(
+            len(self.operation_pool),
+            max(0, self.thread_pool.maxThreadCount() - self.active_operations),
+        )
+        if initial_slots == 0 and not self.operation_pool and self.active_operations == 0:
+            self.__set_runner_finished()
+            return
+        for _ in range(initial_slots):
             self.__start_next_operation()
 
     def stop(self):
         self.runner_stop.emit()
+        self._stopping = True
         # Cancel all known operations so running ones can gracefully exit
         for op in self._all_operations:
             op.stop()
-        self.thread_pool.clear()
-        # We don't want to block the UI waiting for threads to finish if they take a while.
-        # But we do want to reset state. The threads will finish shortly since they were cancelled.
-        # Removing waitForDone prevents UI freeze on stop click.
-        self.active_operations = 0
+        self._cancel_pending_operations()
+        if self.active_operations == 0:
+            self.__set_runner_finished()
+
+    def _cancel_pending_operations(self):
+        for op in self.operation_pool:
+            op.update_op_status(OperationStatus.Cancelled)
+            for task in op.tasks:
+                task.update_task_status(OperationStatus.Cancelled)
         self.operation_pool.clear()
 
     def __start_next_operation(self):
-        can_start = self.active_operations < self.thread_pool.maxThreadCount()
+        can_start = not self._stopping and self.active_operations < self.thread_pool.maxThreadCount()
         if can_start and self.operation_pool:
             op = self.operation_pool.pop(0)
-            op.set_finished_callback(lambda: self.on_operation_finished(op))
+            op.set_finished_callback(lambda completed=op: self._operation_completed.emit(completed))
             op.set_op_progress_callback(self.on_op_progress_update)
-            self.thread_pool.start(op)
             self.active_operations += 1
+            try:
+                self.thread_pool.start(op)
+            except Exception:
+                self.active_operations -= 1
+                self.operation_pool.insert(0, op)
+                raise
 
     def on_operation_finished(self, operation: Operation):
         self.active_operations -= 1
@@ -147,9 +175,13 @@ class OperationRunner(QObject):
 
         if self.abort_all_on_error and operation.is_failed():
             logger.error("Operation %s failed, stopping all operations", operation.id)
-            self.operation_pool.clear()
-            self.thread_pool.clear()
-            self.__set_runner_finished()
+            self._stopping = True
+            for other_operation in self._all_operations:
+                if other_operation is not operation:
+                    other_operation.stop()
+            self._cancel_pending_operations()
+            if self.active_operations == 0:
+                self.__set_runner_finished()
             return
 
         self.__start_next_operation()
@@ -157,7 +189,9 @@ class OperationRunner(QObject):
             self.__set_runner_finished()
 
     def __set_runner_finished(self):
-        time.sleep(0.1)
+        if self._finished_emitted:
+            return
+        self._finished_emitted = True
         statistics = RunnerStatistics(self._all_operations)
         self.runner_finish.emit(statistics)
         if self.on_runner_finished:

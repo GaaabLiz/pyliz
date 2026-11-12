@@ -2,12 +2,21 @@
 
 import configparser
 import os
+import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 import rich
 
 from pylizlib.core.log.pylizLogger import logger
+
+_ini_write_lock = threading.RLock()
+
+
+def _new_config_parser() -> configparser.ConfigParser:
+    """Create a parser that treats percent signs as literal INI data."""
+    return configparser.ConfigParser(interpolation=None)
 
 
 @dataclass(slots=True)
@@ -35,6 +44,32 @@ class IniManager:
         if parent:
             os.makedirs(parent, exist_ok=True)
 
+    def _write_atomic(self, config: configparser.ConfigParser) -> None:
+        """Write a complete INI beside the destination and replace atomically."""
+        self._ensure_parent_dir()
+        parent = os.path.dirname(os.path.abspath(self.path))
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=parent,
+                prefix=".ini-",
+                delete=False,
+            ) as configfile:
+                temporary_path = configfile.name
+                config.write(configfile)
+                configfile.flush()
+                os.fsync(configfile.fileno())
+            os.replace(temporary_path, self.path)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+
     def exists(self) -> bool:
         """Return ``True`` when the INI file exists on disk."""
 
@@ -43,7 +78,7 @@ class IniManager:
     def create(self, items: list[IniItem] | None = None) -> None:
         """Create the INI file and optionally write initial items."""
 
-        self.config = configparser.ConfigParser()
+        self.config = _new_config_parser()
         items = items or []
         list_of_sections = {item.section for item in items}
 
@@ -54,11 +89,11 @@ class IniManager:
             self.config.set(item.section, item.key, str(item.value))
 
         try:
-            self._ensure_parent_dir()
-            with open(self.path, "w", encoding="utf-8") as configfile:
-                self.config.write(configfile)
+            with _ini_write_lock:
+                self._write_atomic(self.config)
         except OSError as exc:
             logger.error(f"Error while creating configuration file '{self.path}': {exc}")
+            raise
 
     def read(
         self,
@@ -72,8 +107,12 @@ class IniManager:
             logger.warning(f"INI file '{self.path}' does not exist.")
             return None
 
-        self.config = configparser.ConfigParser()
-        self.config.read(self.path, encoding="utf-8")
+        self.config = _new_config_parser()
+        try:
+            self.config.read(self.path, encoding="utf-8")
+        except (OSError, configparser.Error) as exc:
+            logger.error(f"Error while parsing configuration file '{self.path}': {exc}")
+            return None
         if not self.config.has_section(section):
             logger.warning(f"Section '{section}' does not exist in INI file '{self.path}'.")
             return None
@@ -96,15 +135,15 @@ class IniManager:
     ) -> None:
         """Write or update a value in the INI file."""
 
-        self.config = configparser.ConfigParser()
-        if self.exists():
-            self.config.read(self.path, encoding="utf-8")
-        if not self.config.has_section(section):
-            self.config.add_section(section)
-        self.config.set(section, key, str(value))
-        self._ensure_parent_dir()
-        with open(self.path, "w", encoding="utf-8") as configfile:
-            self.config.write(configfile)
+        with _ini_write_lock:
+            config = _new_config_parser()
+            if self.exists():
+                config.read(self.path, encoding="utf-8")
+            if not config.has_section(section):
+                config.add_section(section)
+            config.set(section, key, str(value))
+            self._write_atomic(config)
+            self.config = config
 
 
 @dataclass
@@ -121,7 +160,7 @@ class CfgPath:
     ) -> None:
         """Print sections and keys found in a single INI file."""
 
-        config = configparser.ConfigParser()
+        config = _new_config_parser()
         config.read(path, encoding="utf-8")
         if sections:
             rich.print(f"Sections in {path}:")

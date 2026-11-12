@@ -3,8 +3,15 @@ import re
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from pylizlib.core.log.loggiz import Loggiz, config, rootConsoleLogger, rootFileLogger
+from pylizlib.core.log.loggiz import (
+    Loggiz,
+    LoggizLogger,
+    config,
+    rootConsoleLogger,
+    rootFileLogger,
+)
 
 
 class LoggizTestCase(unittest.TestCase):
@@ -63,6 +70,102 @@ class LoggizTestCase(unittest.TestCase):
         finally:
             Loggiz._reset_handlers(rootFileLogger)
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class LoggizLoggerTestCase(unittest.TestCase):
+    def test_get_tag_string(self):
+        tag_no_ansi = LoggizLogger.get_tag_string("TEST", ansify=False)
+        self.assertEqual(tag_no_ansi, f"{config.tag_char_start}TEST{config.tag_char_end}")
+
+        tag_ansi = LoggizLogger.get_tag_string("TEST", ansify=True)
+        self.assertIn("TEST", tag_ansi)
+
+    @patch("builtins.print")
+    def test_print_separator(self, mock_print):
+        config.enable_console_ansi = False
+        LoggizLogger.print_separator("-", 5)
+        mock_print.assert_called_with("-----")
+
+        config.enable_console_ansi = True
+        LoggizLogger.print_separator("-", 5)
+        self.assertIn("-----", mock_print.call_args[0][0])
+
+    @patch.object(rootConsoleLogger, "debug")
+    @patch.object(rootConsoleLogger, "info")
+    @patch.object(rootConsoleLogger, "warning")
+    @patch.object(rootConsoleLogger, "error")
+    def test_log_console_methods(self, mock_err, mock_warn, mock_info, mock_dbg):
+        config.enable_console_ansi = False
+        LoggizLogger.log_console_debug("TAG", "dbg msg")
+        mock_dbg.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}dbg msg")
+
+        LoggizLogger.log_console_info("TAG", "info msg")
+        mock_info.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}info msg")
+
+        LoggizLogger.log_console_warning("TAG", "warn msg")
+        mock_warn.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}warn msg")
+
+        LoggizLogger.log_console_error("TAG", "err msg")
+        mock_err.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}err msg")
+
+        config.enable_console_ansi = True
+        LoggizLogger.log_console_debug("TAG", "dbg msg")
+        self.assertIn("dbg msg", mock_dbg.call_args[0][0])
+
+    @patch.object(rootFileLogger, "debug")
+    @patch.object(rootFileLogger, "info")
+    @patch.object(rootFileLogger, "warning")
+    @patch.object(rootFileLogger, "error")
+    def test_log_file_methods(self, mock_err, mock_warn, mock_info, mock_dbg):
+        LoggizLogger.log_file_debug("TAG", "dbg msg")
+        mock_dbg.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}dbg msg")
+
+        LoggizLogger.log_file_info("TAG", "info msg")
+        mock_info.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}info msg")
+
+        LoggizLogger.log_file_warning("TAG", "warn msg")
+        mock_warn.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}warn msg")
+
+        LoggizLogger.log_file_error("TAG", "err msg")
+        mock_err.assert_called_with(f"{config.tag_char_start}TAG{config.tag_char_end}err msg")
+
+    @patch.object(LoggizLogger, "log_console_debug")
+    @patch.object(LoggizLogger, "log_file_debug")
+    @patch.object(LoggizLogger, "log_console_info")
+    @patch.object(LoggizLogger, "log_file_info")
+    @patch.object(LoggizLogger, "log_console_warning")
+    @patch.object(LoggizLogger, "log_file_warning")
+    @patch.object(LoggizLogger, "log_console_error")
+    @patch.object(LoggizLogger, "log_file_error")
+    def test_tag_dispatch_methods(
+        self,
+        mock_file_err,
+        mock_cons_err,
+        mock_file_warn,
+        mock_cons_warn,
+        mock_file_info,
+        mock_cons_info,
+        mock_file_dbg,
+        mock_cons_dbg,
+    ):
+        config.logger_console_enabled = True
+        config.logger_file_enabled = True
+
+        LoggizLogger.debug_tag("T", "msg")
+        mock_cons_dbg.assert_called_once_with("T", "msg")
+        mock_file_dbg.assert_called_once_with("T", "msg")
+
+        LoggizLogger.info_tag("T", "msg")
+        mock_cons_info.assert_called_once_with("T", "msg")
+        mock_file_info.assert_called_once_with("T", "msg")
+
+        LoggizLogger.warning_tag("T", "msg")
+        mock_cons_warn.assert_called_once_with("T", "msg")
+        mock_file_warn.assert_called_once_with("T", "msg")
+
+        LoggizLogger.error_tag("T", "msg")
+        mock_cons_err.assert_called_once_with("T", "msg")
+        mock_file_err.assert_called_once_with("T", "msg")
 
 
 if __name__ == "__main__":

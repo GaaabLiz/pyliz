@@ -21,6 +21,12 @@ def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any
     Raises:
         ValueError: If the video cannot be opened.
     """
+    frames, _ = sample_video_frames_with_count(video_path, max_frames=max_frames)
+    return frames
+
+
+def sample_video_frames_with_count(video_path: str | Path, max_frames: int = 5) -> tuple[list[Any], int]:
+    """Return sampled frames and the number of frame indices attempted."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise ValueError(f"Cannot open video file: {video_path}")
@@ -28,7 +34,7 @@ def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any
     try:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames <= 0:
-            return []
+            return [], 0
 
         indices = _build_frame_indices(total_frames=total_frames, max_frames=max_frames)
         frames = []
@@ -38,7 +44,7 @@ def sample_video_frames(video_path: str | Path, max_frames: int = 5) -> list[Any
             if not ok:
                 continue
             frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        return frames
+        return frames, len(indices)
     finally:
         cap.release()
 
@@ -48,11 +54,15 @@ def _build_frame_indices(*, total_frames: int, max_frames: int) -> list[int]:
     Calculates frame indices that are evenly spaced across the video.
     Ensures the first and last frames are included if possible.
     """
+    if max_frames <= 0:
+        raise ValueError("max_frames must be greater than zero")
+    if total_frames <= 0:
+        return []
     if total_frames <= max_frames:
         return list(range(total_frames))
+    if max_frames == 1:
+        return [0]
 
-    step = max(total_frames // max_frames, 1)
-    indices = list(range(0, total_frames, step))[:max_frames]
-    if (total_frames - 1) not in indices:
-        indices[-1] = total_frames - 1
-    return indices
+    last_index = total_frames - 1
+    denominator = max_frames - 1
+    return [int(index * last_index / denominator + 0.5) for index in range(max_frames)]

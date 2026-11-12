@@ -18,22 +18,26 @@ class ResHandler:
 
         # Disegna l'SVG nella pixmap con colore sovrascritto
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Applica un colore con CompositionMode_SourceIn
-        renderer.render(painter)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), color)
-
-        painter.end()
+            # Applica un colore con CompositionMode_SourceIn
+            renderer.render(painter)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(), color)
+        finally:
+            painter.end()
 
         return QIcon(pixmap)
 
     @staticmethod
     def __get_icon_color(icon: ResIcon, theme: AppTheme):
-        if icon.has_fixed_color():
-            return icon.get_color(theme)
-        return theme.ui.get_primary_color()
+        color = icon.get_color(theme)
+        if color is None or not color.isValid():
+            color = theme.ui.get_primary_color()
+        if color is None or not color.isValid():
+            return QColor(Qt.GlobalColor.black)
+        return color
 
     @staticmethod
     def get_icon(

@@ -94,6 +94,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libegl1
+
       - name: Install Make
         if: runner.os == 'Windows'
         run: choco install make --yes

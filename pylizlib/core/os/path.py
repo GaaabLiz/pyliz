@@ -174,7 +174,7 @@ def count_pathsub_elements(path):
 
 def scan_directory(path: str, on_file, on_folder):
     """
-    Scan a directory and call the on_file and on_folder functions for each file and folder found
+    Scan a directory once and call each callback with the full path of its item.
     :param path: The path to scan
     :param on_file: function to call for each file found
     :param on_folder: function to call for each folder found
@@ -182,9 +182,9 @@ def scan_directory(path: str, on_file, on_folder):
     """
     for root, dirs, files in os.walk(path):
         for file in files:
-            on_file(file)
+            on_file(os.path.join(root, file))
         for dir in dirs:
-            scan_directory(os.path.join(root, dir), on_file, on_folder)
+            on_folder(os.path.join(root, dir))
 
 
 def scan_directory_match_bool(path: str, to_be_add: Callable[[str], bool]) -> List[str]:
@@ -293,7 +293,7 @@ def get_path_items(path: Path, recursive: bool = False) -> list[Path]:
                 entry_path = Path(entry.path)
                 items.append(entry_path)
 
-                if recursive and entry.is_dir():
+                if recursive and entry.is_dir(follow_symlinks=False):
                     items.extend(get_path_items(entry_path, recursive=True))
             except PermissionError:
                 continue
@@ -315,20 +315,16 @@ def remove_directory_or_move_to_temp(path: Path, temp_path: Path | None = None, 
     """
     if not move_to_temp:
         if message_callback:
-
-            def remove_with_cb(p: Path):
-                if not p.exists():
-                    return
-                for item in p.iterdir():
-                    if item.is_dir():
-                        remove_with_cb(item)
-                    else:
-                        message_callback(f"Eliminazione: {item.name}")
-                        item.unlink()
-                message_callback(f"Eliminazione: {p.name}")
-                p.rmdir()
-
-            remove_with_cb(path)
+            # ``shutil.rmtree`` uses a symlink-attack-resistant implementation
+            # where the platform supports it. Walk separately only to report
+            # progress; os.walk does not descend into directory symlinks.
+            for root, dirs, files in os.walk(path, topdown=False, followlinks=False):
+                for name in files:
+                    message_callback(f"Eliminazione: {name}")
+                for name in dirs:
+                    message_callback(f"Eliminazione: {name}")
+            message_callback(f"Eliminazione: {path.name}")
+            shutil.rmtree(path)
         else:
             shutil.rmtree(path.__str__(), ignore_errors=True)
     else:
@@ -393,6 +389,11 @@ def duplicate_directory(src_dir: Path, dest_dir: Path | None = None, copy_suffix
     if dest_dir is None:
         dest_dir = src_dir.with_name(src_dir.name + copy_suffix)
 
+    resolved_src = src_dir.resolve(strict=True)
+    resolved_dest = dest_dir.resolve(strict=False)
+    if resolved_dest == resolved_src or resolved_src in resolved_dest.parents:
+        raise ValueError("The destination directory cannot be the source or one of its descendants")
+
     # Assicura che la destinazione non esista già
     if dest_dir.exists():
         raise FileExistsError(f"{dest_dir!r} esiste già")
@@ -453,6 +454,6 @@ class PathMatcher:
                 file.write(f"{item}\n")
 
     def log_all(self):
-        logger.trace(f"Working path: {self.working_path}")
+        logger.debug(f"Working path: {self.working_path}")
         for item in self.working_path_items_rel:
             print(item)

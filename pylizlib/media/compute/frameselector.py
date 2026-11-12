@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from typing import Any, List, Tuple
 
@@ -46,17 +47,25 @@ class FrameSelector(ABC):
         Raises:
             ValueError: If the video file cannot be opened.
         """
-        self.logger.trace(f"Validating video file: {video_path}")
+        self.logger.debug(f"Validating video file: {video_path}")
         cap = cv2.VideoCapture(video_path)
 
-        if not cap.isOpened():
-            raise ValueError(f"Failed to open video file: {video_path}")
+        try:
+            if not cap.isOpened():
+                raise ValueError(f"Failed to open video file: {video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = total_frames / fps
+            fps = float(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if not math.isfinite(fps) or fps <= 0:
+                raise ValueError(f"Invalid video FPS for {video_path}: {fps}")
+            if total_frames < 0:
+                raise ValueError(f"Invalid frame count for {video_path}: {total_frames}")
+            duration = total_frames / fps
+        except Exception:
+            cap.release()
+            raise
 
-        self.logger.trace(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
+        self.logger.debug(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
         return cap, fps, duration, total_frames
 
 
@@ -71,17 +80,18 @@ class DynamicFrameSelector(FrameSelector):
         Statically analyzes the video to detect scene changes and extracts frames
         accordingly, weighted by scene transitions.
         """
-        self.logger.trace("Starting dynamic frame selection")
+        self.logger.debug("Starting dynamic frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
-        scene_changes = self._detect_scene_changes(video_path, cap)
-        target_frames = frame_options.calculate_dynamic_frame_count(duration, scene_changes)
+        try:
+            scene_changes = self._detect_scene_changes(video_path, cap)
+            target_frames = frame_options.calculate_dynamic_frame_count(duration, scene_changes)
 
-        self.logger.trace(f"Target frames for analysis: {target_frames}")
-        frames = self._extract_frames(cap, target_frames, scene_changes)
-
-        cap.release()
-        self.logger.trace(f"Dynamic frame selection completed. Selected {len(frames)} frames")
+            self.logger.debug(f"Target frames for analysis: {target_frames}")
+            frames = self._extract_frames(cap, target_frames, scene_changes)
+        finally:
+            cap.release()
+        self.logger.debug(f"Dynamic frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _detect_scene_changes(
@@ -102,7 +112,7 @@ class DynamicFrameSelector(FrameSelector):
         Returns:
             List of timestamps (seconds) where scene changes were detected.
         """
-        self.logger.trace("Detecting scene changes")
+        self.logger.debug("Detecting scene changes")
         scene_changes = []
         prev_frame = None
 
@@ -145,25 +155,20 @@ class DynamicFrameSelector(FrameSelector):
         Extracts specific frames from the video, ensuring scene changes are prioritized
         and gaps are filled to reach the target count.
         """
-        frames = []
-        ret, first_frame = cap.read()
-        if ret:
-            frames.append(
-                Frame(
-                    image=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB),
-                    timestamp=0.0,
-                    scene_type=SceneType.STATIC,
-                )
-            )
-
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        interval = total_frames // (target_frames - 1)
+        target_frames = min(max(target_frames, 0), total_frames)
+        if target_frames == 0:
+            return []
 
-        for frame_idx in range(interval, total_frames, interval):
+        frame_indices = np.linspace(0, total_frames - 1, num=target_frames, dtype=int)
+        frames = []
+        for frame_idx in frame_indices:
+            frame_idx = int(frame_idx)
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
-                break
+                self.logger.warning(f"Failed to read frame at position {frame_idx}")
+                continue
 
             timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -186,15 +191,16 @@ class UniformFrameSelector(FrameSelector):
         """
         Selects a target number of frames distributed evenly across the video duration.
         """
-        self.logger.trace("Starting uniform frame selection")
+        self.logger.debug("Starting uniform frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
         target_frames = frame_options.calculate_uniform_frame_count(duration)
-        self.logger.trace(f"Target frames for uniform selection: {target_frames}")
-        frames = self._extract_uniform_frames(cap, target_frames, fps)
-
-        cap.release()
-        self.logger.trace(f"Uniform frame selection completed. Selected {len(frames)} frames")
+        self.logger.debug(f"Target frames for uniform selection: {target_frames}")
+        try:
+            frames = self._extract_uniform_frames(cap, target_frames, fps)
+        finally:
+            cap.release()
+        self.logger.debug(f"Uniform frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_uniform_frames(
@@ -206,15 +212,17 @@ class UniformFrameSelector(FrameSelector):
         """
         Inner logic to jump to specific frame indices based on uniform spacing.
         """
+        total_frames = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        target_frames = min(max(target_frames, 0), total_frames)
+        if target_frames == 0:
+            return []
+
+        frame_indices = np.linspace(0, total_frames - 1, num=target_frames, dtype=int)
+        self.logger.debug(f"Frame indices selected: {frame_indices.tolist()}")
+
         frames = []
-        if target_frames <= 0:
-            return frames
-
-        interval = cap.get(cv2.CAP_PROP_FRAME_COUNT) / target_frames
-        self.logger.debug(f"Frame extraction interval: {interval}")
-
-        for i in range(target_frames):
-            frame_number = int(i * interval)
+        for frame_number in frame_indices:
+            frame_number = int(frame_number)
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
             ret, frame = cap.read()
             if not ret:
@@ -239,12 +247,14 @@ class AllFrameSelector(FrameSelector):
         """
         Extracts all frames sequentially from the video.
         """
-        self.logger.trace("Starting all frame selection")
+        self.logger.debug("Starting all frame selection")
         cap, fps, duration, total_frames = self._validate_video(video_path)
 
-        frames = self._extract_all_frames(cap, fps)
-        cap.release()
-        self.logger.trace(f"All frame selection completed. Selected {len(frames)} frames")
+        try:
+            frames = self._extract_all_frames(cap, fps)
+        finally:
+            cap.release()
+        self.logger.debug(f"All frame selection completed. Selected {len(frames)} frames")
         return frames
 
     def _extract_all_frames(self, cap: cv2.VideoCapture, fps: float) -> List[Frame]:

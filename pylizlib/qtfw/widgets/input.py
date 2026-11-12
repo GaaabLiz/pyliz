@@ -19,11 +19,80 @@ class MultiSelectionComboBox(ComboBox):
     selectionChanged = Signal(list)  # Emits a list of checked ComboItem objects
 
     def __init__(self, parent=None):
-        super().__init__(parent=parent)
         self._checked_indexes = []  # Track selected indices
+        self._checked_items = []  # Keep selected item identity stable across list mutations
+        self._selection_ready = False
+        super().__init__(parent=parent)
         self._placeholderText = "Select items..."
+        self._selection_ready = True
         self.setText(self._placeholderText)
         self._updateTextState(True)
+
+    def addItem(self, *args, **kwargs):
+        result = super().addItem(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def addItems(self, *args, **kwargs):
+        result = super().addItems(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def insertItem(self, *args, **kwargs):
+        result = super().insertItem(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def insertItems(self, *args, **kwargs):
+        result = super().insertItems(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def removeItem(self, *args, **kwargs):
+        result = super().removeItem(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def setItemText(self, *args, **kwargs):
+        result = super().setItemText(*args, **kwargs)
+        self._sync_checked_items()
+        return result
+
+    def clear(self):
+        previous = getattr(self, "_suspend_selection_events", False)
+        self._suspend_selection_events = True
+        try:
+            result = super().clear()
+        finally:
+            self._suspend_selection_events = previous
+        if getattr(self, "_selection_ready", False):
+            self._checked_items.clear()
+            self._checked_indexes.clear()
+            self._update_selection_text()
+            self.selectionChanged.emit([])
+        return result
+
+    def _sync_checked_items(self):
+        """Keep selections attached to their ComboItem objects after mutations."""
+        if not getattr(self, "_selection_ready", False) or not hasattr(self, "items"):
+            return
+
+        previous = [(id(item), item.text) for item in self._checked_items]
+        selected_ids = {id(item) for item in self._checked_items}
+        self._checked_items = [item for item in self.items if id(item) in selected_ids]
+        self._checked_indexes = [index for index, item in enumerate(self.items) if id(item) in selected_ids]
+        current = [(id(item), item.text) for item in self._checked_items]
+        self._update_selection_text()
+        if current != previous and not getattr(self, "_suspend_selection_events", False):
+            self.selectionChanged.emit([item.text for item in self._checked_items])
+
+    def _update_selection_text(self):
+        if self._checked_items:
+            self.setText(", ".join(item.text for item in self._checked_items))
+            self._updateTextState(False)
+        else:
+            self.setText(self._placeholderText)
+            self._updateTextState(True)
 
     def _createComboMenu(self):
         """Create a checkable menu for multi-selection"""
@@ -72,32 +141,21 @@ class MultiSelectionComboBox(ComboBox):
 
     def _onItemToggled(self, index: int, action: QAction):
         """Handle item toggle events"""
+        if not 0 <= index < len(self.items):
+            return
+        item = self.items[index]
         if action.isChecked():
-            if index not in self._checked_indexes:
-                self._checked_indexes.append(index)
+            if all(selected is not item for selected in self._checked_items):
+                self._checked_items.append(item)
         else:
-            if index in self._checked_indexes:
-                self._checked_indexes.remove(index)
+            self._checked_items = [selected for selected in self._checked_items if selected is not item]
 
-        self._checked_indexes.sort()
-
-        # Update display text
-        if self._checked_indexes:
-            selected_texts = []
-            for i in self._checked_indexes:
-                if 0 <= i < len(self.items):
-                    selected_texts.append(self.items[i].text)
-            self.setText(", ".join(selected_texts))
-            self._updateTextState(False)
-        else:
-            self.setText(self._placeholderText)
-            self._updateTextState(True)
-
-        self.selectionChanged.emit([item.text for item in self.checkedItems()])
+        self._sync_checked_items()
+        self.selectionChanged.emit([selected.text for selected in self._checked_items])
 
     def checkedItems(self):
         """Get list of selected items"""
-        return [self.items[i] for i in self._checked_indexes]
+        return self._checked_items[:]
 
     def checkedIndexes(self):
         """Get list of selected indices"""
@@ -105,32 +163,23 @@ class MultiSelectionComboBox(ComboBox):
 
     def clearChecks(self):
         """Clear all selections"""
+        self._checked_items.clear()
         self._checked_indexes.clear()
-        self.setText(self._placeholderText)
-        self._updateTextState(True)
+        self._update_selection_text()
         self.selectionChanged.emit([])
 
     def setCheckedIndexes(self, indexes: list[int]):
         """Set selected indices"""
-        valid = [i for i in indexes if 0 <= i < len(self.items)]
-        self._checked_indexes = list(set(valid))
-
-        if self._checked_indexes:
-            selected_texts = [self.items[i].text for i in sorted(self._checked_indexes)]
-            self.setText(", ".join(selected_texts))
-            self._updateTextState(False)
-        else:
-            self.setText(self._placeholderText)
-            self._updateTextState(True)
-
-        self.selectionChanged.emit([item.text for item in self.checkedItems()])
+        valid = sorted({i for i in indexes if 0 <= i < len(self.items)})
+        self._checked_items = [self.items[index] for index in valid]
+        self._sync_checked_items()
+        self.selectionChanged.emit([item.text for item in self._checked_items])
 
     def setPlaceholderText(self, text: str):
         """Set placeholder text shown when no items are selected"""
         self._placeholderText = text
-        if not self._checked_indexes:
-            self.setText(text)
-            self._updateTextState(True)
+        if not self._checked_items:
+            self._update_selection_text()
 
     def get_items(self) -> list[str]:
         items = self.checkedItems()

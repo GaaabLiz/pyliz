@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+import tempfile
 from datetime import datetime
 
 import requests
@@ -29,19 +30,19 @@ text_extensions = [".txt", ".doc", ".docx", ".pdf", ".odt", ".rtf", ".tex"]
 
 
 def is_image_extension(extension: str) -> bool:
-    return extension in image_extensions
+    return extension.lower() in image_extensions
 
 
 def is_video_extension(extension: str) -> bool:
-    return extension in video_extensions
+    return extension.lower() in video_extensions
 
 
 def is_audio_extension(extension: str) -> bool:
-    return extension in audio_extensions
+    return extension.lower() in audio_extensions
 
 
 def is_text_extension(extension: str) -> bool:
-    return extension in text_extensions
+    return extension.lower() in text_extensions
 
 
 def is_image_file(path: str) -> bool:
@@ -70,7 +71,7 @@ def is_media_file(path: str) -> bool:
 
 def is_media_sidecar_file(path: str) -> bool:
     sidecar_extensions = [".xmp", ".xml", ".aae"]
-    return os.path.splitext(path)[1] in sidecar_extensions
+    return os.path.splitext(path)[1].lower() in sidecar_extensions
 
 
 def get_file_type(path: str) -> FileType:
@@ -116,33 +117,58 @@ def get_file_c_date(path_to_file) -> datetime:
     return datetime.fromtimestamp(timestamp)
 
 
-def download_file(url: str, destinazione: str, on_progress: callable) -> Operation[None]:
+def download_file(url: str, destinazione: str, on_progress: callable, timeout: float = 30) -> Operation[None]:
+    response = None
+    temporary_path = None
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()  # Verifica se la richiesta è andata a buon fine
 
         # Ottieni la dimensione totale del file dal campo 'Content-Length' dell'header
-        totale = int(response.headers.get("content-length", 0))
+        totale = int(response.headers.get("content-length", 0) or 0)
 
         # Inizializza variabili per il calcolo della percentuale
         scaricato = 0
         percentuale = 0
 
-        with open(destinazione, "wb") as file:
+        destination_dir = os.path.dirname(os.path.abspath(destinazione))
+        with tempfile.NamedTemporaryFile(mode="wb", dir=destination_dir, prefix=".download-", delete=False) as file:
+            temporary_path = file.name
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:  # Filtra fuori i chunk vuoti
                     file.write(chunk)
                     scaricato += len(chunk)
 
                     # Calcola la nuova percentuale
-                    nuova_percentuale = int(scaricato * 100 / totale)
+                    if totale > 0:
+                        nuova_percentuale = min(99, int(scaricato * 100 / totale))
+                    else:
+                        nuova_percentuale = percentuale
                     if nuova_percentuale > percentuale:
                         percentuale = nuova_percentuale
                         on_progress(percentuale)
-        logger.trace("Download completed!")
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.replace(temporary_path, destinazione)
+        temporary_path = None
+        if percentuale < 100:
+            on_progress(100)
+        logger.debug("Download completed!")
         return Operation(status=True)
     except Exception as e:
         return Operation(status=False, error=str(e))
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def write_json_to_file(path, filename, content):
@@ -150,9 +176,29 @@ def write_json_to_file(path, filename, content):
     if not os.path.exists(path):
         os.makedirs(path)
 
+    # Serialize first so invalid values cannot truncate an existing file.
+    serialized = json.dumps(content, indent=4)
+
     # Crea il percorso completo del file
     file_path = os.path.join(path, filename)
-
-    # Scrive il contenuto JSON nel file
-    with open(file_path, "w") as json_file:
-        json.dump(content, json_file, indent=4)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path,
+            prefix=".json-",
+            delete=False,
+        ) as json_file:
+            temporary_path = json_file.name
+            json_file.write(serialized)
+            json_file.flush()
+            os.fsync(json_file.fileno())
+        os.replace(temporary_path, file_path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass

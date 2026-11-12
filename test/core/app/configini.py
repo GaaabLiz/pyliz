@@ -17,6 +17,17 @@ class IniManagerTestCase(unittest.TestCase):
 
             self.assertTrue(os.path.isfile(ini_path))
 
+    @patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("cannot create INI"))
+    def test_create_propagates_file_creation_errors(self, _mock_replace):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+
+            with self.assertRaisesRegex(OSError, "cannot create INI"):
+                IniManager(ini_path).create()
+
+            self.assertFalse(os.path.exists(ini_path))
+            self.assertEqual(os.listdir(temp_dir), [])
+
     def test_create_and_read_items(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             ini_path = os.path.join(temp_dir, "settings.ini")
@@ -66,6 +77,41 @@ class IniManagerTestCase(unittest.TestCase):
 
             self.assertTrue(os.path.isfile(ini_path))
             self.assertEqual(manager.read("general", "theme"), "light")
+
+    def test_failed_atomic_write_preserves_existing_configuration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            manager = IniManager(ini_path)
+            manager.create([IniItem("general", "theme", "dark")])
+            previous = Path(ini_path).read_text(encoding="utf-8")
+
+            with patch("pylizlib.core.app.configini.os.replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    manager.write("general", "theme", "light")
+
+            self.assertEqual(Path(ini_path).read_text(encoding="utf-8"), previous)
+            self.assertEqual(os.listdir(temp_dir), ["settings.ini"])
+
+    def test_malformed_configuration_is_reported_as_missing_value(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            Path(ini_path).write_text("[general\ntheme=dark\n", encoding="utf-8")
+
+            self.assertIsNone(IniManager(ini_path).read("general", "theme"))
+
+    def test_percent_values_round_trip_without_interpolation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ini_path = os.path.join(temp_dir, "settings.ini")
+            manager = IniManager(ini_path)
+            values = {"single": "%", "escaped": "%20", "reference": "%(other)s"}
+
+            manager.create([IniItem("general", key, value) for key, value in values.items()])
+            for key, expected in values.items():
+                with self.subTest(key=key):
+                    self.assertEqual(manager.read("general", key), expected)
+
+            manager.write("general", "written", "%25")
+            self.assertEqual(manager.read("general", "written"), "%25")
 
 
 class CfgPathTestCase(unittest.TestCase):

@@ -17,3 +17,4 @@ class OperationStatus(Enum):
     InProgress = "In Progress"
     Completed = "Completed"
     Failed = "Failed"
+    Cancelled = "Cancelled"

@@ -36,6 +36,16 @@ class AiMediaScannerTestCase(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_ai_scan_result_keeps_legacy_positional_field_order(self):
+        result = AiScanResult(["cat"], False, ["HELLO"], True)
+
+        self.assertEqual(result.tags, ["cat"])
+        self.assertFalse(result.nsfw)
+        self.assertEqual(result.ocr_text, ["HELLO"])
+        self.assertTrue(result.ocr_detected)
+        self.assertIsNone(result.nsfw_frames_analyzed)
+        self.assertIsNone(result.nsfw_analysis_complete)
+
     def test_scan_from_path_applies_requested_results(self):
         tags_provider = _StaticProvider(AiScanTool.TAGS, AiScanResult(tags=["cat", "indoor"]))
         nsfw_provider = _StaticProvider(AiScanTool.NSFW, AiScanResult(nsfw=False))
@@ -95,6 +105,20 @@ class AiMediaScannerTestCase(unittest.TestCase):
 
         self.assertEqual(media.ai_tags, ["one"])
         self.assertEqual(tags_provider.calls, 1)
+
+    def test_scan_preserves_unknown_nsfw_result_and_frame_coverage(self):
+        nsfw_provider = _StaticProvider(
+            AiScanTool.NSFW,
+            AiScanResult(nsfw=None, nsfw_frames_analyzed=0, nsfw_analysis_complete=False),
+        )
+        scanner = AiMediaScanner(providers=[nsfw_provider])
+
+        media = scanner.scan(media_path=self.image_path, tools=["nsfw"])
+
+        self.assertIsNone(media.ai_nsfw)
+        self.assertEqual(media.ai_nsfw_frames_analyzed, 0)
+        self.assertFalse(media.ai_nsfw_analysis_complete)
+        self.assertFalse(media.ai_scanned)
 
     def test_scan_requires_supported_tools(self):
         scanner = AiMediaScanner(providers=[])

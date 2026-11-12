@@ -95,10 +95,7 @@ class MenuMasterHandler:
             self.toolbar_handler.create(parent_to_use, layout)
             self.toolbar_installed = True
         else:
-            logger.error(
-                "Cannot install toolbar %s. Toolbar is not available.",
-                self.toolbar_handler.item.id,
-            )
+            logger.error("Cannot install toolbar. Toolbar handler is not available.")
 
     def uninstall_menu(self):
         if self.__is_menu_added():
@@ -110,10 +107,7 @@ class MenuMasterHandler:
             self.toolbar_handler.destroy(self.parent)
             self.toolbar_installed = False
         else:
-            logger.error(
-                "Cannot uninstall toolbar %s. Toolbar is not available.",
-                self.toolbar_handler.item.id,
-            )
+            logger.error("Cannot uninstall toolbar. Toolbar handler is not available.")
 
     def set_toolbar_handler(self, toolbar_handler: ToolbarHandler):
         if self.__is_toolbar_available():
@@ -126,10 +120,7 @@ class MenuMasterHandler:
 
     def clear_toolbar_handler(self):
         if not self.__is_toolbar_available():
-            logger.error(
-                "Cannot clear toolbar handler %s. Toolbar handler is not set.",
-                self.toolbar_handler.item.id,
-            )
+            logger.error("Cannot clear toolbar handler. Toolbar handler is not set.")
             return
         self.toolbar_handler = None
 
