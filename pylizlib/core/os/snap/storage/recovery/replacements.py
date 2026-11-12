@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from pylizlib.core.os.filesystem.durability import rename_and_sync
@@ -83,72 +84,10 @@ def _validate_replacement_entries(operation: str, data: dict, storage, workspace
     """
     if not isinstance(data.get("entries"), list):
         raise TransactionRecoveryError("Replacement journal has no entry list.")
-    associations = {association.folder_id: association for association in storage.snapshot.directories}
-    root = storage.path_snapshot.resolve(strict=False)
+    validator = ReplacementValidator(operation, storage, workspace)
     for entry in data["entries"]:
-        if not isinstance(entry, dict) or not isinstance(entry.get("folder_id"), str):
-            raise TransactionRecoveryError("Replacement journal entry has no association identity.")
-        association = associations.get(entry["folder_id"])
-        if association is None:
-            # A commit-decided edit does not use this handler; other replacement
-            # operations must still match the persisted association set.
-            raise TransactionRecoveryError(f"Unknown association in transaction: {entry['folder_id']!r}.")
-        for key in ("stage", "destination", "backup"):
-            if not isinstance(entry.get(key), str) or not entry[key]:
-                raise TransactionRecoveryError(f"Replacement journal path '{key}' must be a nonempty string.")
-        if type(entry.get("had_original")) is not bool:
-            raise TransactionRecoveryError("Replacement journal 'had_original' must be a boolean.")
-        if entry.get("merge_child", False) and operation != "install":
-            raise TransactionRecoveryError("Only install journals may contain merge entries.")
-        if "stage_root" in entry and not isinstance(entry["stage_root"], str):
-            raise TransactionRecoveryError("Replacement journal stage root must be a string.")
-        stage = Path(entry["stage"])
-        destination = Path(entry["destination"])
-        backup = Path(entry["backup"])
-        if operation in {"install", "restore_associations"}:
-            live = Path(os.path.abspath(association.original_path))
-            if operation == "install" and entry.get("merge_child"):
-                if destination.parent != live or stage.parent != Path(entry.get("stage_root", stage.parent)):
-                    raise TransactionRecoveryError("Install merge journal escaped its associated directory.")
-            elif destination != live:
-                raise TransactionRecoveryError("Transaction destination does not match its association.")
-            if backup.parent != destination.parent or not backup.name.startswith(f"{destination.name}_bck_"):
-                raise TransactionRecoveryError("External backup path is not a generated sibling of its destination.")
-            stage_root = Path(entry.get("stage_root", stage.parent))
-            if operation == "restore_associations":
-                if not stage.resolve(strict=False).is_relative_to(workspace.resolve(strict=False)):
-                    raise TransactionRecoveryError("Restore staging path escaped its transaction workspace.")
-            else:
-                if stage_root.parent != destination.parent or not stage_root.name.startswith(f"{live.name}_staging_"):
-                    raise TransactionRecoveryError("Install staging path is not a generated sibling of its destination.")
-                if not entry.get("merge_child") and stage != stage_root:
-                    raise TransactionRecoveryError("Install staging directory does not match its journal entry.")
-        elif operation == "sync":
-            expected = root / association.directory_name
-            if destination != expected or stage.parent != root or backup.parent != root:
-                raise TransactionRecoveryError("Sync transaction paths must be direct children of the snapshot root.")
-            if not stage.name.startswith(f"{expected.name}_staging_") or not backup.name.startswith(f"{expected.name}_bck_"):
-                raise TransactionRecoveryError("Sync transaction uses an unexpected staging or backup name.")
-        for path in (stage, destination, backup):
-            if path.name in {"", ".", ".."}:
-                raise TransactionRecoveryError("Transaction journal contains an invalid path.")
-    staging_roots = data.get("staging_roots", [])
-    if not isinstance(staging_roots, list):
-        raise TransactionRecoveryError("Replacement journal staging roots must be a list.")
-    for raw_path in staging_roots:
-        if not isinstance(raw_path, str) or not raw_path:
-            raise TransactionRecoveryError("Replacement journal staging root must be a nonempty string.")
-        path = Path(raw_path)
-        if operation == "sync":
-            allowed = path.parent == root and any(path.name.startswith(f"{association.directory_name}_staging_") for association in associations.values())
-        elif operation == "install":
-            allowed = any(
-                path.parent == live.parent and path.name.startswith(f"{live.name}_staging_") for live in (Path(os.path.abspath(association.original_path)) for association in associations.values())
-            )
-        else:
-            allowed = False
-        if not allowed:
-            raise TransactionRecoveryError("Replacement journal staging root is outside its generated staging paths.")
+        validator.validate_entry(entry)
+    validator.validate_staging_roots(data.get("staging_roots", []))
     _validate_metadata_paths(data, storage, workspace)
 
 
@@ -218,3 +157,109 @@ def _cleanup_replacements(data: dict) -> None:
         _remove_path(Path(entry["stage"]))
     for path in data.get("staging_roots", []):
         _remove_path(Path(path))
+
+
+@dataclass(frozen=True)
+class ReplacementPaths:
+    """Name the three native paths of one validated replacement record.
+
+    Attributes:
+        stage (Path): Owned staging copy before publication.
+        destination (Path): Final copy target.
+        backup (Path): Recoverable original target.
+    """
+
+    stage: Path
+    destination: Path
+    backup: Path
+
+
+class ReplacementValidator:
+    """Apply common record checks, then the current operation's path policy."""
+
+    def __init__(self, operation: str, storage, workspace: Path):
+        """Capture the current association map and resolved stored-snapshot root."""
+        self.operation = operation
+        self.workspace = workspace
+        self.associations = {association.folder_id: association for association in storage.snapshot.directories}
+        self.root = storage.path_snapshot.resolve(strict=False)
+
+    def validate_entry(self, entry: dict) -> None:
+        """Validate identity and field shape before dispatching operation path checks."""
+        if not isinstance(entry, dict) or not isinstance(entry.get("folder_id"), str):
+            raise TransactionRecoveryError("Replacement journal entry has no association identity.")
+        association = self.associations.get(entry["folder_id"])
+        if association is None:
+            # A commit-decided edit does not use this handler; other replacement
+            # operations must still match the persisted association set.
+            raise TransactionRecoveryError(f"Unknown association in transaction: {entry['folder_id']!r}.")
+        for key in ("stage", "destination", "backup"):
+            if not isinstance(entry.get(key), str) or not entry[key]:
+                raise TransactionRecoveryError(f"Replacement journal path '{key}' must be a nonempty string.")
+        if type(entry.get("had_original")) is not bool:
+            raise TransactionRecoveryError("Replacement journal 'had_original' must be a boolean.")
+        if entry.get("merge_child", False) and self.operation != "install":
+            raise TransactionRecoveryError("Only install journals may contain merge entries.")
+        if "stage_root" in entry and not isinstance(entry["stage_root"], str):
+            raise TransactionRecoveryError("Replacement journal stage root must be a string.")
+        stage = Path(entry["stage"])
+        destination = Path(entry["destination"])
+        backup = Path(entry["backup"])
+        paths = ReplacementPaths(stage, destination, backup)
+        if self.operation in {"install", "restore_associations"}:
+            self._validate_external_paths(entry, association, paths)
+        elif self.operation == "sync":
+            self._validate_sync_paths(association, paths)
+        for path in (stage, destination, backup):
+            if path.name in {"", ".", ".."}:
+                raise TransactionRecoveryError("Transaction journal contains an invalid path.")
+
+    def _validate_external_paths(self, entry: dict, association, paths: ReplacementPaths) -> None:
+        """Constrain install/restore targets and their distinct staging ownership."""
+        stage, destination, backup = paths.stage, paths.destination, paths.backup
+        live = Path(os.path.abspath(association.original_path))
+        if self.operation == "install" and entry.get("merge_child"):
+            if destination.parent != live or stage.parent != Path(entry.get("stage_root", stage.parent)):
+                raise TransactionRecoveryError("Install merge journal escaped its associated directory.")
+        elif destination != live:
+            raise TransactionRecoveryError("Transaction destination does not match its association.")
+        if backup.parent != destination.parent or not backup.name.startswith(f"{destination.name}_bck_"):
+            raise TransactionRecoveryError("External backup path is not a generated sibling of its destination.")
+        stage_root = Path(entry.get("stage_root", stage.parent))
+        if self.operation == "restore_associations":
+            if not stage.resolve(strict=False).is_relative_to(self.workspace.resolve(strict=False)):
+                raise TransactionRecoveryError("Restore staging path escaped its transaction workspace.")
+        else:
+            if stage_root.parent != destination.parent or not stage_root.name.startswith(f"{live.name}_staging_"):
+                raise TransactionRecoveryError("Install staging path is not a generated sibling of its destination.")
+            if not entry.get("merge_child") and stage != stage_root:
+                raise TransactionRecoveryError("Install staging directory does not match its journal entry.")
+
+    def _validate_sync_paths(self, association, paths: ReplacementPaths) -> None:
+        """Require generated sync siblings directly below the stored snapshot root."""
+        stage, destination, backup = paths.stage, paths.destination, paths.backup
+        expected = self.root / association.directory_name
+        if destination != expected or stage.parent != self.root or backup.parent != self.root:
+            raise TransactionRecoveryError("Sync transaction paths must be direct children of the snapshot root.")
+        if not stage.name.startswith(f"{expected.name}_staging_") or not backup.name.startswith(f"{expected.name}_bck_"):
+            raise TransactionRecoveryError("Sync transaction uses an unexpected staging or backup name.")
+
+    def validate_staging_roots(self, staging_roots: object) -> None:
+        """Check all shared staging roots after individual replacement entries."""
+        if not isinstance(staging_roots, list):
+            raise TransactionRecoveryError("Replacement journal staging roots must be a list.")
+        for raw_path in staging_roots:
+            if not isinstance(raw_path, str) or not raw_path:
+                raise TransactionRecoveryError("Replacement journal staging root must be a nonempty string.")
+            path = Path(raw_path)
+            if self.operation == "sync":
+                allowed = path.parent == self.root and any(path.name.startswith(f"{association.directory_name}_staging_") for association in self.associations.values())
+            elif self.operation == "install":
+                allowed = any(
+                    path.parent == live.parent and path.name.startswith(f"{live.name}_staging_")
+                    for live in (Path(os.path.abspath(association.original_path)) for association in self.associations.values())
+                )
+            else:
+                allowed = False
+            if not allowed:
+                raise TransactionRecoveryError("Replacement journal staging root is outside its generated staging paths.")

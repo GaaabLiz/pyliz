@@ -86,53 +86,12 @@ def _validate_edit(data: dict, storage, workspace: Path) -> None:
         raise TransactionRecoveryError("Edit journal moves and additions must be lists.")
     if data.get("phase") not in {"staging", "publishing"}:
         raise TransactionRecoveryError("Edit journal has an invalid phase.")
-    seen_sources = set()
-    seen_targets = set()
-    seen_staged = set()
-
-    def validate_item(item: dict, *, is_addition: bool) -> None:
-        """Validate one persisted edit record before any recovery rename.
-
-        Args:
-            item (dict): One edit record, using relative source, target and staging basenames.
-            is_addition (bool): True for an addition without a source; False for a move or removal.
-
-
-        Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
-        """
-        if not isinstance(item, dict):
-            raise TransactionRecoveryError("Edit journal entry must be an object.")
-        if not is_addition:
-            source = validate_directory_component(item.get("source"), "edit transaction source")
-            if source in seen_sources:
-                raise TransactionRecoveryError("Edit journal contains duplicate source names.")
-            seen_sources.add(source)
-            if "target" not in item or (item["target"] is not None and not isinstance(item["target"], str)):
-                raise TransactionRecoveryError("Edit journal move target must be a string or null.")
-        elif not isinstance(item.get("target"), str):
-            raise TransactionRecoveryError("Edit journal addition must have a target name.")
-        if is_addition and "source" in item:
-            raise TransactionRecoveryError("Edit journal addition cannot contain a source name.")
-        for key in ("target",) if is_addition else ("source", "target"):
-            if item.get(key) is not None:
-                validate_directory_component(item[key], f"edit transaction {key}")
-        if item.get("target") is not None:
-            target = item["target"]
-            if target in seen_targets:
-                raise TransactionRecoveryError("Edit journal contains duplicate destination names.")
-            seen_targets.add(target)
-        staged = validate_directory_component(item.get("staged"), "edit transaction staging name")
-        if staged in seen_staged:
-            raise TransactionRecoveryError("Edit journal contains duplicate staging names.")
-        seen_staged.add(staged)
-        if (workspace / staged).parent.resolve(strict=False) != workspace.resolve(strict=False):
-            raise TransactionRecoveryError("Edit staging path escaped its workspace.")
+    validator = EditRecordValidator(workspace)
 
     for move in moves:
-        validate_item(move, is_addition=False)
+        validator.validate_item(move, is_addition=False)
     for addition in additions:
-        validate_item(addition, is_addition=True)
+        validator.validate_item(addition, is_addition=True)
     _validate_metadata_paths(data, storage, workspace)
 
 
@@ -172,3 +131,53 @@ def _complete_edit_directories(journal: SnapshotTransactionJournal, data: dict, 
             rename_and_sync(staged, target)
         elif not _lexists(target):
             raise TransactionRecoveryError(f"Neither staged nor published addition exists for '{target}'.")
+
+
+class EditRecordValidator:
+    """Own duplicate-name sets for one edit plan instead of capturing mutable closures."""
+
+    def __init__(self, workspace: Path):
+        """Bind the workspace and start independent source/target/staging identity sets."""
+        self.workspace = workspace
+        self.seen_sources = set()
+        self.seen_targets = set()
+        self.seen_staged = set()
+
+    def validate_item(self, item: dict, *, is_addition: bool) -> None:
+        """Validate one persisted edit record before any recovery rename.
+
+        Args:
+            item (dict): One edit record, using relative source, target and staging basenames.
+            is_addition (bool): True for an addition without a source; False for a move or removal.
+
+
+        Returns:
+            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        """
+        if not isinstance(item, dict):
+            raise TransactionRecoveryError("Edit journal entry must be an object.")
+        if not is_addition:
+            source = validate_directory_component(item.get("source"), "edit transaction source")
+            if source in self.seen_sources:
+                raise TransactionRecoveryError("Edit journal contains duplicate source names.")
+            self.seen_sources.add(source)
+            if "target" not in item or (item["target"] is not None and not isinstance(item["target"], str)):
+                raise TransactionRecoveryError("Edit journal move target must be a string or null.")
+        elif not isinstance(item.get("target"), str):
+            raise TransactionRecoveryError("Edit journal addition must have a target name.")
+        if is_addition and "source" in item:
+            raise TransactionRecoveryError("Edit journal addition cannot contain a source name.")
+        for key in ("target",) if is_addition else ("source", "target"):
+            if item.get(key) is not None:
+                validate_directory_component(item[key], f"edit transaction {key}")
+        if item.get("target") is not None:
+            target = item["target"]
+            if target in self.seen_targets:
+                raise TransactionRecoveryError("Edit journal contains duplicate destination names.")
+            self.seen_targets.add(target)
+        staged = validate_directory_component(item.get("staged"), "edit transaction staging name")
+        if staged in self.seen_staged:
+            raise TransactionRecoveryError("Edit journal contains duplicate staging names.")
+        self.seen_staged.add(staged)
+        if (self.workspace / staged).parent.resolve(strict=False) != self.workspace.resolve(strict=False):
+            raise TransactionRecoveryError("Edit staging path escaped its workspace.")
