@@ -15,11 +15,10 @@ from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot, validate_directory_component
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.recovery.models import JOURNAL_FILENAME, TRANSACTION_DIRECTORY, VALID_STATES, JournalCodec
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
-TRANSACTION_DIRECTORY = ".pyliz_transactions"
-JOURNAL_FILENAME = "journal.json"
-_VALID_STATES = {"prepared", "rollback_decided", "commit_decided", "committed"}
+_VALID_STATES = VALID_STATES
 
 
 class TransactionRecoveryError(RuntimeError):
@@ -123,7 +122,7 @@ class SnapshotTransactionJournal:
 
     def _write(self) -> None:
         """Encode and atomically replace this journal file."""
-        SnapshotSerializer.write_text(self.path, json.dumps(self.payload, indent=2))
+        SnapshotSerializer.write_text(self.path, JournalCodec.encode(self.payload))
 
 
 def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
@@ -195,17 +194,8 @@ def prepare_snapshot_metadata(storage, workspace: Path, *, field_name: str | Non
 
 
 def _validate_journal(payload: dict, scope_root: Path) -> None:
-    """Reject malformed journals and entries that refer to another storage root."""
-    if not isinstance(payload, dict) or payload.get("version") != 1:
-        raise TransactionRecoveryError("Unsupported snapshot transaction journal version.")
-    if payload.get("scope_root") != scope_root.as_posix():
-        raise TransactionRecoveryError("Transaction journal belongs to another storage scope.")
-    if not isinstance(payload.get("operation"), str):
-        raise TransactionRecoveryError("Transaction journal operation must be a string.")
-    if payload.get("state") not in _VALID_STATES:
-        raise TransactionRecoveryError("Transaction journal has an invalid state.")
-    if not isinstance(payload.get("payload"), dict):
-        raise TransactionRecoveryError("Transaction journal payload must be an object.")
+    """Validate a v1 envelope through the shared journal codec."""
+    JournalCodec.validate(payload, scope_root)
 
 
 def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
