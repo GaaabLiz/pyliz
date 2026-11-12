@@ -97,7 +97,7 @@ CI_PYTHON_VERSION ?= 3.13
 # Example for a library supporting Python 3.11 through 3.14:
 #   CI_PYTHON_VERSIONS ?= ["3.11", "3.12", "3.13", "3.14"]
 CI_PYTHON_VERSIONS ?= ["3.12", "3.13"]
-CI_TEST_OS_MATRIX ?= ["ubuntu-latest"]
+CI_TEST_OS_MATRIX ?= ["ubuntu-latest", "macos-latest", "windows-latest"]
 
 # Pin uv so upstream releases cannot silently change CI behavior.
 CI_UV_VERSION ?= 0.13.6
