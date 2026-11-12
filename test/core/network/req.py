@@ -55,6 +55,15 @@ class NetResponseTestCase(unittest.TestCase):
 
         self.assertFalse(wrapped.hasResponse)
         self.assertIn("timeout", wrapped.get_error())
+        self.assertEqual(str(wrapped), "NetResponse(code=None, type=timeout)")
+
+    def test_netresponse_get_error_with_response(self):
+        response = MagicMock()
+        response.status_code = 500
+        response.text = "Internal Server Error"
+        wrapped = NetResponse(response, NetResponseType.ERROR)
+        self.assertTrue(wrapped.is_error())
+        self.assertEqual(wrapped.get_error(), "(500): Internal Server Error")
 
     def test_no_content_response_is_successful_without_a_body(self):
         response = MagicMock()
@@ -103,6 +112,8 @@ class RequestHelpersTestCase(unittest.TestCase):
         mock_get.return_value.status_code = 200
         self.assertTrue(is_endpoint_reachable("https://example.com"))
         mock_get.return_value.status_code = 500
+        self.assertFalse(is_endpoint_reachable("https://example.com"))
+        mock_get.side_effect = requests.RequestException("Network down")
         self.assertFalse(is_endpoint_reachable("https://example.com"))
 
     @patch("pylizlib.core.network.req.requests.get", side_effect=requests.RequestException("connection failed"))
@@ -239,6 +250,17 @@ class RequestHelpersTestCase(unittest.TestCase):
     def test_exec_post_request_exception(self, _):
         result = exec_post("https://example.com", payload={})
         self.assertEqual(result.type, NetResponseType.REQUEST_ERROR)
+
+    @patch("pylizlib.core.network.req.requests.head")
+    def test_get_file_size_byte_none_header(self, mock_head):
+        response = MagicMock()
+        response.headers = {"content-length": None}
+        response.raise_for_status.return_value = None
+        mock_head.return_value = response
+
+        self.assertEqual(get_file_size_byte("https://example.com/file.bin"), -1)
+        with self.assertRaises(ValueError):
+            get_file_size_byte("https://example.com/file.bin", exception_on_fail=True)
 
     @patch("pylizlib.core.network.req.requests.head")
     def test_get_file_size_byte_success(self, mock_head):

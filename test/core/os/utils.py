@@ -59,6 +59,11 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
         with patch.object(Path, "is_relative_to", side_effect=ValueError("different drive")):
             self.assertFalse(is_critical_system_path("/non/critical/path"))
 
+    def test_invalid_path_returns_false(self):
+        with patch.object(Path, "resolve", side_effect=ValueError("Invalid path")):
+            self.assertFalse(is_critical_system_path("/any/path"))
+
+
 
 class GetFolderSizeMbTestCase(unittest.TestCase):
     def test_known_size(self):
@@ -183,6 +188,18 @@ class IsSoftwareInstalledTestCase(unittest.TestCase):
 
     def test_non_existing_path(self):
         self.assertFalse(is_software_installed(Path("/non/existing/binary")))
+
+
+class IsCommandAvailableWithRunTestCase(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_available(self, mock_run):
+        mock_run.return_value = None
+        self.assertTrue(is_command_available_with_run("git"))
+        mock_run.assert_called_once_with(["git"], check=True)
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_not_available(self, mock_run):
+        self.assertFalse(is_command_available_with_run("nonexistent_cmd"))
 
 
 class OpenSystemFolderTestCase(unittest.TestCase):
