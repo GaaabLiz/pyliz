@@ -5,6 +5,7 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import BackupType, SnapshotBackupInfo, SnapshotSettings, validate_directory_component
 from pylizlib.core.os.snap.operations.archives import _ArchiveMetadata
 from pylizlib.core.os.snap.operations.backup.manifest import parse_legacy_associations_manifest
@@ -35,52 +36,19 @@ class BackupArchiveInspector:
             with zipfile.ZipFile(backup_zip_path, "r") as archive:
                 names = archive.namelist()
                 if BACKUP_MANIFEST_NAME in names:
-                    if names.count(BACKUP_MANIFEST_NAME) != 1:
-                        raise ValueError("Snapshot backup archive contains duplicate backup manifests.")
-                    try:
-                        manifest_data = json.loads(archive.read(BACKUP_MANIFEST_NAME).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Snapshot backup manifest is invalid: {error}") from error
-                    manifest = parse_backup_manifest(manifest_data)
-                    info = SnapshotBackupInfo(
-                        backup_zip_path,
-                        backup_zip_path.name,
-                        manifest.snapshot_id,
-                        manifest.backup_type,
-                        manifest.prefix,
-                        manifest.created_at,
-                        manifest.is_export,
-                    )
-                    return _ArchiveMetadata(info, manifest.associations, manifest.os_created, BACKUP_MANIFEST_NAME)
+                    result = self._read_modern_manifest(archive, backup_zip_path, names)
+                    logger.debug("Read backup metadata archive=%s format=modern", backup_zip_path)
+                    return result
 
                 if ASSOCIATED_DIRECTORIES_MANIFEST in names:
-                    if names.count(ASSOCIATED_DIRECTORIES_MANIFEST) != 1:
-                        raise ValueError("Associated-directories archive contains duplicate legacy manifests.")
-                    try:
-                        legacy_data = json.loads(archive.read(ASSOCIATED_DIRECTORIES_MANIFEST).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Associated-directories manifest is invalid: {error}") from error
-                    snapshot_id, origin_os, associations = parse_legacy_associations_manifest(legacy_data)
-                    filename_info = self.parse_info(backup_zip_path)
-                    info = self._replace_info_identity(filename_info, snapshot_id, BackupType.ASSOCIATED_DIRECTORIES)
-                    return _ArchiveMetadata(info, tuple(associations), origin_os, ASSOCIATED_DIRECTORIES_MANIFEST)
+                    result = self._read_legacy_manifest(archive, backup_zip_path, names)
+                    logger.debug("Read backup metadata archive=%s format=legacy-ad", backup_zip_path)
+                    return result
 
                 if self.settings.json_filename in names:
-                    if names.count(self.settings.json_filename) != 1:
-                        raise ValueError("Snapshot-directory archive contains duplicate snapshot metadata files.")
-                    try:
-                        snapshot_data = json.loads(archive.read(self.settings.json_filename).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Snapshot-directory metadata is invalid: {error}") from error
-                    if not isinstance(snapshot_data, dict) or not isinstance(snapshot_data.get("id"), str) or not snapshot_data["id"]:
-                        raise ValueError("Snapshot-directory metadata has no snapshot ID.")
-                    validate_directory_component(snapshot_data["id"], "backup snapshot ID")
-                    origin_os = snapshot_data.get("os_created")
-                    if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
-                        raise ValueError("Snapshot-directory metadata contains an invalid originating OS.")
-                    filename_info = self.parse_info(backup_zip_path)
-                    info = self._replace_info_identity(filename_info, snapshot_data["id"], BackupType.SNAPSHOT_DIRECTORY)
-                    return _ArchiveMetadata(info, None, origin_os)
+                    result = self._read_snapshot_metadata(archive, backup_zip_path, names)
+                    logger.debug("Read backup metadata archive=%s format=legacy-sd", backup_zip_path)
+                    return result
         except zipfile.BadZipFile:
             # Preserve the legacy error mapping: extraction reports malformed ZIPs.
             return _ArchiveMetadata(self.parse_info(backup_zip_path))
@@ -95,3 +63,66 @@ class BackupArchiveInspector:
     def _replace_info_identity(info: SnapshotBackupInfo, snapshot_id: str, backup_type: BackupType) -> SnapshotBackupInfo:
         """Retain filename-only convenience fields while replacing ID and type from archive data."""
         return SnapshotBackupInfo(info.path, info.file_name, snapshot_id, backup_type, info.prefix, info.created_at, info.is_export)
+
+    def _read_modern_manifest(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
+        """Decode the modern identity while retaining format-specific validation."""
+        if names.count(BACKUP_MANIFEST_NAME) != 1:
+            raise ValueError("Snapshot backup archive contains duplicate backup manifests.")
+        manifest_data = self._read_json_member(archive, BACKUP_MANIFEST_NAME, "Snapshot backup manifest")
+        manifest = parse_backup_manifest(manifest_data)
+        info = SnapshotBackupInfo(
+            backup_zip_path,
+            backup_zip_path.name,
+            manifest.snapshot_id,
+            manifest.backup_type,
+            manifest.prefix,
+            manifest.created_at,
+            manifest.is_export,
+        )
+        return _ArchiveMetadata(info, manifest.associations, manifest.os_created, BACKUP_MANIFEST_NAME)
+
+    def _read_legacy_manifest(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
+        """Decode the legacy-ad identity while retaining format-specific validation."""
+        if names.count(ASSOCIATED_DIRECTORIES_MANIFEST) != 1:
+            raise ValueError("Associated-directories archive contains duplicate legacy manifests.")
+        legacy_data = self._read_json_member(archive, ASSOCIATED_DIRECTORIES_MANIFEST, "Associated-directories manifest")
+        snapshot_id, origin_os, associations = parse_legacy_associations_manifest(legacy_data)
+        filename_info = self.parse_info(backup_zip_path)
+        info = self._replace_info_identity(filename_info, snapshot_id, BackupType.ASSOCIATED_DIRECTORIES)
+        return _ArchiveMetadata(info, tuple(associations), origin_os, ASSOCIATED_DIRECTORIES_MANIFEST)
+
+    def _read_snapshot_metadata(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
+        """Decode the legacy-sd identity while retaining format-specific validation."""
+        if names.count(self.settings.json_filename) != 1:
+            raise ValueError("Snapshot-directory archive contains duplicate snapshot metadata files.")
+        snapshot_data = self._read_json_member(archive, self.settings.json_filename, "Snapshot-directory metadata")
+        if not isinstance(snapshot_data, dict) or not isinstance(snapshot_data.get("id"), str) or not snapshot_data["id"]:
+            raise ValueError("Snapshot-directory metadata has no snapshot ID.")
+        validate_directory_component(snapshot_data["id"], "backup snapshot ID")
+        origin_os = snapshot_data.get("os_created")
+        if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
+            raise ValueError("Snapshot-directory metadata contains an invalid originating OS.")
+        filename_info = self.parse_info(backup_zip_path)
+        info = self._replace_info_identity(filename_info, snapshot_data["id"], BackupType.SNAPSHOT_DIRECTORY)
+        return _ArchiveMetadata(info, None, origin_os)
+
+    @staticmethod
+    def _read_json_member(archive: zipfile.ZipFile, member: str, label: str) -> object:
+        """Decode one UTF-8 JSON member, preserving the original error category.
+
+        Args:
+            archive (zipfile.ZipFile): Open archive owned by the inspection context.
+            member (str): Already-recognized metadata member name.
+            label (str): Format-specific prefix for a malformed-content error.
+
+        Returns:
+            object: Decoded JSON value; each format validates its own schema.
+
+        Raises:
+            ValueError: If UTF-8 decoding or JSON parsing fails, with its cause chained.
+            OSError: If reading the member fails.
+        """
+        try:
+            return json.loads(archive.read(member).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError(f"{label} is invalid: {error}") from error

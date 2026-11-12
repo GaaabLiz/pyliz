@@ -18,7 +18,7 @@ from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAM
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 
 
-def test_inspector_uses_embedded_identity_and_preserves_strict_precedence(tmp_path):
+def test_inspector_uses_embedded_identity_and_preserves_strict_precedence(tmp_path, caplog):
     """A modern manifest governs renamed ZIPs, and an invalid one cannot fall back."""
     snapshot = Snapshot("embedded-id", "name", "description")
     manifest = build_backup_manifest(snapshot, BackupType.SNAPSHOT_DIRECTORY, "prefix", False, "20260102_030405")
@@ -26,10 +26,13 @@ def test_inspector_uses_embedded_identity_and_preserves_strict_precedence(tmp_pa
     inspector = BackupArchiveInspector(SnapshotSettings(), parse_backup_filename)
     with zipfile.ZipFile(archive, "w") as stream:
         stream.writestr(BACKUP_MANIFEST_NAME, json.dumps(manifest))
-    result = inspector.read(archive)
+    with caplog.at_level("DEBUG", logger="PylizLib"):
+        result = inspector.read(archive)
     assert result.info.snapshot_id == "embedded-id"
     assert result.info.prefix == "prefix"
     assert result.info.backup_type == BackupType.SNAPSHOT_DIRECTORY
+    assert "format=modern" in caplog.text
+    assert "description" not in caplog.text
 
     with zipfile.ZipFile(archive, "w") as stream:
         stream.writestr(BACKUP_MANIFEST_NAME, "{}")
@@ -105,3 +108,18 @@ def test_restore_stages_every_copy_before_modifying_targets(tmp_path, monkeypatc
     assert [(task.destination / "content").read_text() for task in tasks] == ["old", "old"]
     assert all(not task.staged_dir.exists() and not task.backup_dest.exists() for task in tasks)
     assert not (catalogue / ".pyliz_transactions").exists()
+
+
+@pytest.mark.parametrize(
+    ("member", "message"),
+    [(BACKUP_MANIFEST_NAME, "Snapshot backup manifest"), (".pyliz_ad_manifest.json", "Associated-directories manifest"), ("snapshot.json", "Snapshot-directory metadata")],
+)
+def test_each_metadata_format_retains_its_decode_error(tmp_path, member, message):
+    """Common JSON decoding preserves format-specific diagnostics and the cause."""
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as stream:
+        stream.writestr(member, b"\xff")
+    inspector = BackupArchiveInspector(SnapshotSettings(), parse_backup_filename)
+    with pytest.raises(ValueError, match=message + " is invalid") as error:
+        inspector.read(archive)
+    assert isinstance(error.value.__cause__, UnicodeDecodeError)
