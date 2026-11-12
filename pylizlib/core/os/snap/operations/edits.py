@@ -1,12 +1,12 @@
 """Plan and apply directory-association changes using stable folder IDs."""
 
-from copy import deepcopy
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
+from pylizlib.core.os.snap.model_state import restore_snapshot_model
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 from pylizlib.core.os.snap.storage.transactions import (
@@ -137,10 +137,7 @@ class SnapshotEditor:
 
     def _apply_plan(self, plan: EditPlan, message_callback=None) -> None:
         """Journal staged moves and the proposed JSON before final publication."""
-        moves = [
-            {"source": move.source.name, "target": move.target.name if move.target is not None else None, "staged": f"original_{index}"}
-            for index, move in enumerate(plan.moves)
-        ]
+        moves = [{"source": move.source.name, "target": move.target.name if move.target is not None else None, "staged": f"original_{index}"} for index, move in enumerate(plan.moves)]
         additions = [{"target": association.directory_name, "staged": f"addition_{index}"} for index, association in enumerate(plan.additions)]
         journal = SnapshotTransactionJournal.begin(
             self.storage.path_snapshot,
@@ -164,15 +161,8 @@ class SnapshotEditor:
                 rename_and_sync(move.source, staging_path / f"original_{index}")
 
             journal.update_payload(phase="publishing")
-            publications = [
-                (staging_path / move["staged"], self.storage.child_path(move["target"]))
-                for move in moves
-                if move["target"] is not None
-            ]
-            publications.extend(
-                (staging_path / addition["staged"], self.storage.child_path(addition["target"]))
-                for addition in additions
-            )
+            publications = [(staging_path / move["staged"], self.storage.child_path(move["target"])) for move in moves if move["target"] is not None]
+            publications.extend((staging_path / addition["staged"], self.storage.child_path(addition["target"])) for addition in additions)
             for staged, target in publications:
                 if target.exists() or target.is_symlink():
                     raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
@@ -212,20 +202,4 @@ class SnapshotEditor:
     @staticmethod
     def _restore_snapshot_model(snapshot: Snapshot, previous: Snapshot) -> None:
         """Restore a failed edit's model while preserving existing association objects."""
-        live_by_id = {association.folder_id: association for association in snapshot.directories}
-        restored_directories = []
-        association_fields = ("index", "original_path", "folder_id", "mb_size", "integrity_manifest")
-        for old_association in previous.directories:
-            association = live_by_id.get(old_association.folder_id)
-            if association is None:
-                association = deepcopy(old_association)
-            else:
-                for name in association_fields:
-                    setattr(association, name, deepcopy(getattr(old_association, name)))
-                association._set_storage_name(old_association.directory_name)
-            restored_directories.append(association)
-
-        for model_field in fields(Snapshot):
-            if model_field.name != "directories":
-                setattr(snapshot, model_field.name, deepcopy(getattr(previous, model_field.name)))
-        snapshot.directories[:] = restored_directories
+        restore_snapshot_model(snapshot, previous)
