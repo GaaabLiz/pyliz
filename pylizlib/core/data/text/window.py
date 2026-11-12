@@ -29,8 +29,8 @@ class TextWindow:
             limit (int): Maximum retained character count for this scan.
 
         Returns:
-            None: Text and coordinates are updated in place using the existing
-            rule for whether the retained first line is incomplete.
+            None: Text and coordinates are updated in place using the existing rule for whether the retained first
+                line is incomplete.
         """
         self.text += chunk
         self._trim(limit)
@@ -55,8 +55,8 @@ class TextWindow:
             limit (int): Maximum character count to retain.
 
         Returns:
-            None: Unchanged when text already fits; otherwise records the dropped
-            suffix boundary exactly as the previous streaming implementation did.
+            None: Unchanged when text already fits; otherwise records the dropped suffix boundary exactly as the
+                previous streaming implementation did.
         """
         dropped_count = max(0, len(self.text) - limit)
         if dropped_count:

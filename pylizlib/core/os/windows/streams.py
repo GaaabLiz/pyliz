@@ -5,12 +5,34 @@ from pathlib import Path
 
 
 def copy_streams(source: Path, destination: Path) -> None:
-    """Copy NTFS alternate data streams exposed by FindFirstStreamW."""
+    """Copy NTFS alternate data streams exposed by FindFirstStreamW.
+
+    Args:
+        source (Path): Source file or directory whose contents or metadata are read.
+        destination (Path): Target path receiving the copied content or metadata.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        OSError: Stream enumeration or byte copying fails. Native errors 1, 38 and 50
+            on the first enumeration mean this source exposes no supported streams.
+        AttributeError: The host does not provide ctypes.WinDLL; call this only on Windows.
+
+    Notes:
+        The default unnamed data stream is excluded. Only named :$DATA streams
+        are copied, and the native enumeration handle is closed in all cases.
+    """
     import ctypes
     from ctypes import wintypes
 
     class FindStreamData(ctypes.Structure):
-        """Win32 stream enumeration result layout."""
+        """Win32 stream enumeration result layout.
+
+        Attributes:
+            stream_size (int): Native signed 64-bit stream byte count.
+            stream_name (str): Native WCHAR[296] stream name including its type suffix.
+        """
 
         _fields_ = [("stream_size", ctypes.c_longlong), ("stream_name", wintypes.WCHAR * 296)]
 

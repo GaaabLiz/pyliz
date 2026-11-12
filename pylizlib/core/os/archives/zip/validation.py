@@ -16,8 +16,8 @@ class ZipArchivePreflight:
     Attributes:
         entry_count (int): Number of members, including explicit directory entries.
         uncompressed_bytes (int): Sum of the members' declared expanded byte sizes.
-        bytes_by_root (dict[str, int]): Expanded sizes grouped by first path component.
-            The dictionary is mutable even though the record fields are frozen.
+        bytes_by_root (dict[str, int]): Expanded sizes grouped by first path component. The dictionary is mutable
+            even though the record fields are frozen.
     """
 
     entry_count: int
@@ -36,15 +36,15 @@ def validate_zip_archive(
     Args:
         zip_path (Path): ZIP to inspect. The member table is read into memory.
         max_entries (int | None): Maximum members, or None to disable this bound.
-        max_uncompressed_bytes (int | None): Maximum declared expanded bytes,
-            or None to disable this bound. Equality with either limit is allowed.
+        max_uncompressed_bytes (int | None): Maximum declared expanded bytes, or None to disable this bound.
+            Equality with either limit is allowed.
 
     Returns:
         ZipArchivePreflight: Counts and sizes for accepted members.
 
     Raises:
-        ValueError: If the ZIP is invalid or a member is absolute, ambiguous,
-            duplicate, encrypted, a symbolic link, or exceeds a resource bound.
+        ValueError: If the ZIP is invalid or a member is absolute, ambiguous, duplicate, encrypted, a symbolic
+            link, or exceeds a resource bound.
         OSError: If inspection fails for another reason, with the cause chained.
 
     Notes:

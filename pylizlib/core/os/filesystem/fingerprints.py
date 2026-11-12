@@ -12,7 +12,19 @@ from pylizlib.core.os.filesystem.tree import is_link_or_junction as _is_link_or_
 def fingerprint_tree(root: Path) -> dict[str, tuple[str, int | str]]:
     """Fingerprint source files and directories, rejecting links and special files.
 
-    This scan representation is distinct from the persisted integrity manifest."""
+    This scan representation is distinct from the persisted integrity manifest.
+
+    Args:
+        root (Path): Root directory for the tree operation; link and existence policy is described above.
+
+    Returns:
+        dict[str, tuple[str, int | str]]: Relative path fingerprint preserving empty directories, file SHA-256
+            digests and byte sizes.
+
+    Raises:
+        NotADirectoryError: A required real directory is missing, is a link, or has another entry type.
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+    """
     assert_no_symlinks(root)
     root_mode = root.lstat().st_mode
     if _is_link_or_junction(root) or not stat.S_ISDIR(root_mode):

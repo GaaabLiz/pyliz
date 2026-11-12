@@ -4,7 +4,18 @@ from pathlib import Path
 
 
 def copy_security(source: Path, destination: Path) -> None:
-    """Copy the Windows owner, group and discretionary access control list."""
+    """Copy the Windows owner, group and discretionary access control list.
+
+    Args:
+        source (Path): Source file or directory whose contents or metadata are read.
+        destination (Path): Target path receiving the copied content or metadata.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        NotImplementedError: The platform cannot provide required metadata or filesystem capabilities.
+    """
     try:
         import win32security
     except ImportError as error:
@@ -27,12 +38,12 @@ def grant_everyone_full_control(path: Path, *, security_api, con) -> None:
         None: After replacing the directory's security descriptor DACL.
 
     Raises:
-        Exception: Account lookup, descriptor, ACL and native write failures propagate
-            so the calling policy can decide whether they are fatal.
+        Exception: Account lookup, descriptor, ACL and native write failures propagate so the calling policy can
+            decide whether they are fatal.
 
     Notes:
-        The historical account name Everyone is retained; SID/localization changes
-        require a separate functional change. No dependency is loaded by this function.
+        The historical account name Everyone is retained; SID/localization changes require a separate functional
+        change. No dependency is loaded by this function.
     """
     everyone, domain, type = security_api.LookupAccountName("", "Everyone")
     sd = security_api.GetFileSecurity(str(path), security_api.DACL_SECURITY_INFORMATION)

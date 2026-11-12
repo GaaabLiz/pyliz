@@ -27,18 +27,18 @@ def extract_zip(
         destination (Path): Extraction directory, created after successful validation.
         max_entries (int | None): Maximum members; None disables the limit.
         max_uncompressed_bytes (int | None): Maximum expanded bytes; None disables it.
-        additional_space_paths (Iterable[Path]): Existing directories requiring a
-            simultaneous full-size copy of the expanded archive.
-        additional_space_requirements (Iterable[tuple[Path, int]]): Explicit
-            additional byte requirements, summed with the full-copy requirements.
+        additional_space_paths (Iterable[Path]): Existing directories requiring a simultaneous full-size copy of
+            the expanded archive.
+        additional_space_requirements (Iterable[tuple[Path, int]]): Explicit additional byte requirements, summed
+            with the full-copy requirements.
 
     Returns:
         None: On extraction success; the caller owns the extracted tree and cleanup.
 
     Raises:
         ValueError: If ZIP structure, members or resource bounds are invalid.
-        OSError: If capacity checks, I/O or decompression fails. The exception
-            message identifies extraction; a partial destination may remain.
+        OSError: If capacity checks, I/O or decompression fails. The exception message identifies extraction; a
+            partial destination may remain.
     """
     try:
         preflight = validate_zip_archive(

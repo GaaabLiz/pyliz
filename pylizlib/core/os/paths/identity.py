@@ -16,12 +16,12 @@ def same_filesystem_entry(first: str | Path, second: str | Path) -> bool:
         second (str | Path): Path to compare with first.
 
     Returns:
-        bool: True for equal lexical paths or aliases of one existing entry.
-        False for unequal paths when either entry is missing.
+        bool: True for equal lexical paths or aliases of one existing entry. False for unequal paths when either
+            entry is missing.
 
     Raises:
-        ValueError: If an OS error other than a missing entry prevents comparison.
-            The original OSError remains available as the exception cause.
+        ValueError: If an OS error other than a missing entry prevents comparison. The original OSError remains
+            available as the exception cause.
     """
     first_path = Path(first)
     second_path = Path(second)

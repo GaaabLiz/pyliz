@@ -13,10 +13,10 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
 
     Args:
         zip_path (Path): Final archive path; an existing entry may be replaced.
-        files (Iterable[tuple[Path, Path]]): Source entries and relative archive names.
-            The iterable is fully consumed before the temporary ZIP is created.
-        message_callback (Callable[[str], None] | None): Optional observer called
-            before each member is archived; its exceptions propagate.
+        files (Iterable[tuple[Path, Path]]): Source entries and relative archive names. The iterable is fully
+            consumed before the temporary ZIP is created.
+        message_callback (Callable[[str], None] | None): Optional observer called before each member is archived;
+            its exceptions propagate.
 
     Returns:
         Path: The final ZIP path after publication.
@@ -26,8 +26,8 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
         zipfile.BadZipFile: If a member fails the post-close CRC check.
 
     Notes:
-        Member-name policy belongs to the caller; use validation before extracting.
-        CRC verification is not authentication or a guarantee of storage durability.
+        Member-name policy belongs to the caller; use validation before extracting. CRC verification is not
+        authentication or a guarantee of storage durability.
     """
     return _write_verified_zip(zip_path, files, message_callback, replace_existing=True)
 
@@ -58,8 +58,8 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
         zip_path (Path): Final path and parent used for same-filesystem staging.
         files (Iterable[tuple[Path, Path]]): Source entries and member names.
         message_callback (Callable[[str], None] | None): Per-member observer.
-        replace_existing (bool): Replace the final entry when True, otherwise link
-            exclusively. Cleanup errors are logged without hiding the main result.
+        replace_existing (bool): Replace the final entry when True, otherwise link exclusively. Cleanup errors are
+            logged without hiding the main result.
 
     Returns:
         Path: Final path after CRC verification and publication.
