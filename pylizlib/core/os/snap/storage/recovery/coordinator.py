@@ -7,9 +7,12 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.recovery.edits import _recover_edit
-from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _refresh_snapshot_model, _restore_old_metadata
+from pylizlib.core.os.snap.storage.recovery.metadata import _refresh_snapshot_model
 from pylizlib.core.os.snap.storage.recovery.models import JOURNAL_FILENAME, TRANSACTION_DIRECTORY, JournalCodec
-from pylizlib.core.os.snap.storage.recovery.replacements import _cleanup_replacements, _complete_replacements, _rollback_replacements, _validate_manifest_restore_entries, _validate_replacement_entries
+from pylizlib.core.os.snap.storage.recovery.replacements import (
+    recover_manifest_restore,
+    recover_replacements,
+)
 from pylizlib.core.os.snap.storage.recovery.tree import _recover_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
@@ -104,19 +107,8 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
         _recover_snapshot_tree(journal, state, data)
         return
     if operation == "restore_associations_manifest":
-        _validate_manifest_restore_entries(data, journal.workspace)
-        if state in {"prepared", "rollback_decided"}:
-            _rollback_replacements(data)
-            journal.cleanup()
-            return
-        if state in {"commit_decided", "committed"}:
-            _complete_replacements(data)
-            if state == "commit_decided":
-                journal.set_state("committed")
-            _cleanup_replacements(data)
-            journal.cleanup()
-            return
-        raise TransactionRecoveryError("Manifest restore journal has an unsupported state.")
+        recover_manifest_restore(journal, state, data)
+        return
     if storage is None:
         raise TransactionRecoveryError(f"Transaction '{operation}' requires snapshot metadata context.")
     if operation == "edit":
@@ -124,17 +116,4 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
         return
     if operation not in {"install", "sync", "restore_associations"}:
         raise TransactionRecoveryError(f"Unknown snapshot transaction type: {operation!r}.")
-    _validate_replacement_entries(operation, data, storage, journal.workspace)
-    if state in {"prepared", "rollback_decided"}:
-        _rollback_replacements(data)
-        if state == "rollback_decided" and data.get("metadata"):
-            _restore_old_metadata(journal, data, storage)
-        journal.cleanup()
-        return
-    if state in {"commit_decided", "committed"}:
-        _complete_replacements(data)
-        if state == "commit_decided":
-            _publish_new_metadata(journal, data, storage)
-            journal.set_state("committed")
-        _cleanup_replacements(data)
-        journal.cleanup()
+    recover_replacements(journal, state, data, storage, operation)

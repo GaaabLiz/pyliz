@@ -2,7 +2,7 @@
 
 import pytest
 
-from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError, recover_pending_transactions
 
 
 @pytest.mark.parametrize("state", ["prepared", "rollback_decided", "commit_decided", "committed"])
@@ -71,3 +71,20 @@ def test_journal_logs_only_persisted_decisions(tmp_path, monkeypatch, caplog):
         with pytest.raises(OSError, match="persistence failed"):
             journal.set_state("committed")
     assert "decision=committed" not in caplog.text
+
+
+@pytest.mark.parametrize("has_storage", [False, True])
+def test_dispatch_checks_metadata_context_before_unknown_operation(tmp_path, has_storage):
+    """The legacy first failure differs depending on whether metadata context exists."""
+    journal = SnapshotTransactionJournal(tmp_path, {"operation": "unknown", "state": "prepared", "payload": {}})
+    expected = "Unknown snapshot transaction type" if has_storage else "requires snapshot metadata context"
+    with pytest.raises(TransactionRecoveryError, match=expected):
+        journal.recover(object() if has_storage else None)
+
+
+def test_standalone_restore_rejects_unknown_state_before_cleanup(tmp_path):
+    """Direct journal replay still rejects a state not handled by the AD handler."""
+    journal = SnapshotTransactionJournal(tmp_path, {"operation": "restore_associations_manifest", "state": "unknown", "payload": {"entries": []}})
+    with pytest.raises(TransactionRecoveryError, match="unsupported state"):
+        journal.recover()
+    assert tmp_path.is_dir()

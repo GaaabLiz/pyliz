@@ -9,8 +9,8 @@ from pathlib import Path
 from pylizlib.core.os.filesystem.durability import rename_and_sync
 from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
-from pylizlib.core.os.snap.storage.recovery.metadata import _validate_metadata_paths
-from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError
+from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _restore_old_metadata, _validate_metadata_paths
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
@@ -263,3 +263,38 @@ class ReplacementValidator:
                 allowed = False
             if not allowed:
                 raise TransactionRecoveryError("Replacement journal staging root is outside its generated staging paths.")
+
+
+def recover_manifest_restore(journal: SnapshotTransactionJournal, state: str, data: dict) -> None:
+    """Recover a standalone AD restore without requiring catalogue snapshot metadata."""
+    _validate_manifest_restore_entries(data, journal.workspace)
+    if state in {"prepared", "rollback_decided"}:
+        _rollback_replacements(data)
+        journal.cleanup()
+        return
+    if state in {"commit_decided", "committed"}:
+        _complete_replacements(data)
+        if state == "commit_decided":
+            journal.set_state("committed")
+        _cleanup_replacements(data)
+        journal.cleanup()
+        return
+    raise TransactionRecoveryError("Manifest restore journal has an unsupported state.")
+
+
+def recover_replacements(journal: SnapshotTransactionJournal, state: str, data: dict, storage, operation: str) -> None:
+    """Recover install/sync/legacy AD replacements with the matching metadata policy."""
+    _validate_replacement_entries(operation, data, storage, journal.workspace)
+    if state in {"prepared", "rollback_decided"}:
+        _rollback_replacements(data)
+        if state == "rollback_decided" and data.get("metadata"):
+            _restore_old_metadata(journal, data, storage)
+        journal.cleanup()
+        return
+    if state in {"commit_decided", "committed"}:
+        _complete_replacements(data)
+        if state == "commit_decided":
+            _publish_new_metadata(journal, data, storage)
+            journal.set_state("committed")
+        _cleanup_replacements(data)
+        journal.cleanup()
