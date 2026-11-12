@@ -1,0 +1,140 @@
+"""Scan pending journals and dispatch validated recovery to the matching handler."""
+
+import json
+from pathlib import Path
+
+from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
+from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.recovery.edits import _recover_edit
+from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _refresh_snapshot_model, _restore_old_metadata
+from pylizlib.core.os.snap.storage.recovery.models import JOURNAL_FILENAME, TRANSACTION_DIRECTORY, JournalCodec
+from pylizlib.core.os.snap.storage.recovery.replacements import _cleanup_replacements, _complete_replacements, _rollback_replacements, _validate_manifest_restore_entries, _validate_replacement_entries
+from pylizlib.core.os.snap.storage.recovery.tree import _recover_snapshot_tree
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
+from pylizlib.core.os.snap.storage.tree import is_link_or_junction
+
+
+def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
+    """Recover every journal in one storage scope before new work begins.
+
+    A ``prepared`` transaction rolls back; a ``commit_decided`` transaction
+    finishes publishing its staged metadata; ``committed`` only needs cleanup.
+    Journals that cannot be validated or recovered are left in place and raised
+    so callers never proceed over an ambiguous tree.
+
+    Args:
+        scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing resolved-path policy.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+
+
+    Returns:
+        list[str]: Recovered operation names in workspace order; empty when no journal needed recovery. Recovery may rename/delete entries and refresh the live model.
+    """
+    scope_root = Path(scope_root).resolve(strict=False)
+    transactions_path = scope_root / TRANSACTION_DIRECTORY
+    if is_link_or_junction(transactions_path):
+        raise TransactionRecoveryError(f"Transaction directory '{transactions_path}' cannot be a link.")
+    if not transactions_path.exists():
+        return []
+    recovered = []
+    for workspace in sorted(transactions_path.iterdir()):
+        if is_link_or_junction(workspace) or not workspace.is_dir():
+            raise TransactionRecoveryError(f"Unexpected entry in transaction directory: '{workspace}'.")
+        journal_path = workspace / JOURNAL_FILENAME
+        if not journal_path.exists():
+            # The process could stop after creating an empty workspace but before
+            # publishing its journal. No destructive operation starts before it.
+            _remove_path(workspace)
+            continue
+        try:
+            payload = json.loads(SnapshotSerializer.read_text(journal_path))
+            JournalCodec.validate(payload, scope_root)
+            journal = SnapshotTransactionJournal(workspace, payload)
+            logger.info("Recovering snapshot operation=%s journal=%s state=%s", payload["operation"], workspace.name, payload["state"])
+            _recover_one(journal, storage)
+            logger.info("Recovered snapshot operation=%s journal=%s", payload["operation"], workspace.name)
+        except Exception as error:
+            if isinstance(error, TransactionRecoveryError):
+                raise
+            raise TransactionRecoveryError(f"Could not recover transaction '{workspace}': {error}") from error
+        recovered.append(str(payload["operation"]))
+    try:
+        transactions_path.rmdir()
+    except OSError:
+        # Another transaction may have started after the scan. Its own journal
+        # remains authoritative; leaving the shared parent is harmless.
+        pass
+    if recovered and storage is not None and storage.path_snapshot_json.is_file():
+        _refresh_snapshot_model(storage)
+    return recovered
+
+
+def recover_storage_transactions(storage) -> list[str]:
+    """Recover catalogue-root and snapshot-root journals before a new operation.
+
+    Args:
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+
+
+    Returns:
+        list[str]: Operation names recovered first from catalogue scope, then snapshot scope.
+    """
+    recovered = recover_pending_transactions(storage.path_catalogue, storage)
+    if storage.path_snapshot.is_dir():
+        recovered.extend(recover_pending_transactions(storage.path_snapshot, storage))
+    return recovered
+
+
+def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
+    """Dispatch one journal to rollback, commit completion or cleanup.
+
+    Args:
+        journal (SnapshotTransactionJournal): Live journal owning the workspace, durable state and cleanup.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+
+
+    Returns:
+        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+    """
+    operation = journal.payload["operation"]
+    state = journal.payload["state"]
+    data = journal.payload["payload"]
+    if operation == "snapshot_tree":
+        _recover_snapshot_tree(journal, state, data)
+        return
+    if operation == "restore_associations_manifest":
+        _validate_manifest_restore_entries(data, journal.workspace)
+        if state in {"prepared", "rollback_decided"}:
+            _rollback_replacements(data)
+            journal.cleanup()
+            return
+        if state in {"commit_decided", "committed"}:
+            _complete_replacements(data)
+            if state == "commit_decided":
+                journal.set_state("committed")
+            _cleanup_replacements(data)
+            journal.cleanup()
+            return
+        raise TransactionRecoveryError("Manifest restore journal has an unsupported state.")
+    if storage is None:
+        raise TransactionRecoveryError(f"Transaction '{operation}' requires snapshot metadata context.")
+    if operation == "edit":
+        _recover_edit(journal, state, data, storage)
+        return
+    if operation not in {"install", "sync", "restore_associations"}:
+        raise TransactionRecoveryError(f"Unknown snapshot transaction type: {operation!r}.")
+    _validate_replacement_entries(operation, data, storage, journal.workspace)
+    if state in {"prepared", "rollback_decided"}:
+        _rollback_replacements(data)
+        if state == "rollback_decided" and data.get("metadata"):
+            _restore_old_metadata(journal, data, storage)
+        journal.cleanup()
+        return
+    if state in {"commit_decided", "committed"}:
+        _complete_replacements(data)
+        if state == "commit_decided":
+            _publish_new_metadata(journal, data, storage)
+            journal.set_state("committed")
+        _cleanup_replacements(data)
+        journal.cleanup()
