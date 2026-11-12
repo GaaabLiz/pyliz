@@ -7,16 +7,15 @@ from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
 
 def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
-    """
-    Constructs the full path to a snapshot's directory within the catalogue.
+    """Constructs the full path to a snapshot's directory within the catalogue.
     Validates the folder name to prevent path traversal.
 
     Args:
-        folder_name: The name of the snapshot's folder (usually the snapshot ID).
-        catalogue_path: The base path of the snapshot catalogue.
+        folder_name (str): The name of the snapshot's folder (usually the snapshot ID).
+        catalogue_path (Path): The base path of the snapshot catalogue.
 
     Returns:
-        The full path to the snapshot's directory.
+        Path: The full path to the snapshot's directory.
 
     Raises:
         ValueError: If the folder_name attempts path traversal or is invalid.
@@ -51,7 +50,18 @@ def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
 
 
 def validate_snapshot_root(folder_name: str, catalogue_path: Path) -> Path:
-    """Return the snapshot root, rejecting a root replaced by a symlink."""
+    """Return the snapshot root, rejecting a root replaced by a symlink.
+
+    Args:
+        folder_name (str): Snapshot ID used as a single catalogue-directory component.
+        catalogue_path (Path): Catalogue directory containing snapshot ID subdirectories.
+
+    Returns:
+        Path: Contained snapshot directory path, rejecting a root currently replaced by a link.
+
+    Raises:
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+    """
     root = get_snapshot_path(folder_name, catalogue_path)
     if is_link_or_junction(root):
         raise ValueError(f"Snapshot root '{root}' cannot be a symbolic link.")
@@ -59,7 +69,19 @@ def validate_snapshot_root(folder_name: str, catalogue_path: Path) -> Path:
 
 
 def get_snapshot_child_path(folder_name: str, catalogue_path: Path, child_name: str) -> Path:
-    """Resolve and contain a single child path beneath its snapshot root."""
+    """Resolve and contain a single child path beneath its snapshot root.
+
+    Args:
+        folder_name (str): Snapshot ID used as a single catalogue-directory component.
+        catalogue_path (Path): Catalogue directory containing snapshot ID subdirectories.
+        child_name (str): Single direct-child component to resolve below the validated snapshot root.
+
+    Returns:
+        Path: Validated direct child path with no current link escape from the stored root.
+
+    Raises:
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+    """
     validate_directory_component(child_name)
     root = validate_snapshot_root(folder_name, catalogue_path)
     destination = root / child_name
@@ -72,15 +94,14 @@ def get_snapshot_child_path(folder_name: str, catalogue_path: Path, child_name: 
 
 
 def get_snapshot_json_path(folder_name: str, catalogue_path: Path, json_filename: str) -> Path:
-    """
-    Constructs the full path to a snapshot's JSON file.
+    """Constructs the full path to a snapshot's JSON file.
 
     Args:
-        folder_name: The name of the snapshot's folder.
-        catalogue_path: The base path of the snapshot catalogue.
-        json_filename: The name of the JSON file.
+        folder_name (str): The name of the snapshot's folder.
+        catalogue_path (Path): The base path of the snapshot catalogue.
+        json_filename (str): The name of the JSON file.
 
     Returns:
-        The full path to the snapshot's JSON file.
+        Path: The full path to the snapshot's JSON file.
     """
     return get_snapshot_child_path(folder_name, catalogue_path, json_filename)

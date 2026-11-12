@@ -12,6 +12,18 @@ def build_backup_filename(snapshot_id: str, prefix: str, backup_type: BackupType
 
     The operation validates backup_type before calling this naming function.
     Keeping the timestamp as an input preserves its original acquisition point.
+
+    Args:
+        snapshot_id (str): Snapshot ID expected in metadata and used for the destination directory.
+        prefix (str): Backup filename prefix recorded unchanged in the archive manifest.
+        backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+            (SD).
+        timestamp (str): Creation timestamp in YYYYMMDD_HHMMSS format using the existing naive/local naming
+            convention.
+        is_export (bool): Whether the backup uses the existing export naming convention.
+
+    Returns:
+        str: ZIP basename using the existing ID/prefix/type/timestamp/export grammar.
     """
     backup_type_suffix = ""
     if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
@@ -24,7 +36,15 @@ def build_backup_filename(snapshot_id: str, prefix: str, backup_type: BackupType
 
 
 def parse_backup_filename(backup_path: Path) -> SnapshotBackupInfo:
-    """Parse legacy filename hints; embedded manifests are authoritative for new backups."""
+    """Parse legacy filename hints; embedded manifests are authoritative for new backups.
+
+    Args:
+        backup_path (Path): Directory receiving completed backups and same-directory temporary archive files.
+
+    Returns:
+        SnapshotBackupInfo: Best-effort filename hints, including legacy collision suffixes; embedded manifests
+            remain authoritative.
+    """
     stem = backup_path.stem
     created_at = None
     backup_type: BackupType | None = None

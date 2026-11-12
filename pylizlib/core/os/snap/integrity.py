@@ -16,7 +16,25 @@ class SnapshotIntegrityError(RuntimeError):
 
 
 def validate_integrity_manifest(manifest: IntegrityManifest | None) -> None:
-    """Validate a serialized tree manifest and all of its relative paths."""
+    """Validate a serialized tree manifest and all of its relative paths.
+
+    Args:
+        manifest (IntegrityManifest | None): Stored integrity mapping to validate; None denotes unverified legacy
+            content and is accepted.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        TypeError: An argument or mutable model field has a type rejected by this contract.
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+
+    Notes:
+        None denotes legacy unverified content. Otherwise paths are relative POSIX spellings, entries describe
+        file/directory type and non-negative integer byte size, file hashes are lowercase SHA-256, and the
+        required dot-root entry describes an empty-hash directory. Unknown per-entry fields are not normalized
+        away.
+    """
     if manifest is None:
         return
     if not isinstance(manifest, dict):
@@ -51,14 +69,35 @@ def validate_integrity_manifest(manifest: IntegrityManifest | None) -> None:
 
 
 def integrity_manifest_size_mb(manifest: IntegrityManifest) -> float:
-    """Return the captured file-content size in MiB from a validated manifest."""
+    """Return the captured file-content size in MiB from a validated manifest.
+
+    Args:
+        manifest (IntegrityManifest): Complete captured integrity mapping, including the dot-root directory entry;
+            this operation requires a manifest rather than None.
+
+    Returns:
+        float: Sum of captured file byte sizes divided by 1024**2; directory entries contribute zero.
+    """
     validate_integrity_manifest(manifest)
     total_bytes = sum(entry["size"] for entry in manifest.values() if entry["type"] == "file")
     return total_bytes / (1024 * 1024)
 
 
 def assert_manifest_matches(expected: IntegrityManifest, observed: IntegrityManifest) -> None:
-    """Raise a useful error if expected and copied tree entries differ."""
+    """Raise a useful error if expected and copied tree entries differ.
+
+    Args:
+        expected (IntegrityManifest): Expected manifest or stat identity, according to the annotated contract.
+        observed (IntegrityManifest): Observed integrity mapping or entry identity to compare with the expected
+            value.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        SnapshotIntegrityError: Captured and expected content differ in paths, entry types, sizes or SHA-256
+            values.
+    """
     validate_integrity_manifest(expected)
     validate_integrity_manifest(observed)
     if expected == observed:

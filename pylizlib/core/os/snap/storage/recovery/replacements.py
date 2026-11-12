@@ -21,18 +21,27 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
+
+    # Reject malformed payload shape before deriving trusted storage boundaries.
     entries = data.get("entries")
     if not isinstance(entries, list):
         raise TransactionRecoveryError("Manifest restore journal has no entry list.")
+
+    # Resolve transaction storage before comparing external restore destinations.
     workspace = workspace.resolve(strict=False)
     scope_root = workspace.parent.parent.resolve(strict=False)
     transaction_root = workspace.parent.resolve(strict=False)
     seen_ids = set()
     destinations = []
+
+    # Validate each identity and generated path before considering pairwise overlap.
     for entry in entries:
         if not isinstance(entry, dict):
             raise TransactionRecoveryError("Manifest restore journal entry must be an object.")
@@ -48,6 +57,8 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
         stage = Path(entry["stage"])
         destination = Path(entry["destination"])
         backup = Path(entry["backup"])
+
+        # Standalone restore requires absolute staging, destination and backup siblings.
         if not stage.is_absolute() or not destination.is_absolute() or not backup.is_absolute():
             raise TransactionRecoveryError("Manifest restore journal paths must be absolute.")
         if stage.parent.resolve(strict=False) != destination.parent.resolve(strict=False):
@@ -56,6 +67,8 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
             raise TransactionRecoveryError("Manifest restore staging path is not a generated destination sibling.")
         if backup.parent != destination.parent or not backup.name.startswith(f"{destination.name}_bck_"):
             raise TransactionRecoveryError("Manifest restore backup is not a generated sibling of its destination.")
+
+        # Live targets must not overlap the catalogue transaction storage.
         resolved_destination = destination.resolve(strict=False)
         if resolved_destination == scope_root or scope_root in resolved_destination.parents:
             raise TransactionRecoveryError("Manifest restore destination overlaps catalogue transaction storage.")
@@ -63,6 +76,7 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
             raise TransactionRecoveryError("Manifest restore destination overlaps its transaction workspace.")
         destinations.append((folder_id, resolved_destination))
 
+    # Compare all resolved destinations only after their individual records are valid.
     for index, (folder_id, destination) in enumerate(destinations):
         for other_id, other_destination in destinations[index + 1 :]:
             if destination == other_destination or destination in other_destination.parents or other_destination in destination.parents:
@@ -75,12 +89,16 @@ def _validate_replacement_entries(operation: str, data: dict, storage, workspace
     Args:
         operation (str): Operation discriminator; determines which path and recovery policy applies.
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     if not isinstance(data.get("entries"), list):
         raise TransactionRecoveryError("Replacement journal has no entry list.")
@@ -97,9 +115,8 @@ def _rollback_replacements(data: dict) -> None:
     Args:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
     """
     for entry in reversed(data.get("entries", [])):
         stage = Path(entry["stage"])
@@ -123,9 +140,12 @@ def _complete_replacements(data: dict) -> None:
     Args:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     for entry in data.get("entries", []):
         stage = Path(entry["stage"])
@@ -148,9 +168,8 @@ def _cleanup_replacements(data: dict) -> None:
     Args:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
     """
     for entry in data.get("entries", []):
         _remove_path(Path(entry["backup"]))
@@ -175,23 +194,56 @@ class ReplacementPaths:
 
 
 class ReplacementValidator:
-    """Apply common record checks, then the current operation's path policy."""
+    """Apply common record checks, then the current operation's path policy.
+
+    Attributes:
+        operation (str): Operation name selecting recovery policy or identifying the operation in diagnostics.
+        workspace (Path): Private transaction directory owning staged metadata and relative edit entries.
+        associations (dict[str, SnapDirAssociation]): Expected associations in their persisted/archive order.
+        root (Path): Root directory for the tree operation; link and existence policy is described above.
+
+    Notes:
+        Use one instance for one plan. Resolving paths and reading directory_name retain existing filesystem/model
+        validation side effects; this validator does not mutate the journal dictionary.
+    """
 
     def __init__(self, operation: str, storage, workspace: Path):
-        """Capture the current association map and resolved stored-snapshot root."""
+        """Capture the current association map and resolved stored-snapshot root.
+
+        Args:
+            operation (str): Operation name selecting recovery policy or identifying the operation in diagnostics.
+            storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+                for this operation.
+            workspace (Path): Private transaction directory owning staged metadata and relative edit entries.
+
+        Returns:
+            None: No return value.
+        """
         self.operation = operation
         self.workspace = workspace
         self.associations = {association.folder_id: association for association in storage.snapshot.directories}
         self.root = storage.path_snapshot.resolve(strict=False)
 
     def validate_entry(self, entry: dict) -> None:
-        """Validate identity and field shape before dispatching operation path checks."""
+        """Validate identity and field shape before dispatching operation path checks.
+
+        Args:
+            entry (dict): One persisted replacement record whose fields are checked before path replay.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
+        """
         if not isinstance(entry, dict) or not isinstance(entry.get("folder_id"), str):
             raise TransactionRecoveryError("Replacement journal entry has no association identity.")
         association = self.associations.get(entry["folder_id"])
+
+        # A commit-decided edit does not use this handler; other replacement
+        # operations must still match the persisted association set.
         if association is None:
-            # A commit-decided edit does not use this handler; other replacement
-            # operations must still match the persisted association set.
             raise TransactionRecoveryError(f"Unknown association in transaction: {entry['folder_id']!r}.")
         for key in ("stage", "destination", "backup"):
             if not isinstance(entry.get(key), str) or not entry[key]:
@@ -215,7 +267,21 @@ class ReplacementValidator:
                 raise TransactionRecoveryError("Transaction journal contains an invalid path.")
 
     def _validate_external_paths(self, entry: dict, association, paths: ReplacementPaths) -> None:
-        """Constrain install/restore targets and their distinct staging ownership."""
+        """Constrain install/restore targets and their distinct staging ownership.
+
+        Args:
+            entry (dict): One persisted replacement record whose fields are checked before path replay.
+            association (SnapDirAssociation): Directory association providing stable folder_id, original source and
+                stored directory name.
+            paths (ReplacementPaths): Ordered filesystem entries to inspect or clean up under the calling policy.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
+        """
         stage, destination, backup = paths.stage, paths.destination, paths.backup
         live = Path(os.path.abspath(association.original_path))
         if self.operation == "install" and entry.get("merge_child"):
@@ -236,7 +302,20 @@ class ReplacementValidator:
                 raise TransactionRecoveryError("Install staging directory does not match its journal entry.")
 
     def _validate_sync_paths(self, association, paths: ReplacementPaths) -> None:
-        """Require generated sync siblings directly below the stored snapshot root."""
+        """Require generated sync siblings directly below the stored snapshot root.
+
+        Args:
+            association (SnapDirAssociation): Directory association providing stable folder_id, original source and
+                stored directory name.
+            paths (ReplacementPaths): Ordered filesystem entries to inspect or clean up under the calling policy.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
+        """
         stage, destination, backup = paths.stage, paths.destination, paths.backup
         expected = self.root / association.directory_name
         if destination != expected or stage.parent != self.root or backup.parent != self.root:
@@ -245,7 +324,19 @@ class ReplacementValidator:
             raise TransactionRecoveryError("Sync transaction uses an unexpected staging or backup name.")
 
     def validate_staging_roots(self, staging_roots: object) -> None:
-        """Check all shared staging roots after individual replacement entries."""
+        """Check all shared staging roots after individual replacement entries.
+
+        Args:
+            staging_roots (object): Generated staging-root paths owned by this operation and eligible for journal
+                cleanup.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
+        """
         if not isinstance(staging_roots, list):
             raise TransactionRecoveryError("Replacement journal staging roots must be a list.")
         for raw_path in staging_roots:
@@ -266,7 +357,22 @@ class ReplacementValidator:
 
 
 def recover_manifest_restore(journal: SnapshotTransactionJournal, state: str, data: dict) -> None:
-    """Recover a standalone AD restore without requiring catalogue snapshot metadata."""
+    """Recover a standalone AD restore without requiring catalogue snapshot metadata.
+
+    Args:
+        journal (SnapshotTransactionJournal): Transaction journal owning staged paths, persisted decisions and
+            cleanup.
+        state (str): Known journal decision; validation of names does not impose a new transition graph.
+        data (dict): Decoded JSON value or metadata mapping; fields are validated without implicit schema
+            coercion.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
+    """
     _validate_manifest_restore_entries(data, journal.workspace)
     if state in {"prepared", "rollback_decided"}:
         _rollback_replacements(data)
@@ -283,7 +389,21 @@ def recover_manifest_restore(journal: SnapshotTransactionJournal, state: str, da
 
 
 def recover_replacements(journal: SnapshotTransactionJournal, state: str, data: dict, storage, operation: str) -> None:
-    """Recover install/sync/legacy AD replacements with the matching metadata policy."""
+    """Recover install/sync/legacy AD replacements with the matching metadata policy.
+
+    Args:
+        journal (SnapshotTransactionJournal): Transaction journal owning staged paths, persisted decisions and
+            cleanup.
+        state (str): Known journal decision; validation of names does not impose a new transition graph.
+        data (dict): Decoded JSON value or metadata mapping; fields are validated without implicit schema
+            coercion.
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
+        operation (str): Operation name selecting recovery policy or identifying the operation in diagnostics.
+
+    Returns:
+        None: No return value.
+    """
     _validate_replacement_entries(operation, data, storage, journal.workspace)
     if state in {"prepared", "rollback_decided"}:
         _rollback_replacements(data)

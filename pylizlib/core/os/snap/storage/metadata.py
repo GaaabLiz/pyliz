@@ -61,14 +61,13 @@ class SnapshotJsonCodec:
 
     @staticmethod
     def convert(o):
-        """
-        Converts non-serializable objects for JSON dumping.
+        """Converts non-serializable objects for JSON dumping.
 
         Args:
-            o: The object to convert.
+            o (object): The object to convert.
 
         Returns:
-            A serializable representation of the object.
+            object: A serializable representation of the object.
 
         Raises:
             TypeError: If the object type is not supported.
@@ -81,18 +80,43 @@ class SnapshotJsonCodec:
 
     @staticmethod
     def encode(snapshot: Snapshot, converter: Callable | None = None) -> str:
-        """
-        Validate and encode a snapshot using the existing indented JSON format.
+        """Validate and encode a snapshot using the existing indented JSON format.
 
         The optional converter retains the public serializer customization hook.
         File access is intentionally left to the caller.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            converter (Callable | None): Optional JSON default hook; None selects the existing datetime/enum
+                converter.
+
+        Returns:
+            str: Indented JSON text using the existing converter and snapshot validation timing.
         """
         data_dict = SnapshotJsonCodec.snapshot_data(snapshot)
         return SnapshotJsonCodec.encode_data(data_dict, converter)
 
     @staticmethod
     def decode(contents: str) -> Snapshot:
-        """Decode JSON text with legacy date/default handling and domain validation."""
+        """Decode JSON text with legacy date/default handling and domain validation.
+
+        Args:
+            contents (str): Complete file or JSON contents, using the annotated bytes/text type without implicit
+                conversion.
+
+        Returns:
+            Snapshot: Validated Snapshot reconstructed from JSON, retaining legacy defaults and physical storage
+                names.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+
+        Notes:
+            Domain constructors validate and normalize source path spellings; Windows mapped-drive normalization may
+            query the OS. No recursive source-size scan is performed. Invalid JSON, dates, fields or persisted storage
+            names propagate their existing errors.
+        """
         data = json.loads(contents)
         if not isinstance(data, dict):
             raise ValueError("Snapshot JSON root must be an object.")
@@ -143,13 +167,34 @@ class SnapshotJsonCodec:
 
         This intentionally does not decode the domain model or add validation.
         The legacy partial-update API accepts arbitrary JSON object fields.
+
+        Args:
+            contents (str): Complete file or JSON contents, using the annotated bytes/text type without implicit
+                conversion.
+            field_name (str): Metadata field or model label selected by this operation.
+            new_value (object): New JSON-compatible value; the serializer's converter handles supported datetime/enum
+                values.
+            converter (Callable | None): Optional JSON default hook; None selects the existing datetime/enum
+                converter.
+
+        Returns:
+            str: JSON text after changing one raw object field; unknown fields are retained without domain-model
+                validation.
         """
         data = SnapshotJsonCodec.updated_data(contents, field_name, new_value)
         return SnapshotJsonCodec.encode_data(data, converter)
 
     @staticmethod
     def snapshot_data(snapshot: Snapshot) -> dict:
-        """Validate before conversion, preserving public serializer hook timing."""
+        """Validate before conversion, preserving public serializer hook timing.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+
+        Returns:
+            dict: Validated dataclass field data with each association's persistent storage_name added.
+        """
         snapshot.validate()
         data = asdict(snapshot)
         for association_data, association in zip(data["directories"], snapshot.directories):
@@ -158,31 +203,56 @@ class SnapshotJsonCodec:
 
     @staticmethod
     def updated_data(contents: str, field_name: str, new_value) -> dict:
-        """Patch a decoded JSON object without constructing a domain model."""
+        """Patch a decoded JSON object without constructing a domain model.
+
+        Args:
+            contents (str): Complete file or JSON contents, using the annotated bytes/text type without implicit
+                conversion.
+            field_name (str): Metadata field or model label selected by this operation.
+            new_value (object): New JSON-compatible value; the serializer's converter handles supported datetime/enum
+                values.
+
+        Returns:
+            dict: Decoded JSON object with exactly the selected field replaced; unrelated fields remain unchanged.
+        """
         data = json.loads(contents)
         data[field_name] = new_value
         return data
 
     @staticmethod
     def encode_data(data: dict, converter: Callable | None = None) -> str:
-        """Encode prepared data with the existing converter and indentation."""
+        """Encode prepared data with the existing converter and indentation.
+
+        Args:
+            data (dict): Decoded JSON value or metadata mapping; fields are validated without implicit schema
+                coercion.
+            converter (Callable | None): Optional JSON default hook; None selects the existing datetime/enum
+                converter.
+
+        Returns:
+            str: JSON text with four-space indentation and the supplied/default converter.
+        """
         return json.dumps(data, default=converter if converter is not None else SnapshotJsonCodec.convert, indent=4)
 
 
 def get_snapshot_from_path(path_snapshot: Path, json_filename: str) -> Snapshot | None:
-    """
-    Loads a Snapshot object from a directory containing a snapshot JSON file.
+    """Loads a Snapshot object from a directory containing a snapshot JSON file.
 
     Args:
-        path_snapshot: The path to the snapshot's directory.
-        json_filename: The name of the JSON file that contains the snapshot's data.
+        path_snapshot (Path): The path to the snapshot's directory.
+        json_filename (str): The name of the JSON file that contains the snapshot's data.
 
     Returns:
-        A Snapshot object if the file is found and parsed correctly, otherwise None.
+        Snapshot: Decoded snapshot on success; missing paths/JSON and parsing/validation failures raise instead of
+            returning None.
 
     Raises:
         ValueError: If the provided path is a file, not a directory.
         FileNotFoundError: If the path or the JSON file does not exist.
+
+    Notes:
+        On success this implementation returns a Snapshot. Its historical optional return annotation is retained,
+        but absent paths, unreadable data and malformed metadata raise rather than returning None.
     """
     from pylizlib.core.os.snap.serializer import SnapshotSerializer
 

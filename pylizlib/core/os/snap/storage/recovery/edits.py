@@ -18,20 +18,25 @@ def _recover_edit(journal: SnapshotTransactionJournal, state: str, data: dict, s
         journal (SnapshotTransactionJournal): Live journal owning the workspace, durable state and cleanup.
         state (str): Known recovery decision name; no additional transition graph is imposed.
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     root = storage.path_snapshot.resolve(strict=False)
     _validate_edit(data, storage, journal.workspace)
+
+    # Rollback parks every published target before restoring potentially overlapping old names.
+    # First move published directories back to unique staging slots. Target names
+    # can overlap old source names, so restoring one source at a time could
+    # mistake another association for the copy being rolled back.
     if state in {"prepared", "rollback_decided"}:
         if data.get("phase") == "publishing":
-            # First move every already-published directory back to its unique
-            # staging slot. Target names can overlap the old source names, so
-            # restoring one source at a time could mistake another association
-            # for the copy being rolled back.
             for addition in reversed(data.get("additions", [])):
                 target = root / addition["target"]
                 staged = journal.workspace / addition["staged"]
@@ -55,6 +60,8 @@ def _recover_edit(journal: SnapshotTransactionJournal, state: str, data: dict, s
             _restore_old_metadata(journal, data, storage)
         journal.cleanup()
         return
+
+    # A durable commit decision completes publications instead of restoring old names.
     if state in {"commit_decided", "committed"}:
         if state == "commit_decided":
             _complete_edit_directories(journal, data, root)
@@ -73,12 +80,16 @@ def _validate_edit(data: dict, storage, workspace: Path) -> None:
 
     Args:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     moves = data.get("moves")
     additions = data.get("additions")
@@ -103,9 +114,12 @@ def _complete_edit_directories(journal: SnapshotTransactionJournal, data: dict, 
         data (dict): Operation-specific payload, validated before destructive recovery actions.
         root (Path): Resolved snapshot directory containing the association entries.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     for move in data.get("moves", []):
         target_name = move.get("target")
@@ -134,10 +148,28 @@ def _complete_edit_directories(journal: SnapshotTransactionJournal, data: dict, 
 
 
 class EditRecordValidator:
-    """Own duplicate-name sets for one edit plan instead of capturing mutable closures."""
+    """Own duplicate-name sets for one edit plan instead of capturing mutable closures.
+
+    Attributes:
+        workspace (Path): Private transaction directory owning staged metadata and relative edit entries.
+        seen_sources (set[str]): Source basenames claimed by this one edit-validation attempt.
+        seen_targets (set[str]): Destination basenames claimed by this one edit-validation attempt.
+        seen_staged (set[str]): Workspace staging basenames claimed by this one edit-validation attempt.
+
+    Notes:
+        Use one instance per edit plan and discard it after validation failure. Claimed-name sets can already
+        contain earlier entries, preserving the original sequential validation order.
+    """
 
     def __init__(self, workspace: Path):
-        """Bind the workspace and start independent source/target/staging identity sets."""
+        """Bind the workspace and start independent source/target/staging identity sets.
+
+        Args:
+            workspace (Path): Private transaction directory owning staged metadata and relative edit entries.
+
+        Returns:
+            None: No return value.
+        """
         self.workspace = workspace
         self.seen_sources = set()
         self.seen_targets = set()
@@ -150,9 +182,12 @@ class EditRecordValidator:
             item (dict): One edit record, using relative source, target and staging basenames.
             is_addition (bool): True for an addition without a source; False for a move or removal.
 
-
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
         """
         if not isinstance(item, dict):
             raise TransactionRecoveryError("Edit journal entry must be an object.")

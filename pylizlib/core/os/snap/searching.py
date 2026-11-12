@@ -12,7 +12,12 @@ if TYPE_CHECKING:
 
 
 class SnapshotTextOptions:
-    """Expose live parameters without copying mutable callback-visible settings."""
+    """Expose live parameters without copying mutable callback-visible settings.
+
+    Attributes:
+        params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+            configuration.
+    """
 
     def __init__(self, params: SnapshotSearchParams):
         """Retain the caller's search parameters by reference.
@@ -27,44 +32,78 @@ class SnapshotTextOptions:
 
     @property
     def query(self) -> str:
-        """Return str: current query text or regular-expression source."""
+        """Return str: current query text or regular-expression source.
+
+        Returns:
+            str: Current query text or regular-expression source.
+        """
         return self.params.query
 
     @property
     def literal(self) -> bool:
-        """Return bool: whether the current query mode is literal text."""
+        """Return bool: whether the current query mode is literal text.
+
+        Returns:
+            bool: Whether the current query mode is literal text.
+        """
         from pylizlib.core.os.snap.searcher import QueryType
 
         return self.params.query_type == QueryType.TEXT
 
     @property
     def encoding(self) -> str | None:
-        """Return str | None: explicit codec or automatic-detection selection."""
+        """Return str | None: explicit codec or automatic-detection selection.
+
+        Returns:
+            str | None: Explicit codec or automatic-detection selection.
+        """
         return self.params.encoding
 
     @property
     def chunk_size(self) -> int:
-        """Return int: decoded characters requested from each stream read."""
+        """Return int: decoded characters requested from each stream read.
+
+        Returns:
+            int: Decoded characters requested from each stream read.
+        """
         return self.params.chunk_size
 
     @property
     def max_context_chars(self) -> int:
-        """Return int: current maximum regex context in decoded characters."""
+        """Return int: current maximum regex context in decoded characters.
+
+        Returns:
+            int: Current maximum regex context in decoded characters.
+        """
         return self.params.max_context_chars
 
     @property
     def max_line_preview_chars(self) -> int:
-        """Return int: current preview width before any truncation ellipses."""
+        """Return int: current preview width before any truncation ellipses.
+
+        Returns:
+            int: Current preview width before any truncation ellipses.
+        """
         return self.params.max_line_preview_chars
 
     @property
     def regex_timeout_seconds(self) -> float:
-        """Return float: timeout for each regex matching operation in seconds."""
+        """Return float: timeout for each regex matching operation in seconds.
+
+        Returns:
+            float: Timeout for each regex matching operation in seconds.
+        """
         return self.params.regex_timeout_seconds
 
 
 class SnapshotMatchPage:
-    """Convert generic text matches while preserving snapshot pagination state."""
+    """Convert generic text matches while preserving snapshot pagination state.
+
+    Attributes:
+        page (ResultPage[SnapshotSearchResult]): Bounded result sink retaining remaining offset, limit and
+            successful matches.
+        snapshot_name (str): Snapshot display label copied into each public search result.
+    """
 
     def __init__(self, page: ResultPage[SnapshotSearchResult], snapshot_name: str):
         """Bind a caller-owned page and the snapshot label for this file.
@@ -81,7 +120,11 @@ class SnapshotMatchPage:
 
     @property
     def full(self) -> bool:
-        """Return bool: whether the underlying page has reached its result limit."""
+        """Return bool: whether the underlying page has reached its result limit.
+
+        Returns:
+            bool: Whether this bounded page has reached its configured result limit.
+        """
         return self.page.full
 
     def add(self, result: TextMatch) -> None:
@@ -98,7 +141,12 @@ class SnapshotMatchPage:
         self.page.add(SnapshotSearchResult(result.file_path, result.query, self.snapshot_name, result.line_number, result.line_content))
 
     def fork(self) -> SnapshotMatchPage:
-        """Return SnapshotMatchPage: an isolated file attempt with remaining limits."""
+        """Return SnapshotMatchPage: an isolated file attempt with remaining limits.
+
+        Returns:
+            SnapshotMatchPage: Independent attempt with the remaining offset and capacity; its results can be
+                discarded without mutating the parent.
+        """
         return SnapshotMatchPage(self.page.fork(), self.snapshot_name)
 
     def commit(self, child: SnapshotMatchPage) -> None:

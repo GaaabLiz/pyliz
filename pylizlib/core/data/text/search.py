@@ -196,9 +196,10 @@ class TextScanSession:
             bool: True only for explicit observer cancellation; EOF, a full page or regex timeout produce False.
         """
         errors = "strict" if encoding in {"utf-8", "utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-32"} else "replace"
+
+        # Freeze window budgets for this attempt, retaining live query reads.
         with self.file_path.open("rb") as raw_stream:
             with io.TextIOWrapper(raw_stream, encoding=encoding, errors=errors, newline=None) as stream:
-                # Freeze window budgets for this attempt, retaining live query reads.
                 self._initialize_window()
                 while not self.page.full:
                     chunk = stream.read(self.params.chunk_size)

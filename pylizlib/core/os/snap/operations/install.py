@@ -34,8 +34,8 @@ class SnapshotInstallMetadataError(RuntimeError):
     Attributes:
         installation_completed (bool): Always True; installed content is not rolled back.
         metadata_field (str): Always date_last_used, the completion field being saved.
-        metadata_published (bool | None): Confirmed publication, confirmed absence of
-            publication, or unknown outcome. The journal may complete it on recovery.
+        metadata_published (bool | None): Confirmed publication, confirmed absence of publication, or unknown
+            outcome. The journal may complete it on recovery.
         durability_confirmed (bool | None): Adapter's directory-flush outcome, if known.
     """
 
@@ -67,9 +67,10 @@ class InstallReplacement:
         install_loc (Path): Absolute lexical target of the installed association.
         staging_dir (Path): Generated sibling receiving the verified stored content.
         backup_dir (Path): Generated sibling retaining any previous target.
-        folder_id (str): Stable association identity used for metadata and recovery.
-        had_original (bool): Whether lstat observed a target during planning; no path
-            reservation is implied and publication checks for concurrent changes.
+        folder_id (str): Non-empty stable association identity; physical storage uses its digest, so it need not
+            be a path component.
+        had_original (bool): Whether lstat observed a target during planning; no path reservation is implied and
+            publication checks for concurrent changes.
     """
 
     install_loc: Path
@@ -84,29 +85,51 @@ class SnapshotInstaller:
 
     Replacement and top-level merge intentionally have different recovery
     behavior. Last-used metadata is saved after the content transaction.
+
+    Attributes:
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
     """
 
     def __init__(self, storage: SnapshotStorage):
-        """Use the live model and validated storage paths for this invocation."""
+        """Use the live model and validated storage paths for this invocation.
+
+        Args:
+            storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+                for this operation.
+
+        Returns:
+            None: No return value.
+        """
         self.storage = storage
 
     def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
-        """
-        Installs the snapshot's contents to their original locations on the filesystem.
-        This will clear the destination directories before copying the snapshot's contents.
+        """Installs the snapshot's contents to their original locations on the filesystem.
+        Copies are prepared and verified in staging before live destinations are replaced or merged.
 
         Args:
-            enable_everyone_full_control (bool): If True and on Windows, it will attempt
-                to set full control permissions for the 'Everyone' group on the
-                installed directories. Defaults to False; ACL changes require explicit opt-in.
-            clear_destination (bool): If True, clears the destination directories before copying.
+            enable_everyone_full_control (bool): If True and on Windows, it will attempt to set full control
+                permissions for the 'Everyone' group on the installed directories. Defaults to False; ACL changes
+                require explicit opt-in.
+            clear_destination (bool): Replace entire live roots after all staging copies complete when True; False
+                merges by replacing colliding top-level children and retaining unrelated ones.
+            progress_callback (SnapshotPercentCallback | None): Optional observer receiving integer aggregate
+                percentage from 0 through 100; return values do not cancel the operation.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
 
         Raises:
-            SnapshotInstallMetadataError: If the directory installation committed but
-                updating ``date_last_used`` failed. Temporary old copies are retained
-                for recovery when replacement mode staged them, and
-                ``metadata_published`` describes the JSON outcome when the metadata
-                adapter can report it.
+            SnapshotInstallMetadataError: If the directory installation committed but updating ``date_last_used``
+                failed. Temporary old copies are retained for recovery when replacement mode staged them, and
+                ``metadata_published`` describes the JSON outcome when the metadata adapter can report it.
+
+        Notes:
+            All copies are staged before any live replacement. Whole-root replacement and top-level merge retain
+            distinct journal plans. The date_last_used write follows the content commit; SnapshotInstallMetadataError
+            means contents remain installed and the journal may complete metadata on recovery.
         """
         self.storage.snapshot.validate()
         self.storage.root_path()
@@ -164,15 +187,22 @@ class SnapshotInstaller:
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
 
     def remove_installed_copies(self, message_callback=None):
-        """
-        Removes all directories on the system that this snapshot is managing.
+        """Removes all directories on the system that this snapshot is managing.
         This is effectively an 'uninstall' operation for the snapshot's associated directories.
         It only removes the copies at the 'original_path' locations, not the snapshot's
         internal backup.
 
+        Args:
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+
         Raises:
-            ExceptionGroup: If any target could not be removed. Other targets
-                            are still attempted, and metadata is left unchanged.
+            ExceptionGroup: If any target could not be removed. Other targets are still attempted, and metadata is
+                left unchanged.
+            NotADirectoryError: A required real directory is missing, is a link, or has another entry type.
         """
         validate_destructive_destinations(
             [(association.folder_id, association.original_path) for association in self.storage.snapshot.directories],
@@ -202,7 +232,17 @@ class SnapshotInstaller:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
 
     def _preflight(self) -> None:
-        """Validate stored sources and manifests before copying."""
+        """Validate stored sources and manifests before copying.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+            SnapshotIntegrityError: Captured and expected content differ in paths, entry types, sizes or SHA-256
+                values.
+        """
+
         # Preflight
         for dir_assoc in self.storage.snapshot.directories:
             source_dir = self.storage.child_path(dir_assoc.directory_name)
@@ -218,7 +258,15 @@ class SnapshotInstaller:
                 )
 
     def _plan_replacements(self) -> list[InstallReplacement]:
-        """Choose unique stage and backup names before publishing the journal."""
+        """Choose unique stage and backup names before publishing the journal.
+
+        Returns:
+            list[InstallReplacement]: Ordered generated staging/backup/target plan; names are checked but not reserved
+                against concurrent writers.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
         replacements = []
         for association in self.storage.snapshot.directories:
             install_location = Path(os.path.abspath(association.original_path))
@@ -235,7 +283,24 @@ class SnapshotInstaller:
         return replacements
 
     def _stage_directories(self, replacements: list[InstallReplacement], total_dirs: int, progress_callback, message_callback) -> None:
-        """Prepare and verify every copy before replacing any live destination."""
+        """Prepare and verify every copy before replacing any live destination.
+
+        Args:
+            replacements (list[InstallReplacement]): Complete ordered replacement plan, including target, staging and
+                backup paths.
+            total_dirs (int): Total associations receiving equal weight in aggregate progress.
+            progress_callback (SnapshotPercentCallback | None): Optional observer receiving integer aggregate
+                percentage from 0 through 100; return values do not cancel the operation.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            RuntimeError: The requested operation cannot complete; a wrapped failure retains its original cause where
+                documented.
+        """
         associations = {association.folder_id: association for association in self.storage.snapshot.directories}
         for i, replacement in enumerate(replacements):
             dir_assoc = associations[replacement.folder_id]
@@ -243,7 +308,16 @@ class SnapshotInstaller:
             staging_dir = replacement.staging_dir
 
             def copy_progress(copied_bytes: int, total_bytes: int) -> None:
-                """Adapt verified-copy byte counts to snapshot percentage notifications."""
+                """Adapt verified-copy byte counts to snapshot percentage notifications.
+
+                Args:
+                    copied_bytes (int): Bytes copied so far for the current directory, before clamping aggregate progress.
+                    total_bytes (int): Estimated total bytes for progress; completed notifications use actual copied bytes,
+                        including zero-byte trees.
+
+                Returns:
+                    None: No return value.
+                """
                 report_directory_progress(progress_callback, i, total_dirs, copied_bytes, total_bytes)
 
             logger.info(f"Copying '{source_dir}' to staging '{staging_dir}'")
@@ -269,7 +343,19 @@ class SnapshotInstaller:
             # La strategia ha verificato il manifest prima di pubblicare lo staging.
 
     def _plan_merge_entries(self, replacements: list[InstallReplacement]) -> list[dict]:
-        """Record every top-level merge replacement before modifying live copies."""
+        """Record every top-level merge replacement before modifying live copies.
+
+        Args:
+            replacements (list[InstallReplacement]): Complete ordered replacement plan, including target, staging and
+                backup paths.
+
+        Returns:
+            list[dict]: Ordered top-level member replacements preserving unrelated live children; each record belongs
+                to the install journal.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
         entries = []
         for replacement in replacements:
             for staged_item in sorted(replacement.staging_dir.iterdir()):
@@ -296,7 +382,24 @@ class SnapshotInstaller:
         return entries
 
     def _publish_directories(self, replacements: list[InstallReplacement], clear_destination: bool, merge_entries: list[dict]) -> None:
-        """Publish prepared copies using replacement or the legacy top-level merge."""
+        """Publish prepared copies using replacement or the legacy top-level merge.
+
+        Args:
+            replacements (list[InstallReplacement]): Complete ordered replacement plan, including target, staging and
+                backup paths.
+            clear_destination (bool): Replace entire live roots after all staging copies complete when True; False
+                merges by replacing colliding top-level children and retaining unrelated ones.
+            merge_entries (list[dict]): Top-level install replacements, persisted after staging and before changing
+                live children.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
+
         # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
         for rb in replacements:
             install_loc = rb.install_loc
@@ -330,7 +433,19 @@ class SnapshotInstaller:
                 rename_and_sync(staged_item, destination)
 
     def _apply_windows_permissions(self, replacements: list[InstallReplacement], enabled: bool, win32security, con) -> None:
-        """Apply opted-in Windows ACLs, logging individual failures without aborting."""
+        """Apply opted-in Windows ACLs, logging individual failures without aborting.
+
+        Args:
+            replacements (list[InstallReplacement]): Complete ordered replacement plan, including target, staging and
+                backup paths.
+            enabled (bool): Whether the caller explicitly opted into the optional permission policy.
+            win32security (ModuleType | None): Loaded pywin32 security API or None when disabled/unavailable.
+            con (ModuleType | None): Loaded NT security constants or a compatible adapter supplying access/inheritance
+                flags.
+
+        Returns:
+            None: No return value.
+        """
         if enabled and win32security:
             for rb in replacements:
                 install_loc = rb.install_loc
@@ -345,8 +460,8 @@ class SnapshotInstaller:
         Args:
             replacements (list[InstallReplacement]): Complete ordered installation plan.
             staging_roots (list[Path]): Generated sibling roots owned by this operation.
-            clear_destination (bool): Whether entries replace entire roots; merge
-                entries are filled in only after staging reveals their top-level members.
+            clear_destination (bool): Replace entire live roots after all staging copies complete when True; False
+                merges by replacing colliding top-level children and retaining unrelated ones.
 
         Returns:
             SnapshotTransactionJournal: Prepared v1 installation journal.
@@ -386,8 +501,8 @@ class SnapshotInstaller:
             None: After metadata publication, live-model update and committed state.
 
         Raises:
-            SnapshotInstallMetadataError: Contents are installed, while metadata or
-                final journal persistence failed. Publication flags describe the outcome.
+            SnapshotInstallMetadataError: Contents are installed, while metadata or final journal persistence failed.
+                Publication flags describe the outcome.
         """
         try:
             new_metadata = self.storage.metadata.read_bytes(journal.workspace / metadata_info["new"])
@@ -408,7 +523,16 @@ class SnapshotInstaller:
 
     @staticmethod
     def _permission_backend(enable_everyone_full_control: bool):
-        """Load optional Windows permission APIs only after explicit user opt-in."""
+        """Load optional Windows permission APIs only after explicit user opt-in.
+
+        Args:
+            enable_everyone_full_control (bool): Explicit opt-in for best-effort inheritable Everyone full-control
+                ACLs on Windows; ignored elsewhere.
+
+        Returns:
+            tuple[ModuleType | None, ModuleType | None]: Security API and NT constants on opted-in Windows, otherwise
+                (None, None); import failure is logged.
+        """
         import sys
 
         if enable_everyone_full_control and sys.platform == "win32":

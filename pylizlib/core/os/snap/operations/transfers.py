@@ -17,33 +17,74 @@ from pylizlib.core.os.snap.storage.tree import iter_tree_entries_strict
 
 
 class CatalogueQuery(Protocol):
-    """Read operations required by catalogue import and export."""
+    """Catalogue query capabilities used by import/export; implementations may recover pending work."""
 
     def get_all(self, *, strict: bool = False) -> list[Snapshot]:
-        """List entries with the catalogue's existing strict error policy."""
+        """List entries with the catalogue's existing strict error policy.
+
+        Args:
+            strict (bool): Propagate filesystem errors when True; malformed/domain-invalid catalogue entries remain
+                logged and skipped.
+
+        Returns:
+            list[Snapshot]: List entries with the catalogue's existing strict error policy.
+
+        Notes:
+            The catalogue may recover pending work before scanning. strict controls filesystem errors, not whether
+            invalid metadata is included.
+        """
         ...
 
     def exists(self, snap_id: str) -> bool:
-        """Use metadata-based catalogue lookup to identify existing IDs."""
+        """Use metadata-based catalogue lookup to identify existing IDs.
+
+        Args:
+            snap_id (str): Snapshot ID identifying the catalogue entry, rather than its display name.
+
+        Returns:
+            bool: Use metadata-based catalogue lookup to identify existing IDs.
+
+        Notes:
+            The catalogue may recover pending work and then validate metadata; this capability is not equivalent to
+            Path.exists().
+        """
         ...
 
 
 class CatalogueTransferService:
-    """Import or export snapshot trees while retaining conflict/error policies."""
+    """Import or export snapshot trees while retaining conflict/error policies.
+
+    Attributes:
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+        query (CatalogueQuery): Query text or regex source; regex syntax is compiled at search time.
+    """
 
     def __init__(self, path_catalogue: Path, settings: SnapshotSettings, query: CatalogueQuery):
-        """Capture current paths/settings and a narrow read-only catalogue view."""
+        """Capture current paths/settings and the narrow catalogue query capabilities.
+
+        Args:
+            path_catalogue (Path): Catalogue root retained by this collaborator.
+            settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+            query (CatalogueQuery): Narrow catalogue query collaborator; its lookups retain existing recovery side
+                effects.
+
+        Returns:
+            None: No return value.
+        """
         self.path_catalogue = path_catalogue
         self.settings = settings
         self.query = query
 
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
-        """
-        Exports the entire catalogue to a single zip file.
+        """Exports the entire catalogue to a single zip file.
 
         Args:
-            destination_path: The folder where the exported zip file will be saved.
-            file_name: The name for the output zip file.
+            destination_path (Path): The folder where the exported zip file will be saved.
+            file_name (str): The name for the output zip file.
+
+        Returns:
+            Path | None: Published ZIP path, or None when the catalogue has no snapshots.
         """
         destination_path.mkdir(parents=True, exist_ok=True)
         zip_path = destination_path.joinpath(file_name)
@@ -54,7 +95,11 @@ class CatalogueTransferService:
             return
 
         def files_to_archive():
-            """Yield catalogue-relative tree entries after strict metadata enumeration."""
+            """Yield catalogue-relative tree entries after strict metadata enumeration.
+
+            Yields:
+                tuple[Path, Path]: Source entry and relative archive name, including empty directories.
+            """
             for snap in snapshots:
                 snap_dir = get_snapshot_path(snap.id, self.path_catalogue)
                 for tree_entry in iter_tree_entries_strict(snap_dir):
@@ -63,11 +108,13 @@ class CatalogueTransferService:
         return write_verified_zip(zip_path, files_to_archive())
 
     def import_catalogue(self, zip_path: Path):
-        """
-        Imports all snapshots from a catalogue zip file, skipping existing ones.
+        """Imports all snapshots from a catalogue zip file, skipping existing ones.
 
         Args:
-            zip_path: The path to the catalogue .zip file.
+            zip_path (Path): The path to the catalogue .zip file.
+
+        Returns:
+            None: No return value.
 
         Raises:
             ValueError: If the provided path is not a valid .zip file.
@@ -95,16 +142,17 @@ class CatalogueTransferService:
                 self._import_entry(potential_snap_dir)
 
     def import_snapshot(self, zip_path: Path):
-        """
-        Imports a snapshot from a zip file into the catalogue.
+        """Imports a snapshot from a zip file into the catalogue.
 
         Args:
-            zip_path: The path to the .zip file to import.
+            zip_path (Path): The path to the .zip file to import.
+
+        Returns:
+            None: No return value.
 
         Raises:
-            ValueError: If the path is not a valid zip file, if the zip is corrupted,
-                        if the snapshot.json is missing, or if a snapshot with the same ID
-                        already exists.
+            ValueError: If the path is not a valid zip file, if the zip is corrupted, if the snapshot.json is missing,
+                or if a snapshot with the same ID already exists.
             IOError: If the zip file fails to extract.
         """
         if not zip_path.is_file() or zip_path.suffix != ".zip":
@@ -132,7 +180,14 @@ class CatalogueTransferService:
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
             def validate_import(staged_path: Path) -> None:
-                """Check copied metadata and association directories before publication."""
+                """Check copied metadata and association directories before publication.
+
+                Args:
+                    staged_path (Path): Completed private snapshot tree to inspect before publication.
+
+                Returns:
+                    None: No return value.
+                """
                 validate_staged_snapshot_tree(staged_path, snapshot_to_import.id, self.settings.json_filename)
 
             # Copy the extracted folder to the catalogue
@@ -151,6 +206,13 @@ class CatalogueTransferService:
 
         Only its raw ID is inspected here. Full domain validation belongs to
         single-snapshot import and must not be added to this legacy batch flow.
+
+        Args:
+            potential_snap_dir (Path): One extracted batch-import entry; non-directories and invalid entries are
+                skipped under legacy policy.
+
+        Returns:
+            None: No return value.
         """
         if not potential_snap_dir.is_dir():
             return
@@ -160,8 +222,8 @@ class CatalogueTransferService:
             logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
             return
 
+        # Read just the ID to avoid loading the whole object unnecessarily
         try:
-            # Read just the ID to avoid loading the whole object unnecessarily
             data = json.loads(SnapshotSerializer.read_text(json_path))
             snap_id = data.get("id")
             if not snap_id:
@@ -193,12 +255,12 @@ class CatalogueTransferService:
             temp_dir_path (Path): Extraction root owned by import_snapshot.
 
         Returns:
-            Snapshot: Parsed domain model after identity/association checks. A valid
-            export manifest is removed so it does not enter stored snapshot content.
+            Snapshot: Parsed domain model after identity/association checks. A valid export manifest is removed so it
+                does not enter stored snapshot content.
 
         Raises:
-            ValueError: If JSON is missing/invalid or the optional export manifest
-                disagrees with its type, ID or association set.
+            ValueError: If JSON is missing/invalid or the optional export manifest disagrees with its type, ID or
+                association set.
             OSError: If reading or removing a manifest fails outside the mapped errors.
         """
         json_path = temp_dir_path / self.settings.json_filename

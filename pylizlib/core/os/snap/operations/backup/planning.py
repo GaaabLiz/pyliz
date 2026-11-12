@@ -22,7 +22,8 @@ class AssociationRestoreTask:
     """Keep extracted input, prepared staging and target distinct throughout restore.
 
     Attributes:
-        folder_id (str): Stable association identity recorded in the manifest.
+        folder_id (str): Non-empty stable association identity; physical storage uses its digest, so it need not
+            be a path component.
         extracted_dir (Path): Input directory owned by the extraction context.
         staged_dir (Path): Generated sibling receiving the copy before publication.
         destination (Path): Validated live directory to replace.
@@ -39,16 +40,44 @@ class AssociationRestoreTask:
 
 
 class RestorePlanner:
-    """Validate archive completeness and destination policy before opening a journal."""
+    """Validate archive completeness and destination policy before opening a journal.
+
+    Attributes:
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+        lookup (SnapshotLookup): Catalogue lookup capability used when legacy archive metadata needs a persisted
+            snapshot.
+    """
 
     def __init__(self, path_catalogue: Path, settings: SnapshotSettings, lookup: SnapshotLookup):
-        """Bind catalogue policy and optional legacy metadata lookup."""
+        """Bind catalogue policy and optional legacy metadata lookup.
+
+        Args:
+            path_catalogue (Path): Catalogue root retained by this collaborator.
+            settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+            lookup (SnapshotLookup): Catalogue lookup capability used when legacy archive metadata needs a persisted
+                snapshot.
+
+        Returns:
+            None: No return value.
+        """
         self.path_catalogue = path_catalogue
         self.settings = settings
         self.lookup = lookup
 
     def associations_from(self, metadata: _ArchiveMetadata) -> tuple[list[ArchivedAssociation], str | None]:
-        """Resolve the associations and OS that govern an associated-directory restore."""
+        """Resolve the associations and OS that govern an associated-directory restore.
+
+        Args:
+            metadata (_ArchiveMetadata): Validated archive interpretation or staged JSON names used by this operation.
+
+        Returns:
+            tuple[list[ArchivedAssociation], str | None]: Ordered associations and originating OS; missing legacy
+                information may require catalogue lookup and recovery.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         info = metadata.info
         if not info.snapshot_id:
             raise ValueError("Could not determine snapshot ID from associated-directories archive metadata.")
@@ -85,7 +114,23 @@ class RestorePlanner:
         destination_mapping: Mapping[str, str | Path] | None,
         origin_os: str | None,
     ) -> list[Path]:
-        """Validate association mapping and all paths before extraction or replacement."""
+        """Validate association mapping and all paths before extraction or replacement.
+
+        Args:
+            associations (list[ArchivedAssociation]): Expected associations in their persisted/archive order.
+            destination_mapping (Mapping[str, str | Path] | None): Overrides keyed by stable folder_id; unmapped AD
+                associations retain their archived source paths.
+            origin_os (str | None): Originating OS label to compare with platform.system(); None omits that
+                compatibility check.
+
+        Returns:
+            list[Path]: Validated live destination paths in association order, applying only explicit ID-keyed
+                overrides.
+
+        Raises:
+            TypeError: An argument or mutable model field has a type rejected by this contract.
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         mapping = destination_mapping or {}
         if any(not isinstance(folder_id, str) or not folder_id for folder_id in mapping):
             raise TypeError("Destination mapping keys must be non-empty association IDs.")
@@ -118,7 +163,29 @@ class RestorePlanner:
     def build(
         self, temp_dir_path: Path, associations: list[ArchivedAssociation], destination_mapping: Mapping[str, str | Path] | None, manifest_name: str | None, origin_os: str | None
     ) -> list[AssociationRestoreTask]:
-        """Validate every extracted association before planning sibling staging paths."""
+        """Validate every extracted association before planning sibling staging paths.
+
+        Args:
+            temp_dir_path (Path): Extraction root owned by the surrounding temporary-directory context.
+            associations (list[ArchivedAssociation]): Expected associations in their persisted/archive order.
+            destination_mapping (Mapping[str, str | Path] | None): Overrides keyed by stable folder_id; unmapped AD
+                associations retain their archived source paths.
+            manifest_name (str | None): Metadata member excluded from extracted content checks, or None for a legacy
+                archive without one.
+            origin_os (str | None): Originating OS label to compare with platform.system(); None omits that
+                compatibility check.
+
+        Returns:
+            list[AssociationRestoreTask]: Validated ordered restore tasks with distinct extracted source and sibling
+                staging paths.
+
+        Raises:
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+
+        Notes:
+            Completeness and destination policy are checked again after extraction. The plan only chooses sibling
+            names; it does not reserve them against concurrent writers.
+        """
         extracted_by_name = self._validate_extracted_associations(temp_dir_path, associations, manifest_name)
 
         destinations = self.resolve_destinations(associations, destination_mapping, origin_os)
@@ -161,8 +228,8 @@ class RestorePlanner:
 
         Raises:
             ValueError: If an empty archive restores no associations.
-            SnapshotIncompleteError: If expected directories are missing or unexpected
-                entries/non-directory roots are present.
+            SnapshotIncompleteError: If expected directories are missing or unexpected entries/non-directory roots are
+                present.
             OSError: If enumeration or entry inspection fails.
         """
         dir_name_to_assoc = {association.directory_name: association for association in associations}

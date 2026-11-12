@@ -55,12 +55,12 @@ def parse_associations(raw_associations: object, policy: AssociationManifestPoli
         policy (AssociationManifestPolicy): Vocabulary belonging to the manifest format.
 
     Returns:
-        list[ArchivedAssociation]: Associations in archive order, with original lexical
-        path spellings and unique IDs/storage names. Inputs are not normalized.
+        list[ArchivedAssociation]: Associations in archive order, with original lexical path spellings and unique
+            IDs/storage names. Inputs are not normalized.
 
     Raises:
-        ValueError: If the list or an entry is invalid. Validation order remains ID,
-            index, directory name, source path, then duplicate identity/name checks.
+        ValueError: If the list or an entry is invalid. Validation order remains ID, index, directory name, source
+            path, then duplicate identity/name checks.
     """
     if not isinstance(raw_associations, list):
         raise ValueError(f"{policy.subject} has no association list.")
@@ -101,11 +101,11 @@ def association_identities(associations: Iterable[SnapDirAssociation | ArchivedA
     """Compare exported associations using stable ID, index and physical storage name.
 
     Args:
-        associations (Iterable[SnapDirAssociation | ArchivedAssociation]): Domain or
-            archived associations whose three identity fields should be compared.
+        associations (Iterable[SnapDirAssociation | ArchivedAssociation]): Domain or archived associations whose
+            three identity fields should be compared.
 
     Returns:
-        set[tuple[str, int, str]]: Identity triples, independent of enumeration order.
-        Domain directory_name validation retains its existing model side effects.
+        set[tuple[str, int, str]]: Identity triples, independent of enumeration order. Domain directory_name
+            validation retains its existing model side effects.
     """
     return {(item.folder_id, item.index, item.directory_name) for item in associations}

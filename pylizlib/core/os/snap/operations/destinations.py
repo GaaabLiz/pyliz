@@ -21,6 +21,23 @@ def validate_destructive_destinations(
     Returns normalized absolute paths in input order. Resolved paths are used
     for safety comparisons, while the returned lexical paths preserve the
     filesystem entry that the caller intends to replace or remove.
+
+    Args:
+        destinations (Iterable[tuple[str, str | Path]]): Iterable of (association identity, target path) pairs,
+            checked for OS, critical paths and overlaps.
+        catalogue_path (Path): Catalogue directory containing snapshot ID subdirectories.
+        origin_os (str | None): Originating OS label to compare with platform.system(); None omits that
+            compatibility check.
+        operation (str): Operation name selecting recovery policy or identifying the operation in diagnostics.
+
+    Returns:
+        list[Path]: Absolute lexical destination paths in input order, after OS, critical-path, catalogue and
+            pairwise-overlap checks.
+
+    Raises:
+        RuntimeError: The requested operation cannot complete; a wrapped failure retains its original cause where
+            documented.
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
     """
     if origin_os is not None and origin_os != platform.system():
         raise RuntimeError(f"Cannot {operation}: created on {origin_os}, but current OS is {platform.system()}.")
@@ -49,14 +66,7 @@ def validate_destructive_destinations(
 
     for index, (identity, destination) in enumerate(resolved_destinations):
         for other_identity, other_destination in resolved_destinations[index + 1 :]:
-            if (
-                same_filesystem_entry(destination, other_destination)
-                or destination in other_destination.parents
-                or other_destination in destination.parents
-            ):
-                raise ValueError(
-                    f"{operation.capitalize()} destinations cannot be coincident or nested: "
-                    f"'{identity}' at '{destination}' and '{other_identity}' at '{other_destination}'."
-                )
+            if same_filesystem_entry(destination, other_destination) or destination in other_destination.parents or other_destination in destination.parents:
+                raise ValueError(f"{operation.capitalize()} destinations cannot be coincident or nested: '{identity}' at '{destination}' and '{other_identity}' at '{other_destination}'.")
 
     return destination_paths

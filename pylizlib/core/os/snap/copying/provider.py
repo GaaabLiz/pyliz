@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 class ProviderCopySession:
-    """Keep source consistency independent of the content and metadata policies."""
+    """Keep source consistency independent of the content and metadata policies.
+
+    Attributes:
+        provider (SourceSnapshotProvider): SourceSnapshotProvider supplying a stable tree for the full duration of
+            its context.
+        delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+            and callback contract.
+    """
 
     def __init__(self, provider: SourceSnapshotProvider, delegate: DirectoryCopyStrategy):
         """Retain a validated provider and content-copy strategy.
@@ -43,7 +50,29 @@ class ProviderCopySession:
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Stage a stable-source copy, verify content and publish the completed tree."""
+        """Stage a stable-source copy, verify content and publish the completed tree.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (CopyProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            metadata_copier (MetadataCopier | None): Optional hook receiving actual stable source and copied staging
+                tree before that source context closes.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Stage a stable-source copy, verify content and publish the completed tree.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
@@ -74,7 +103,27 @@ class ProviderCopySession:
         observed_manifest: MutableMapping[str, dict[str, str | int | None]] | None,
         metadata_copier: MetadataCopier | None,
     ) -> Path:
-        """Complete contents and metadata before the provider releases its source."""
+        """Complete contents and metadata before the provider releases its source.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (CopyProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            observed_manifest (MutableMapping[str, dict[str, str | int | None]] | None): Integrity output for this
+                copy attempt, or None to preserve legacy delegates without manifest kwargs.
+            metadata_copier (MetadataCopier | None): Optional hook receiving actual stable source and copied staging
+                tree before that source context closes.
+
+        Returns:
+            Path: Completed staging destination after content, metadata and link checks; the provider context exits
+                before control returns.
+
+        Raises:
+            NotADirectoryError: A required real directory is missing, is a link, or has another entry type.
+        """
         with self.provider.create_snapshot(Path(source)) as stable_source:
             stable_source = Path(stable_source)
             if is_link_or_junction(stable_source) or not stable_source.is_dir():

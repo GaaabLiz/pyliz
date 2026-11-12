@@ -11,17 +11,29 @@ from pylizlib.core.os.snap.storage.transactions import TRANSACTION_DIRECTORY
 
 
 def _is_operational_directory(name: str) -> bool:
-    """Identify catalogue-root transaction, staging and backup containers."""
-    return (
-        name == TRANSACTION_DIRECTORY
-        or name.startswith("_staging_")
-        or "_staging_" in name
-        or "_bck_" in name
-    )
+    """Identify catalogue-root transaction, staging and backup containers.
+
+    Args:
+        name (str): Attribute or filesystem-entry name inspected by this operation.
+
+    Returns:
+        bool: Whether a name belongs to transaction, staging or backup storage excluded from catalogue entries.
+    """
+    return name == TRANSACTION_DIRECTORY or name.startswith("_staging_") or "_staging_" in name or "_bck_" in name
 
 
 def read_snapshot_by_id(path_catalogue: Path, snap_id: str, settings: SnapshotSettings) -> Snapshot | None:
-    """Load one published snapshot directly, without scanning the catalogue."""
+    """Load one published snapshot directly, without scanning the catalogue.
+
+    Args:
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        snap_id (str): Snapshot ID identifying the catalogue entry, rather than its display name.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+
+    Returns:
+        Snapshot | None: Matching metadata model or None for an invalid ID, missing tree, parse/I/O failure or ID
+            mismatch.
+    """
     if not isinstance(snap_id, str) or not snap_id or _is_operational_directory(snap_id):
         return None
     try:
@@ -39,14 +51,15 @@ def read_snapshot_by_id(path_catalogue: Path, snap_id: str, settings: SnapshotSe
 
 
 def read_catalogue(path_catalogue: Path, settings: SnapshotSettings, *, strict: bool = False) -> list[Snapshot]:
-    """
-    Retrieves all snapshots from the catalogue.
+    """Retrieves all snapshots from the catalogue.
 
     Args:
-        strict: Propagate filesystem errors instead of skipping unreadable entries.
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+        strict (bool): Propagate filesystem errors instead of skipping unreadable entries.
 
     Returns:
-        A list of Snapshot objects found in the catalogue.
+        list[Snapshot]: A list of Snapshot objects found in the catalogue.
     """
     path_catalogue.mkdir(parents=True, exist_ok=True)
     snapshots: list[Snapshot] = []
@@ -59,9 +72,7 @@ def read_catalogue(path_catalogue: Path, settings: SnapshotSettings, *, strict: 
                 snap = get_snapshot_from_path(current_dir, settings.json_filename)
                 if snap is not None:
                     if current_dir.name != snap.id:
-                        logger.error(
-                            f"Skipping snapshot directory '{current_dir}': metadata ID '{snap.id}' does not match its directory name."
-                        )
+                        logger.error(f"Skipping snapshot directory '{current_dir}': metadata ID '{snap.id}' does not match its directory name.")
                         continue
                     snapshots.append(snap)
             except Exception as e:

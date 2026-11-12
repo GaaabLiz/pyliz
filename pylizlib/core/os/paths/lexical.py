@@ -75,6 +75,7 @@ def normalize_rooted_path(value: str, *, allow_relative: bool = True, path_label
     if not value or "\x00" in value:
         raise ValueError(f"{path_label} must be a non-empty path without NUL characters.")
 
+    # Recognize foreign Windows syntax without interpreting it as a local relative path.
     windows_path = PureWindowsPath(value)
     if windows_path.drive and not windows_path.root:
         raise ValueError(f"Drive-relative paths are not supported: {value!r}.")
@@ -84,6 +85,7 @@ def normalize_rooted_path(value: str, *, allow_relative: bool = True, path_label
             return normalize_mapped_drive(windows_path, unc_root=unc_root)
         return windows_path.as_posix()
 
+    # POSIX roots remain lexical and do not cause filesystem link resolution.
     posix_path = PurePosixPath(value)
     if posix_path.is_absolute():
         return posix_path.as_posix()

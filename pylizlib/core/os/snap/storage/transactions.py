@@ -20,7 +20,14 @@ class TransactionRecoveryError(RuntimeError):
 
 
 class SnapshotTransactionJournal:
-    """Persist a transaction decision before its old copies may be removed."""
+    """Persist a transaction decision before its old copies may be removed.
+
+    Attributes:
+        workspace (Path): Private transaction directory owning staged metadata and relative edit entries.
+        path (Path): Native filesystem entry operated on by this method.
+        payload (dict): Journal envelope or operation fields retained without schema coercion; None starts with an
+            empty payload.
+    """
 
     def __init__(self, workspace: Path, payload: dict):
         """Bind an existing transaction workspace and its in-memory journal data.
@@ -29,9 +36,12 @@ class SnapshotTransactionJournal:
             workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
             payload (dict): Persisted envelope retained by reference, including operation data and unknown fields.
 
-
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
+
+        Notes:
+            payload is retained by reference. Binding an existing workspace does not itself validate the envelope or
+            write a journal; recovery performs validation before destructive replay.
         """
         self.workspace = Path(workspace)
         self.path = self.workspace / JOURNAL_FILENAME
@@ -42,13 +52,22 @@ class SnapshotTransactionJournal:
         """Create and atomically publish a prepared journal in ``scope_root``.
 
         Args:
-            scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing resolved-path policy.
+            scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing
+                resolved-path policy.
             operation (str): Operation discriminator; determines which path and recovery policy applies.
-            payload (dict): Persisted envelope retained by reference, including operation data and unknown fields.
-
+            payload (dict | None): Persisted envelope retained by reference, including operation data and unknown
+                fields.
 
         Returns:
-            SnapshotTransactionJournal: Prepared journal after its first atomic write; no destination has been modified.
+            SnapshotTransactionJournal: Prepared journal after its first atomic write; no destination has been
+                modified.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+
+        Notes:
+            A non-empty payload dictionary is retained by reference; None or an empty dictionary uses a new empty
+            mapping, matching the existing truthiness rule. The v1 JSON schema and known state names are unchanged.
         """
         scope_root = Path(scope_root).resolve(strict=False)
         if not scope_root.is_dir() or is_link_or_junction(scope_root):
@@ -88,9 +107,15 @@ class SnapshotTransactionJournal:
         Args:
             state (str): Known recovery decision name; no additional transition graph is imposed.
 
-
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+
+        Notes:
+            The in-memory state changes before writing. If persistence fails, that live field still contains the
+            proposed state. Known state names are validated without imposing additional transition restrictions.
         """
         if state not in _VALID_STATES:
             raise ValueError(f"Unknown transaction state: {state!r}.")
@@ -105,9 +130,15 @@ class SnapshotTransactionJournal:
             cleanup_paths (Iterable[Path]): Committed backup/staging paths to remove before deleting the journal.
             operation (str): Operation discriminator; determines which path and recovery policy applies.
 
-
         Returns:
             bool: True when cleanup completes; False when a cleanup error is logged and the journal is retained.
+
+        Notes:
+            Cleanup is best effort and may already have removed part of a backup before failure. Never use cleanup
+            leftovers as an unconditional rollback source after commit.
+
+            False can mean cleanup partially succeeded before failing. A missing subset of backup entries must not
+            trigger a new rollback after the content commit.
         """
         failed = False
         for path in cleanup_paths:
@@ -133,11 +164,10 @@ class SnapshotTransactionJournal:
         """Persist additional staged paths or plan entries before publication.
 
         Args:
-            values (object): Payload fields to merge in place and persist without changing unrelated fields.
-
+            **values (object): Payload fields to merge in place and persist without changing unrelated fields.
 
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
         """
         self.payload["payload"].update(values)
         self._write()
@@ -146,7 +176,7 @@ class SnapshotTransactionJournal:
         """Remove a resolved transaction workspace and its journal sidecars.
 
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
         """
         _remove_path(self.workspace)
         try:
@@ -158,11 +188,11 @@ class SnapshotTransactionJournal:
         """Run the same idempotent recovery used after a process restart.
 
         Args:
-            storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+            storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+                using snapshot metadata.
 
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
         """
         from pylizlib.core.os.snap.storage.recovery.coordinator import _recover_one
 
@@ -172,11 +202,11 @@ class SnapshotTransactionJournal:
         """Persist rollback intent before restoring entries and removing staging.
 
         Args:
-            storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+            storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+                using snapshot metadata.
 
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
         """
         self.set_state("rollback_decided")
         self.recover(storage)
@@ -185,7 +215,7 @@ class SnapshotTransactionJournal:
         """Encode and atomically replace this journal file.
 
         Returns:
-            None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+            None: No return value; failure handling follows this operation's contract.
         """
         SnapshotSerializer.write_text(self.path, JournalCodec.encode(self.payload))
 
@@ -194,12 +224,14 @@ def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
     """Compatibility entry point; see recovery.coordinator.recover_pending_transactions for its contract.
 
     Args:
-        scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing resolved-path policy.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing
+            resolved-path policy.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        list[str]: Recovered operation names in workspace order; empty when no journal needed recovery. Recovery may rename/delete entries and refresh the live model.
+        list[str]: Recovered operation names in workspace order; empty when no journal needed recovery. Recovery
+            may rename/delete entries and refresh the live model.
     """
     from pylizlib.core.os.snap.storage.recovery.coordinator import recover_pending_transactions as implementation
 
@@ -210,8 +242,8 @@ def recover_storage_transactions(storage) -> list[str]:
     """Compatibility entry point; see recovery.coordinator.recover_storage_transactions for its contract.
 
     Args:
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
         list[str]: Operation names recovered first from catalogue scope, then snapshot scope.
@@ -225,14 +257,15 @@ def prepare_snapshot_metadata(storage, workspace: Path, *, field_name: str | Non
     """Compatibility entry point; see recovery.metadata.prepare_snapshot_metadata for its contract.
 
     Args:
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
         field_name (str | None): Single metadata field to patch, or None to serialize the complete live model.
         field_value (object): Value for the requested partial metadata update; ignored for a complete model save.
 
-
     Returns:
-        dict[str, str]: Workspace-relative old/new filenames and the active metadata basename under keys old, new and target.
+        dict: Workspace-relative old/new filenames and the active metadata basename under keys old, new and
+            target.
     """
     from pylizlib.core.os.snap.storage.recovery.metadata import prepare_snapshot_metadata as implementation
 
