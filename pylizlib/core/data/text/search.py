@@ -6,11 +6,9 @@ import io
 from collections.abc import Callable
 from pathlib import Path
 
-import regex as regex_engine
-
 from pylizlib.core.data.text.encoding import EncodingDetector
 from pylizlib.core.data.text.matching import BufferMatcher
-from pylizlib.core.data.text.models import MatchPage, TextSearchConfiguration, _ProgressCallbackError
+from pylizlib.core.data.text.models import MatchPage, TextSearchConfiguration, TimedPattern, _ProgressCallbackError
 from pylizlib.core.data.text.models import TextMatch as TextMatch
 from pylizlib.core.data.text.models import TextSearchOptions as TextSearchOptions
 from pylizlib.core.data.text.window import TextWindow
@@ -50,7 +48,7 @@ class TextFileSearcher:
         self,
         file_path: Path,
         params: TextSearchConfiguration,
-        compiled_regex: regex_engine.Pattern | None,
+        compiled_regex: TimedPattern | None,
         page: MatchPage,
         on_chunk: Callable[[], bool | None] | None,
     ) -> bool:
@@ -60,7 +58,7 @@ class TextFileSearcher:
             file_path (Path): Native candidate file path to filter, inspect or search.
             params (TextSearchConfiguration): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (regex_engine.Pattern | None): Compiled regex used when literal matching is disabled; None
+            compiled_regex (TimedPattern | None): Compiled regex used when literal matching is disabled; None
                 produces no regex matches.
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
             on_chunk (Callable[[], bool | None] | None): Optional zero-argument chunk observer; only literal False
@@ -120,9 +118,7 @@ class TextFileSearcher:
             logger.warning("Error reading file %s during search: %s", file_path, error)
             return False
 
-    def _scan_file(
-        self, file_path: Path, encoding: str, params: TextSearchConfiguration, compiled_regex: regex_engine.Pattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None
-    ) -> bool:
+    def _scan_file(self, file_path: Path, encoding: str, params: TextSearchConfiguration, compiled_regex: TimedPattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None) -> bool:
         """Run one independent decode attempt; return whether the observer cancels.
 
         Args:
@@ -131,7 +127,7 @@ class TextFileSearcher:
                 replacement.
             params (TextSearchConfiguration): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (regex_engine.Pattern | None): Compiled regex used when literal matching is disabled; None
+            compiled_regex (TimedPattern | None): Compiled regex used when literal matching is disabled; None
                 produces no regex matches.
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
             on_chunk (Callable[[], bool | None] | None): Optional zero-argument chunk observer; only literal False
@@ -163,14 +159,14 @@ class TextScanSession:
         last_result_line (int | None): Last reported one-based starting line, or None before a retained match.
     """
 
-    def __init__(self, file_path: Path, params: TextSearchConfiguration, compiled_regex: regex_engine.Pattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None):
+    def __init__(self, file_path: Path, params: TextSearchConfiguration, compiled_regex: TimedPattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None):
         """Retain one attempt's reader, query, sink and optional chunk observer.
 
         Args:
             file_path (Path): Native candidate file path to filter, inspect or search.
             params (TextSearchConfiguration): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (regex_engine.Pattern | None): Compiled regex used when literal matching is disabled; None
+            compiled_regex (TimedPattern | None): Compiled regex used when literal matching is disabled; None
                 produces no regex matches.
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
             on_chunk (Callable[[], bool | None] | None): Optional zero-argument chunk observer; only literal False

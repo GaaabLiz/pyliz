@@ -2,9 +2,70 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Self
+
+
+class RegexSpan(Protocol):
+    """Expose only the match coordinates consumed by the streaming matcher."""
+
+    def start(self) -> int:
+        """Return the match's inclusive start in the searched text.
+
+        Returns:
+            int: Zero-based character offset of the match's start.
+        """
+        ...
+
+    def end(self) -> int:
+        """Return the match's exclusive end in the searched text.
+
+        Returns:
+            int: Zero-based character offset immediately after the match.
+        """
+        ...
+
+
+class TimedPattern(Protocol):
+    """Provide the timed regex operations used for filenames and text windows.
+
+    The ``regex`` package supplies this capability. Standard-library ``re``
+    patterns lack the required timeout argument. Matching may raise
+    ``TimeoutError`` when an operation exceeds its budget.
+    """
+
+    def finditer(self, text: str, *, pos: int, timeout: float) -> Iterator[RegexSpan]:
+        """Iterate non-overlapping matches starting at a character offset.
+
+        Args:
+            text (str): Decoded text window to search.
+            pos (int): Zero-based character offset at which to begin matching.
+            timeout (float): Time budget in seconds for this matching operation.
+
+        Returns:
+            Iterator[RegexSpan]: Matches in increasing starting-offset order.
+
+        Raises:
+            TimeoutError: Matching exceeds the supplied time budget.
+        """
+        ...
+
+    def search(self, text: str, *, timeout: float) -> RegexSpan | None:
+        """Find the first match within a filename or other complete string.
+
+        Args:
+            text (str): String to search from its beginning.
+            timeout (float): Time budget in seconds for this matching operation.
+
+        Returns:
+            RegexSpan | None: First match, or None when the text does not match.
+
+        Raises:
+            TimeoutError: Matching exceeds the supplied time budget.
+        """
+        ...
 
 
 class TextSearchConfiguration(Protocol):
@@ -94,20 +155,20 @@ class MatchPage(Protocol):
         """
         ...
 
-    def fork(self) -> MatchPage:
-        """Return MatchPage: an isolated attempt with the remaining offset/limit.
+    def fork(self) -> Self:
+        """Return an isolated attempt of the same page implementation.
 
         Returns:
-            MatchPage: Independent attempt with the remaining offset and capacity; its results can be discarded
+            Self: Independent attempt with the remaining offset and capacity; its results can be discarded
                 without mutating the parent.
         """
         ...
 
-    def commit(self, child: MatchPage) -> None:
-        """Merge a completed child MatchPage into this page; return None.
+    def commit(self, child: Self) -> None:
+        """Merge a completed child of this page implementation; return None.
 
         Args:
-            child (MatchPage): Successful isolated result-page attempt whose matches and consumed offset are
+            child (Self): Successful isolated result-page attempt whose matches and consumed offset are
                 committed.
 
         Returns:
