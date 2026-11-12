@@ -14,8 +14,8 @@ def needs_complete_line_preview(
         buffer (str): Current decoded text window.
         match_start (int): Match start offset relative to buffer.
         max_chars (int): Positive maximum line-preview width, before ellipses.
-        buffer_starts_mid_line (bool): Whether earlier characters of the first line
-            were discarded, so waiting cannot reconstruct a complete line.
+        buffer_starts_mid_line (bool): Whether earlier characters of the first line were discarded, so waiting
+            cannot reconstruct a complete line.
         final (bool): Whether the reader has reached EOF.
 
     Returns:
@@ -40,13 +40,13 @@ def line_preview(
         buffer (str): Current decoded text window.
         match_start (int): Match start offset relative to buffer.
         max_chars (int): Positive character limit for the preview before ellipses.
-        buffer_starts_mid_line (bool): Whether the beginning of the first line was
-            removed from the rolling window.
+        buffer_starts_mid_line (bool): Whether the beginning of the first line was removed from the rolling
+            window.
         final (bool): Whether EOF makes the trailing line complete.
 
     Returns:
-        str: Stripped preview around the match, up to max_chars plus ellipses;
-        leading/trailing whitespace does not contribute to the final displayed text.
+        str: Stripped preview around the match, up to max_chars plus ellipses; leading/trailing whitespace does
+            not contribute to the final displayed text.
     """
     line_start = buffer.rfind("\n", 0, match_start) + 1
     line_end = buffer.find("\n", match_start)

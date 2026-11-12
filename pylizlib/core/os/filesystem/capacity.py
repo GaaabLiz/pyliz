@@ -18,8 +18,8 @@ def ensure_required_space(
     Args:
         extraction_path (Path): Existing directory receiving the initial expansion.
         extraction_bytes (int): Bytes required for that expansion.
-        additional_requirements (Iterable[tuple[Path, int]]): Existing directories
-            and additional bytes retained simultaneously, including final copies.
+        additional_requirements (Iterable[tuple[Path, int]]): Existing directories and additional bytes retained
+            simultaneously, including final copies.
 
     Returns:
         None: If each device currently has at least its cumulative requirement.
@@ -29,8 +29,8 @@ def ensure_required_space(
         OSError: If stat/disk usage fails, or ENOSPC when a device lacks space.
 
     Notes:
-        Space is observed, not reserved against concurrent writers. Byte counts
-        are supplied by the caller and are not rounded to allocation units.
+        Space is observed, not reserved against concurrent writers. Byte counts are supplied by the caller and are
+        not rounded to allocation units.
     """
     extraction_path = Path(extraction_path)
     if not extraction_path.is_dir():

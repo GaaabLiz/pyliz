@@ -141,8 +141,8 @@ class AtomicFile:
 
         Args:
             path (Path): Existing regular file below a real parent.
-            opener (Callable | None): Protected open hook accepting path and flags,
-                or the class open_file implementation when omitted.
+            opener (Callable | None): Protected open hook accepting path and flags, or the class open_file
+                implementation when omitted.
 
         Returns:
             bytes: Entire file contents without decoding or newline conversion.
@@ -327,10 +327,9 @@ class AtomicFile:
 
         Args:
             path (Path): Absent or regular destination below an existing real parent.
-            contents (bytes): Complete new version; non-byte values are rejected
-                using isinstance(contents, bytes).
-            opener (Callable | None): Optional protected-open hook accepting path,
-                flags and mode; the class open_file is used when omitted.
+            contents (bytes): Complete new version; non-byte values are rejected using isinstance(contents, bytes).
+            opener (Callable | None): Optional protected-open hook accepting path, flags and mode; the class open_file
+                is used when omitted.
 
         Returns:
             None: After publication; unsupported directory flushing is logged.
@@ -338,9 +337,16 @@ class AtomicFile:
         Raises:
             TypeError: If contents is not bytes.
             ValueError: If the destination, previous sidecar or parent is unsafe.
-            FileDurabilityError: If publication succeeds but the final flush fails.
-                An adapter may configure a compatible OSError type.
+            FileDurabilityError: If publication succeeds but the final flush fails. An adapter may configure a
+                compatible OSError type.
             OSError: If inspection, staging, prior-version publication or replace fails.
+            cls.durability_error: The new name was published but final directory flushing failed, using the configured
+                compatibility exception type.
+
+        Notes:
+            Errors before the final replacement do not publish the new current version. FileDurabilityError (or the
+            adapter-compatible error) records an already-published version whose final directory flush failed. Cleanup
+            does not delete the published target.
         """
         path = Path(path)
         if not isinstance(contents, bytes):
@@ -387,7 +393,21 @@ class AtomicFile:
 
     @classmethod
     def _read_previous_version(cls, path: Path, current_stat: os.stat_result, opener: Callable) -> bytes:
-        """Read the prior version and reject a file changed during that read."""
+        """Read the prior version and reject a file changed during that read.
+
+        Args:
+            path (Path): Native filesystem entry operated on by this method.
+            current_stat (os.stat_result): Destination stat captured before reading its previous version.
+            opener (Callable): Optional protected-open hook accepting path, native flags and creation mode; the class
+                hook is used by default.
+
+        Returns:
+            bytes: Exact previous bytes after verifying that identity, size and mtime did not change during the read.
+
+        Raises:
+            OSError: A required filesystem or native metadata operation fails; publication outcome is described by the
+                operation/exception contract.
+        """
         previous_bytes = cls.read_bytes(path, opener=opener)
         after_read_stat = cls._regular_file_stat(path)
         if (
@@ -400,7 +420,15 @@ class AtomicFile:
 
     @classmethod
     def _cleanup_temporaries(cls, new_temp: Path | None, previous_temp: Path | None) -> None:
-        """Remove only still-owned temporary entries without masking the main result."""
+        """Remove only still-owned temporary entries without masking the main result.
+
+        Args:
+            new_temp (Path | None): Still-owned new-version temporary path, or None once it was published.
+            previous_temp (Path | None): Still-owned previous-version temporary path, or None once it was published.
+
+        Returns:
+            None: No return value.
+        """
         for temporary_path in (new_temp, previous_temp):
             if temporary_path is not None:
                 try:

@@ -39,12 +39,12 @@ class EncodingDetector:
 
         Args:
             file_path (Path): File from which at most sample_bytes bytes are read.
-            preferred_encoding (str | None): Explicit codec bypassing automatic
-                detection and binary checks. The sample is still read first.
+            preferred_encoding (str | None): Explicit codec bypassing automatic detection and binary checks. The
+                sample is still read first.
 
         Returns:
-            EncodingDecision: Chosen codec, binary classification and whether the
-            sample required Windows-1252 fallback. No full-file validity is implied.
+            EncodingDecision: Chosen codec, binary classification and whether the sample required Windows-1252
+                fallback. No full-file validity is implied.
 
         Raises:
             OSError: If opening or reading the sample fails.
@@ -99,8 +99,8 @@ class EncodingDetector:
             sample (bytes): Bounded raw sample; an unmatched trailing byte is ignored.
 
         Returns:
-            str | None: utf-16-le or utf-16-be when the existing threshold matches,
-            otherwise None. Samples shorter than four byte pairs are inconclusive.
+            str | None: utf-16-le or utf-16-be when the existing threshold matches, otherwise None. Samples shorter
+                than four byte pairs are inconclusive.
         """
         pairs = len(sample) // 2
         if pairs < 4:
@@ -124,8 +124,8 @@ class EncodingDetector:
             allow_nul (bool): Permit NUL bytes when a UTF-16/32 codec was selected.
 
         Returns:
-            bool: True for a forbidden NUL or a printable-character ratio below 0.65;
-            empty bytes/text are not considered binary by this heuristic.
+            bool: True for a forbidden NUL or a printable-character ratio below 0.65; empty bytes/text are not
+                considered binary by this heuristic.
         """
         if not sample:
             return False

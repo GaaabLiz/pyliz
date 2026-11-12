@@ -34,8 +34,8 @@ def iter_files_strict(root: Path) -> Iterator[Path]:
         root (Path): Existing real directory to traverse with a depth-first stack.
 
     Yields:
-        Path: Regular files in filesystem enumeration order; directories and
-        special entries are omitted. No sorting or source mutation is performed.
+        Path: Regular files in filesystem enumeration order; directories and special entries are omitted. No
+            sorting or source mutation is performed.
 
     Raises:
         NotADirectoryError: If root is not a real directory.
@@ -57,8 +57,8 @@ def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
         root (Path): Existing real directory to traverse without following links.
 
     Yields:
-        Path: Regular files and child directories in filesystem enumeration order.
-        The root is excluded; empty child directories are retained.
+        Path: Regular files and child directories in filesystem enumeration order. The root is excluded; empty
+            child directories are retained.
 
     Raises:
         NotADirectoryError: If root is not a real directory.
@@ -72,8 +72,8 @@ def assert_no_symlinks(root: Path) -> None:
     """Reject symlinks and junctions anywhere in a tree before copying it.
 
     Args:
-        root (Path): Real directory whose descendants are inspected without
-            following links. Other special entries are not rejected here.
+        root (Path): Real directory whose descendants are inspected without following links. Other special entries
+            are not rejected here.
 
     Returns:
         None: If no symbolic link or junction was observed.
@@ -113,8 +113,8 @@ def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[P
 
     Args:
         root (Path): Existing real directory checked lazily on first iteration.
-        include_directories (bool): Yield child directories before descent when True;
-            otherwise retain only regular files. Special entries remain omitted.
+        include_directories (bool): Yield child directories before descent when True; otherwise retain only
+            regular files. Special entries remain omitted.
 
     Yields:
         Path: Accepted entries in the original filesystem/stack traversal order.

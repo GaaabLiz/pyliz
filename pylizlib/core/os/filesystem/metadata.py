@@ -14,7 +14,22 @@ from pylizlib.core.os.windows.streams import copy_streams
 
 
 def copy_extended_attributes(source: Path, destination: Path) -> None:
-    """Copy every extended attribute exposed by the local Python runtime."""
+    """Copy every extended attribute exposed by the local Python runtime.
+
+    Args:
+        source (Path): Source file or directory whose contents or metadata are read.
+        destination (Path): Target path receiving the copied content or metadata.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        OSError: An available source attribute cannot be read or written to the target.
+
+    Notes:
+        Missing runtime xattr functions and source ENOTSUP/EOPNOTSUPP/ENOSYS are
+        skipped. Once attributes are exposed, a target-side failure propagates.
+    """
     list_xattr = getattr(os, "listxattr", None)
     get_xattr = getattr(os, "getxattr", None)
     set_xattr = getattr(os, "setxattr", None)
@@ -33,7 +48,20 @@ def copy_extended_attributes(source: Path, destination: Path) -> None:
 
 
 def copy_posix_owner_group(source: Path, destination: Path) -> None:
-    """Copy POSIX ownership when the caller has the required privilege."""
+    """Copy POSIX ownership when the caller has the required privilege.
+
+    Args:
+        source (Path): Source file or directory whose contents or metadata are read.
+        destination (Path): Target path receiving the copied content or metadata.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        NotImplementedError: The platform cannot provide required metadata or filesystem capabilities.
+        OSError: Reading ownership or applying a required chown operation fails,
+            including insufficient privilege. Equal source/target ownership needs no chown.
+    """
     source_stat = source.stat(follow_symlinks=False)
     destination_stat = destination.stat(follow_symlinks=False)
     if (source_stat.st_uid, source_stat.st_gid) == (destination_stat.st_uid, destination_stat.st_gid):
@@ -51,8 +79,8 @@ class MetadataTree:
     Attributes:
         files (list[tuple[Path, Path]]): Source/target regular-file pairs in visit order.
         directories (list[tuple[Path, Path]]): Source/target directories, including root.
-        hardlink_groups (dict[tuple[int, int], list[Path]]): Target paths grouped by
-            source device/inode. Only entries with multiple source links are grouped.
+        hardlink_groups (dict[tuple[int, int], list[Path]]): Target paths grouped by source device/inode. Only
+            entries with multiple source links are grouped.
     """
 
     files: list[tuple[Path, Path]]
@@ -61,7 +89,17 @@ class MetadataTree:
 
 
 class TreeMetadataCopier:
-    """Preserve supported metadata on a fully copied, link-free destination tree."""
+    """Preserve supported metadata on a fully copied, link-free destination tree.
+
+    Attributes:
+        copy_owner_group (Callable[[Path, Path], None]): POSIX owner/group backend for copied entries.
+        copy_attributes (Callable[[Path, Path], None]): Extended-attribute backend applied after standard stat
+            copying.
+        copy_streams (Callable[[Path, Path], None]): Windows named-stream backend used before copying security
+            descriptors.
+        copy_security (Callable[[Path, Path], None]): Windows owner/group/DACL backend applied after all other
+            metadata work.
+    """
 
     def __init__(
         self,
@@ -71,14 +109,36 @@ class TreeMetadataCopier:
         windows_streams: Callable[[Path, Path], None] = copy_streams,
         windows_security: Callable[[Path, Path], None] = copy_security,
     ):
-        """Select metadata backends without reading either tree."""
+        """Select metadata backends without reading either tree.
+
+        Args:
+            owner_group (Callable[[Path, Path], None]): Backend applying source owner/group to an existing copied
+                entry.
+            attributes (Callable[[Path, Path], None]): Backend applying source extended attributes to an existing
+                copied entry.
+            windows_streams (Callable[[Path, Path], None]): Backend copying named Windows data streams while source
+                and target remain accessible.
+            windows_security (Callable[[Path, Path], None]): Backend copying Windows owner/group/DACL after other
+                metadata work.
+
+        Returns:
+            None: No return value.
+        """
         self.copy_owner_group = owner_group
         self.copy_attributes = attributes
         self.copy_streams = windows_streams
         self.copy_security = windows_security
 
     def preserve(self, source: Path, destination: Path) -> None:
-        """Apply extended metadata to a fully copied, link-free staging tree."""
+        """Apply extended metadata to a fully copied, link-free staging tree.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         assert_no_symlinks(source)
         assert_no_symlinks(destination)
 
@@ -92,7 +152,19 @@ class TreeMetadataCopier:
 
     @staticmethod
     def _collect_entries(source: Path, destination: Path) -> MetadataTree:
-        """Inspect source topology and pair each regular entry with its copied target."""
+        """Inspect source topology and pair each regular entry with its copied target.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            MetadataTree: File/directory source-target pairs and destination hard-link groups for this metadata pass.
+
+        Raises:
+            NotImplementedError: The platform cannot provide required metadata or filesystem capabilities.
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         entries = [(source, destination)]
         entries.extend((path, destination / path.relative_to(source)) for path in iter_tree_entries_strict(source))
 
@@ -116,7 +188,15 @@ class TreeMetadataCopier:
 
     @staticmethod
     def _recreate_hardlinks(hardlink_groups: dict[tuple[int, int], list[Path]]) -> None:
-        """Recreate destination hard links before inode metadata is applied."""
+        """Recreate destination hard links before inode metadata is applied.
+
+        Args:
+            hardlink_groups (dict[tuple[int, int], list[Path]]): Destination paths grouped by source device/inode
+                before metadata is applied.
+
+        Returns:
+            None: No return value.
+        """
         for destinations in hardlink_groups.values():
             if len(destinations) > 1:
                 first, *duplicates = destinations
@@ -126,7 +206,15 @@ class TreeMetadataCopier:
 
     @staticmethod
     def _order_entries(tree: MetadataTree) -> list[tuple[Path, Path]]:
-        """Deduplicate source inodes, then order directories from deepest to root."""
+        """Deduplicate source inodes, then order directories from deepest to root.
+
+        Args:
+            tree (MetadataTree): Collected source/target topology, including directory pairs and hard-link groups.
+
+        Returns:
+            list[tuple[Path, Path]]: One file pair per source inode followed by directories ordered deepest first,
+                including root.
+        """
         file_entries = tree.files
         directory_entries = tree.directories
         unique_files = []
@@ -142,7 +230,15 @@ class TreeMetadataCopier:
         return ordered_entries
 
     def _apply_entry_metadata(self, ordered_entries: list[tuple[Path, Path]]) -> None:
-        """Apply ownership/streams, stat and xattrs, with Windows DACLs last."""
+        """Apply ownership/streams, stat and xattrs, with Windows DACLs last.
+
+        Args:
+            ordered_entries (list[tuple[Path, Path]]): Unique-file and deepest-directory-first source/target pairs
+                ready for metadata copying.
+
+        Returns:
+            None: No return value.
+        """
         for source_path, destination_path in ordered_entries:
             if os.name == "nt":
                 self.copy_streams(source_path, destination_path)

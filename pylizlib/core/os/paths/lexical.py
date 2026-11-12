@@ -14,8 +14,8 @@ def is_absolute_path(value: str) -> bool:
         value (str): Path spelling; invalid non-string values are tolerated.
 
     Returns:
-        bool: False for empty, NUL-containing or drive-relative paths, otherwise
-        whether either supported flavour considers the path absolute.
+        bool: False for empty, NUL-containing or drive-relative paths, otherwise whether either supported flavour
+            considers the path absolute.
     """
     if not isinstance(value, str) or not value or "\x00" in value:
         return False
@@ -30,8 +30,7 @@ def normalize_mapped_drive(path: PureWindowsPath, *, unc_root: Callable[[str], s
 
     Args:
         path (PureWindowsPath): Absolute drive-letter path to normalize.
-        unc_root (Callable[[str], str] | None): Drive-letter lookup, or the native
-            Windows adapter when omitted.
+        unc_root (Callable[[str], str] | None): Drive-letter lookup, or the native Windows adapter when omitted.
 
     Returns:
         str: UNC path with forward slashes and unresolved parent/link components.
@@ -55,13 +54,13 @@ def normalize_rooted_path(value: str, *, allow_relative: bool = True, path_label
         value (str): Non-empty POSIX or Windows path without NUL characters.
         allow_relative (bool): Whether to anchor a relative path to CWD.
         path_label (str): Subject used in validation messages; defaults to Path.
-        drive_type (Callable[[str], int] | None): Optional drive-letter type lookup.
-            Omitted uses the native Windows adapter, called only on Windows.
+        drive_type (Callable[[str], int] | None): Optional drive-letter type lookup. Omitted uses the native
+            Windows adapter, called only on Windows.
         unc_root (Callable[[str], str] | None): Optional mapped-drive UNC lookup.
 
     Returns:
-        str: Rooted spelling with forward slashes; links and parent components
-        remain unresolved. Windows remote drives are converted to UNC.
+        str: Rooted spelling with forward slashes; links and parent components remain unresolved. Windows remote
+            drives are converted to UNC.
 
     Raises:
         TypeError: If value is not a string.

@@ -58,8 +58,8 @@ def rename_and_sync(source: Path, destination: Path) -> None:
         None: After rename and both distinct parent sync attempts.
 
     Raises:
-        OSError: If rename or a supported flush fails; a flush failure may occur
-            after the new name is already visible.
+        OSError: If rename or a supported flush fails; a flush failure may occur after the new name is already
+            visible.
     """
     source = Path(source)
     destination = Path(destination)
