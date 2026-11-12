@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path, PureWindowsPath
 
 from pylizlib.core.os.snap.domain import BackupType, Snapshot, validate_directory_component
 
@@ -92,12 +91,7 @@ def build_backup_manifest(
 
 def parse_backup_manifest(data: object) -> BackupArchiveManifest:
     """Validate a parsed JSON manifest and return its typed archive metadata."""
-    if (
-        not isinstance(data, dict)
-        or data.get("format") != BACKUP_MANIFEST_FORMAT
-        or type(data.get("version")) is not int
-        or data["version"] != BACKUP_MANIFEST_VERSION
-    ):
+    if not isinstance(data, dict) or data.get("format") != BACKUP_MANIFEST_FORMAT or type(data.get("version")) is not int or data["version"] != BACKUP_MANIFEST_VERSION:
         raise ValueError("Unsupported or invalid snapshot backup manifest format.")
 
     type_map = {
@@ -133,36 +127,9 @@ def parse_backup_manifest(data: object) -> BackupArchiveManifest:
     except ValueError as error:
         raise ValueError("Snapshot backup manifest contains an invalid creation timestamp.") from error
 
-    raw_associations = data.get("associations")
-    if not isinstance(raw_associations, list):
-        raise ValueError("Snapshot backup manifest has no association list.")
+    from pylizlib.core.os.snap.operations.backup.associations import MODERN_ASSOCIATIONS, parse_associations
 
-    associations = []
-    seen_ids = set()
-    seen_names = set()
-    for raw in raw_associations:
-        if not isinstance(raw, dict):
-            raise ValueError("Snapshot backup manifest association entries must be objects.")
-        folder_id = raw.get("folder_id")
-        index = raw.get("index")
-        directory_name = raw.get("directory_name")
-        original_path = raw.get("original_path")
-        if not isinstance(folder_id, str) or not folder_id:
-            raise ValueError("Snapshot backup manifest contains an invalid association ID.")
-        if type(index) is not int or index < 0:
-            raise ValueError(f"Snapshot backup manifest contains an invalid index for '{folder_id}'.")
-        validate_directory_component(directory_name, "backup association directory name")
-        if directory_name in {BACKUP_MANIFEST_NAME, LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST}:
-            raise ValueError("Snapshot backup manifest name conflicts with an association directory.")
-        if not isinstance(original_path, str) or not original_path or "\x00" in original_path:
-            raise ValueError(f"Snapshot backup manifest contains an invalid original path for '{folder_id}'.")
-        if not Path(original_path).is_absolute() and not PureWindowsPath(original_path).is_absolute():
-            raise ValueError(f"Snapshot backup manifest path for '{folder_id}' must be absolute.")
-        if folder_id in seen_ids or directory_name in seen_names:
-            raise ValueError("Snapshot backup manifest contains duplicate association IDs or names.")
-        seen_ids.add(folder_id)
-        seen_names.add(directory_name)
-        associations.append(ArchivedAssociation(folder_id, index, directory_name, original_path))
+    associations = parse_associations(data.get("associations"), MODERN_ASSOCIATIONS)
 
     return BackupArchiveManifest(
         snapshot_id=snapshot_id,
