@@ -41,23 +41,31 @@ class QtFwModelTestCase(unittest.TestCase):
         self.assertTrue(val.validate(sys.executable))
         self.assertFalse(val.validate("/non/existent/path/binary"))
 
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            temp_path = f.name
+        suffix = ".txt" if os.name == "nt" else ""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            non_executable_path = f.name
         try:
-            # Not executable
-            os.chmod(temp_path, 0o644)
-            self.assertFalse(val.validate(temp_path))
-            self.assertEqual(val.correct(temp_path), temp_path)
+            if os.name != "nt":
+                os.chmod(non_executable_path, 0o644)
+            self.assertFalse(val.validate(non_executable_path))
+            self.assertEqual(val.correct(non_executable_path), non_executable_path)
+        finally:
+            if os.path.exists(non_executable_path):
+                os.remove(non_executable_path)
 
-            # Make executable
-            os.chmod(temp_path, 0o755)
-            self.assertTrue(val.validate(temp_path))
-            corrected = val.correct(temp_path)
+        executable_suffix = ".exe" if os.name == "nt" else ""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=executable_suffix) as f:
+            executable_path = f.name
+        try:
+            if os.name != "nt":
+                os.chmod(executable_path, 0o755)
+            self.assertTrue(val.validate(executable_path))
+            corrected = val.correct(executable_path)
             self.assertIn("/", corrected)
             self.assertNotIn("\\", corrected)
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            if os.path.exists(executable_path):
+                os.remove(executable_path)
 
     def test_text_list_validator(self):
         val = TextListValidator()
