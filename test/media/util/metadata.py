@@ -119,5 +119,124 @@ class MetadataHandlerTestCase(unittest.TestCase):
                 self.assertIsNone(handler.get_image_creation_date())
 
 
-if __name__ == "__main__":
-    unittest.main()
+class MetadataHandlerTestCaseExpandedTestCase(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="pyliz_metadata_test_")
+        self.base_dir = Path(self.temp_dir.name)
+        self.sample_img = self.base_dir / "sample.jpg"
+        self.sample_img.write_bytes(b"dummy image bytes")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    @patch("shutil.which", return_value=None)
+    def test_exiftool_missing_returns_false(self, _):
+        handler = MetadataHandler(self.sample_img)
+        self.assertFalse(handler.generate_xmp(self.base_dir / "out.xmp"))
+        self.assertFalse(handler.append_eagle_to_xmp(MagicMock(), self.base_dir / "out.xmp"))
+        self.assertIsNone(handler.get_image_creation_date())
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_generate_xmp_success(self, _, mock_run):
+        mock_run.return_value = MagicMock()
+        handler = MetadataHandler(self.sample_img)
+        out_xmp = self.base_dir / "sample.xmp"
+        self.assertTrue(handler.generate_xmp(out_xmp))
+        mock_run.assert_called_once()
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_generate_xmp_nothing_to_write_fallback(self, _, mock_run):
+        err = subprocess.CalledProcessError(1, cmd="exiftool", stderr="Error: Nothing to write")
+        mock_run.side_effect = err
+
+        handler = MetadataHandler(self.sample_img)
+        out_xmp = self.base_dir / "sample.xmp"
+        self.assertTrue(handler.generate_xmp(out_xmp))
+        self.assertTrue(out_xmp.exists())
+        self.assertIn("xmpmeta", out_xmp.read_text())
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_generate_xmp_failure(self, _, mock_run):
+        err = subprocess.CalledProcessError(1, cmd="exiftool", stderr="Fatal error")
+        mock_run.side_effect = err
+
+        handler = MetadataHandler(self.sample_img)
+        self.assertFalse(handler.generate_xmp(self.base_dir / "out.xmp"))
+
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_append_eagle_to_xmp_missing_file(self, _):
+        handler = MetadataHandler(self.sample_img)
+        self.assertFalse(handler.append_eagle_to_xmp(MagicMock(), self.base_dir / "missing.xmp"))
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_append_eagle_to_xmp_empty_metadata(self, _, mock_run):
+        xmp_file = self.base_dir / "exists.xmp"
+        xmp_file.write_text("<xmp></xmp>")
+
+        meta = MagicMock()
+        meta.tags = []
+        meta.annotation = None
+
+        handler = MetadataHandler(self.sample_img)
+        self.assertTrue(handler.append_eagle_to_xmp(meta, xmp_file))
+        mock_run.assert_not_called()
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_append_eagle_to_xmp_success_and_error(self, _, mock_run):
+        xmp_file = self.base_dir / "exists.xmp"
+        xmp_file.write_text("<xmp></xmp>")
+
+        meta = MagicMock()
+        meta.tags = ["nature", "forest"]
+        meta.annotation = "A beautiful photo"
+
+        handler = MetadataHandler(self.sample_img)
+        self.assertTrue(handler.append_eagle_to_xmp(meta, xmp_file))
+        mock_run.assert_called_once()
+
+        # CalledProcessError handling
+        mock_run.side_effect = subprocess.CalledProcessError(1, "exiftool", stderr="Write error")
+        self.assertFalse(handler.append_eagle_to_xmp(meta, xmp_file))
+
+    @patch("subprocess.run")
+    def test_set_creation_date(self, mock_run):
+        xmp_file = self.base_dir / "exists.xmp"
+        xmp_file.write_text("<xmp></xmp>")
+
+        handler = MetadataHandler(self.sample_img)
+        target_date = datetime(2024, 6, 15, 12, 30, 45)
+
+        # File exists -> success
+        self.assertTrue(handler.set_creation_date(target_date, xmp_file))
+        mock_run.assert_called_once()
+
+        # File does not exist -> False
+        self.assertFalse(handler.set_creation_date(target_date, self.base_dir / "missing.xmp"))
+
+        # Exception handling
+        mock_run.side_effect = Exception("error")
+        self.assertFalse(handler.set_creation_date(target_date, xmp_file))
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/exiftool")
+    def test_get_image_creation_date(self, _, mock_run):
+        mock_proc = MagicMock()
+        mock_proc.stdout = "2023:05:10 14:20:00\n"
+        mock_run.return_value = mock_proc
+
+        handler = MetadataHandler(self.sample_img)
+        dt = handler.get_image_creation_date()
+        self.assertEqual(dt, datetime(2023, 5, 10, 14, 20, 0))
+
+        # Output with invalid date
+        mock_proc.stdout = "invalid:date:format\n"
+        self.assertIsNone(handler.get_image_creation_date())
+
+        # Exception handling
+        mock_run.side_effect = Exception("failed")
+        self.assertIsNone(handler.get_image_creation_date())

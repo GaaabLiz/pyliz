@@ -87,5 +87,66 @@ class ImageUtilsTestCase(unittest.TestCase):
             mock_log.assert_called_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
+from pathlib import Path
+
+
+class ImageUtilsTestCaseExpandedTestCase(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="pyliz_image_util_")
+        self.base_dir = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_save_and_load_ndarrays(self):
+        arr1 = np.full((20, 20, 3), 50, dtype=np.uint8)
+        arr2 = np.full((20, 20, 3), 150, dtype=np.uint8)
+
+        out_folder = self.base_dir / "saved_frames"
+        save_ndarrays_as_images([arr1, arr2], str(out_folder), prefix="test_frame", extension="png")
+
+        self.assertTrue((out_folder / "test_frame_0.png").exists())
+        self.assertTrue((out_folder / "test_frame_1.png").exists())
+
+        loaded = load_images_as_ndarrays(str(out_folder))
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0].shape, (20, 20, 3))
+
+    def test_load_images_handles_read_errors(self):
+        out_folder = self.base_dir / "corrupted"
+        out_folder.mkdir()
+        (out_folder / "bad.png").write_text("not an image")
+
+        loaded = load_images_as_ndarrays(str(out_folder))
+        self.assertEqual(loaded, [])
+
+    def test_check_file_is_image_validations(self):
+        # Non-media file
+        txt_file = self.base_dir / "notes.txt"
+        txt_file.write_text("hello")
+        with self.assertRaises(ValueError):
+            ImageUtils.check_sd_metadata(str(txt_file))
+
+        # Valid image file but non-SD metadata
+        img_file = self.base_dir / "sample.png"
+        Image.new("RGB", (10, 10), color="blue").save(img_file)
+        meta = ImageUtils.check_sd_metadata(str(img_file))
+        self.assertIsNone(meta)
+
+    @patch("pylizlib.media.util.image.ParserManager")
+    def test_check_sd_metadata_success_and_exception(self, mock_pm_cls):
+        img_file = self.base_dir / "sample_sd.png"
+        Image.new("RGB", (10, 10), color="green").save(img_file)
+
+        mock_pm = MagicMock()
+        mock_info = MagicMock()
+        mock_pm.parse.return_value = mock_info
+        mock_pm_cls.return_value = mock_pm
+
+        res = ImageUtils.check_sd_metadata(str(img_file))
+        self.assertEqual(res, mock_info)
+
+        # Exception handling
+        mock_pm.parse.side_effect = Exception("parse error")
+        res_err = ImageUtils.check_sd_metadata(str(img_file))
+        self.assertIsNone(res_err)
