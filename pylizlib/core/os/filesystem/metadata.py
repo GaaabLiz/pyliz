@@ -33,7 +33,7 @@ def copy_extended_attributes(source: Path, destination: Path) -> None:
     list_xattr = getattr(os, "listxattr", None)
     get_xattr = getattr(os, "getxattr", None)
     set_xattr = getattr(os, "setxattr", None)
-    if not all((list_xattr, get_xattr, set_xattr)):
+    if not list_xattr or not get_xattr or not set_xattr:
         return
     try:
         names = list_xattr(source, follow_symlinks=False)

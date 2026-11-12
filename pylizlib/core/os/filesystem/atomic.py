@@ -136,12 +136,12 @@ class AtomicFile:
             raise
 
     @classmethod
-    def read_bytes(cls, path: Path, opener: Callable = None) -> bytes:
+    def read_bytes(cls, path: Path, opener: Callable[..., int] | None = None) -> bytes:
         """Read all bytes from a checked regular file and close its descriptor.
 
         Args:
             path (Path): Existing regular file below a real parent.
-            opener (Callable | None): Protected open hook accepting path and flags, or the class open_file
+            opener (Callable[..., int] | None): Protected open hook accepting path and flags, or the class open_file
                 implementation when omitted.
 
         Returns:
@@ -316,7 +316,7 @@ class AtomicFile:
             os.close(parent_fd)
 
     @classmethod
-    def write_bytes(cls, path: Path, contents: bytes, opener: Callable = None) -> None:
+    def write_bytes(cls, path: Path, contents: bytes, opener: Callable[..., int] | None = None) -> None:
         """Atomically replace a regular metadata file and preserve its prior bytes.
 
         The temporary and previous-version files are created beside ``path``.
@@ -328,7 +328,7 @@ class AtomicFile:
         Args:
             path (Path): Absent or regular destination below an existing real parent.
             contents (bytes): Complete new version; non-byte values are rejected using isinstance(contents, bytes).
-            opener (Callable | None): Optional protected-open hook accepting path, flags and mode; the class open_file
+            opener (Callable[..., int] | None): Optional protected-open hook accepting path, flags and mode; the class open_file
                 is used when omitted.
 
         Returns:
@@ -377,7 +377,7 @@ class AtomicFile:
 
             # Retain the old bytes before replacing the current visible name.
             if previous_bytes is not None:
-                previous_mode = stat.S_IMODE(current_stat.st_mode)
+                previous_mode = file_mode
                 assert previous_temp is not None
                 cls._write_temporary(previous_temp, previous_bytes, opener, previous_mode, preserve_mode=True)
                 cls._replace_sibling(previous_temp, previous_path, parent_stat)

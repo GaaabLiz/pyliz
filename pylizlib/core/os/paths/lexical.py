@@ -39,12 +39,12 @@ def normalize_mapped_drive(path: PureWindowsPath, *, unc_root: Callable[[str], s
         ValueError: If the mapping cannot be resolved; native errors are chained.
     """
     try:
-        unc_root = PureWindowsPath((unc_root or get_mapped_drive_unc_root)(path.drive[0]))
+        mapped_root = PureWindowsPath((unc_root or get_mapped_drive_unc_root)(path.drive[0]))
     except (AttributeError, OSError) as error:
         raise ValueError(f"Cannot resolve mapped network drive '{path.drive}' to a UNC path. Use the UNC path directly.") from error
     drive_root = PureWindowsPath(f"{path.drive}\\")
     suffix = path.relative_to(drive_root)
-    return unc_root.joinpath(*suffix.parts).as_posix()
+    return mapped_root.joinpath(*suffix.parts).as_posix()
 
 
 def normalize_rooted_path(value: str, *, allow_relative: bool = True, path_label: str = "Path", drive_type: Callable[[str], int] | None = None, unc_root: Callable[[str], str] | None = None) -> str:

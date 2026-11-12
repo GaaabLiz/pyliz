@@ -31,6 +31,13 @@ def test_recursive_copy_and_filesystem_aliases(tmp_path):
     assert same_filesystem_entry(file, alias)
 
 
+def test_containment_accepts_native_path_strings(tmp_path):
+    """String callers retain the same alias-aware containment policy as Path callers."""
+    with pytest.raises(ValueError, match="inside source"):
+        assert_destination_outside_source(str(tmp_path), str(tmp_path / "child"))
+    assert assert_destination_outside_source(str(tmp_path / "source"), str(tmp_path / "sibling")) is None
+
+
 def test_general_primitives_import_without_snapshot_dependencies():
     """Reusable filesystem imports must not load the snapshot package."""
     result = subprocess.run(

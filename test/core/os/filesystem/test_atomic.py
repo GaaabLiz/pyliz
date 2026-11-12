@@ -1,9 +1,31 @@
 """Protected atomic publication works without snapshot model dependencies."""
 
+import stat
+
 import pytest
 
 from pylizlib.core.os.filesystem.atomic import AtomicFile, FileDurabilityError
 from pylizlib.core.os.filesystem.entries import entry_exists, remove_entry
+
+
+def test_atomic_file_uses_the_protected_opener_for_reads_and_staging(tmp_path):
+    """Hooks receive descriptor flags and preserve the old mode for both versions."""
+    path = tmp_path / "binary"
+    path.write_bytes(b"old")
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    calls = []
+
+    def tracked_open(path, flags, mode=0o666):
+        """Keep protected opening while retaining the hook's positional contract."""
+        calls.append((path, flags, mode))
+        return AtomicFile.open_file(path, flags, mode)
+
+    AtomicFile.write_bytes(path, b"new", opener=tracked_open)
+    assert AtomicFile.read_bytes(path, opener=tracked_open) == b"new"
+    assert AtomicFile.previous_path(path).read_bytes() == b"old"
+    assert calls[0][0] == path and calls[-1][0] == path
+    staging_modes = [mode for entry, _, mode in calls if entry != path]
+    assert staging_modes == [original_mode, original_mode]
 
 
 def test_general_atomic_file_preserves_previous_bytes(tmp_path):
