@@ -15,25 +15,50 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Installazione e rimozione delle copie installate | `operations/install.py` |
 | Aggiornamento delle copie interne dal sistema | `operations/sync.py` |
 | Pianificazione ed esecuzione degli edit | `operations/edits.py` |
-| Backup e ripristino | `operations/archives.py` |
+| Facciata compatibile backup e ripristino | `operations/archives.py` |
+| Creazione e ispezione degli archivi | `operations/backup/creation.py`, `inspection.py` |
+| Piano, staging e pubblicazione del restore | `operations/backup/planning.py`, `restore.py` |
+| Codec e regole delle associazioni archiviate | `operations/backup_manifest.py`, `backup/associations.py` |
 | Generazione e parsing dei nomi dei backup | `operations/backup_names.py` |
 | Import/export del catalogo | `operations/transfers.py` |
 | Percorsi contenuti nello storage | `storage/paths.py` |
-| Scansione e politiche sui link | `storage/tree.py` |
+| Scansione rigorosa e politiche sui link | `core/os/filesystem/tree.py`; deleghe in `storage/tree.py` |
 | Pubblicazione delle directory e pulizia | `storage/publication.py` |
-| Primitive di lettura e scrittura ZIP | `storage/archives.py` |
+| Primitive di lettura e scrittura ZIP | `core/os/archives/zip/`; deleghe in `storage/archives.py` |
 | Limiti predefiniti per import e restore ZIP | `storage/archive_limits.py` |
-| Conversione JSON e file descriptor protetti | `storage/metadata.py` |
+| Conversione JSON snapshot | `storage/metadata.py` |
+| File descriptor protetti e scritture atomiche | `core/os/filesystem/atomic.py` |
 | Scansione delle voci del catalogo | `storage/catalogue.py` |
 | Dipendenze di una singola operazione | `storage/context.py` |
-| Journal e recupero delle transazioni | `storage/transactions.py` |
+| Persistenza e facciata journal | `storage/transactions.py` |
+| Codec, dispatch e handler di recupero | `storage/recovery/` |
 | Copia di un'associazione nel suo storage | `storage/association.py` |
-| Strategie di copia e sorgenti stabili | `copy_strategy.py` |
+| Strategie pubbliche di copia | `copy_strategy.py` |
+| Sessioni di copia, provider e capacità metadata | `copying/` |
 | Validazione e confronto dei manifest | `integrity.py` |
-| Query, ricerca e risoluzione dei percorsi | `searcher.py` |
+| Query pubbliche e risoluzione dei percorsi | `searcher.py` |
+| Adapter di configurazione live e risultati | `searching.py` |
+| Motore testuale, encoding, finestre e preview | `core/data/text/` |
+| Ripristino del modello e stato di acquisizione | `model_state.py` |
 | Contratti delle callback | `callbacks.py` |
 | Confronto delle associazioni e ordinamento | `diff.py`, `sorting.py` |
 | Generazione di esempi casuali | `factories.py` |
+
+I percorsi che iniziano con `core/` sono relativi a `pylizlib/`. Gli altri sono
+relativi a questo package. Le primitive generali non importano `snap`: possono
+essere usate per altri dati e filesystem. In particolare:
+
+- `core/os/paths/` distingue forma lessicale, identità filesystem e containment;
+- `core/os/filesystem/` contiene alberi, metadati, fingerprint, capacità, entry,
+  scrittura atomica e conferma delle rinomine;
+- `core/os/windows/` isola drive, descrittori di sicurezza e alternate data streams,
+  caricando i binding nativi soltanto quando chiamati;
+- `core/os/archives/zip/` valida, estrae e pubblica archivi generici;
+- `core/data/text/` legge testo e raccoglie match tramite contratti strutturali.
+
+Le policy su ID, nomi riservati, associazioni, formati legacy e stati di commit
+rimangono in `snap`. I vecchi moduli di storage restano disponibili come adapter
+di compatibilità; il codice condiviso ha una sola implementazione.
 
 Le scritture dei metadati preparano un file temporaneo nella stessa directory,
 sincronizzano i suoi contenuti, conservano i byte precedenti in un sidecar
@@ -46,7 +71,9 @@ può attestare che il server abbia persistito i byte su supporto stabile.
 di `date_last_used` dopo il commit dei dati. L'eccezione indica che le directory
 sono già state installate, espone `metadata_published` (True, False o None se
 l'adapter non può determinarlo). In modalità sostituzione lascia le copie
-precedenti temporanee per il recupero; il merge non crea sempre copie di backup.
+precedenti temporanee per il recupero. Il merge registra invece le sostituzioni
+delle entry di primo livello e le relative copie di rollback: non ricostruisce
+un backup ricorsivo dell'intera destinazione.
 Un adapter alternativo dovrebbe esporre `published` e
 `durability_confirmed` sulle eccezioni di scrittura post-pubblicazione.
 
@@ -74,10 +101,14 @@ errore di decodifica testuale non viene descritto come file binario. Per altri
 codici si può impostare `encoding` esplicitamente.
 
 Le query di testo e regex possono attraversare le righe. Il contenuto è letto
-con blocchi da `chunk_size` (default 64 KiB). Le regex hanno un timeout per
-finestra (`regex_timeout_seconds`, default 0,1 s) e la finestra è limitata a
-`max_context_chars` (default 1 Mi caratteri): match regex che richiedono più
-contesto non sono garantiti. Solo `False` interrompe la ricerca dello snapshot
+con blocchi da `chunk_size` (default 65.536 **caratteri decodificati**); il campione
+iniziale per l'encoding è invece di 8.192 byte. Le regex hanno un timeout per
+operazione di matching (`regex_timeout_seconds`, default 0,1 s), non una scadenza
+globale della ricerca. `max_context_chars` (default 1.048.576 caratteri) è il
+budget del contesto trattenuto fra i blocchi. Non impone una lunghezza massima
+rigida a ciascun match: uno span più lungo può essere trovato quando entra nella
+finestra corrente, ma non è garantito fra chunk e coda EOF. Solo `False`
+interrompe la ricerca dello snapshot
 corrente; la callback viene richiamata anche durante la lettura, così può
 interrompere un file molto grande.
 
@@ -160,6 +191,12 @@ I contratti sono limitati alle capacità utilizzate:
   ricerca; la firma storica del costruttore resta disponibile.
 - `SnapshotLookup` permette il lookup usato dal restore delle associazioni.
 - `CatalogueQuery` espone le letture necessarie ai trasferimenti ZIP.
+- `MetadataCopyCapability` permette alla strategia estesa di mantenere aperta
+  la sorgente stabile durante la copia degli attributi, senza dipendere dalla
+  classe concreta del provider.
+- `TextSearchConfiguration`, `MatchPage` e `TimedPattern` espongono al motore
+  testuale soltanto configurazione live, pagine isolate per retry e matching
+  con timeout. Il motore non conosce nomi o modelli snapshot.
 
 La copia usa `SnapshotSettings.copy_metadata_mode`. Il default `BASIC` mantiene
 il comportamento corrente: contenuti con `copy2`, metadati standard dei file e
@@ -253,18 +290,46 @@ propri test: non va inserita in uno spostamento di codice.
 Dalla root del repository:
 
 ```sh
-.venv/bin/python -m pytest test/core/os/snap -q --disable-warnings
-.venv/bin/ruff check pylizlib/core/os/snap
+.venv/bin/python -m pytest test/core/test_documentation_contracts.py \
+    test/core/os/snap test/core/os/filesystem test/core/os/paths \
+    test/core/data/text -q --disable-warnings
+.venv/bin/ruff check pylizlib/core/os/snap pylizlib/core/os/filesystem \
+    pylizlib/core/os/paths pylizlib/core/os/windows pylizlib/core/os/archives \
+    pylizlib/core/data/text
+make docs-snap
 ```
 
 I test di caratterizzazione sono in `test_refactor_contracts.py`; quelli dei
 moduli estratti e delle strategie sono in `test_refactor_modules.py`.
-`test_public_api.py` confronta le dichiarazioni pubbliche con la fixture della
-revisione precedente al refactor e richiede docstring per classi, funzioni e
-callback annidate.
+`test_public_api.py` e `test_second_refactor_contracts.py` confrontano firme,
+default, identità e campi pubblici con le fixture precedenti ai due refactor.
+`test/core/test_documentation_contracts.py` richiede sezioni Google tipizzate
+per parametri, ritorni/yield e campi dichiarati, oltre alla riga vuota prima
+dei blocchi di commento. Questi controlli strutturali affiancano la review del
+significato e i test comportamentali; non provano da soli la correttezza del testo.
+
+La preview HTML è in `temp_local/docs_snap_preview/index.html` e viene generata
+con il gruppo `dev` già dichiarato nel progetto. L'HTML storico sotto `docs/`
+va rigenerato esplicitamente prima di pubblicare la documentazione aggiornata.
 
 Per modifiche ai flussi filesystem verificare sia il successo sia errori di
 copia, rinomina, salvataggio e cleanup. Confrontare contenuti, JSON e stato in
 memoria. Usare copie locali isolate: gran parte dei vecchi test condivide una
-root di fixture e non è predisposta per esecuzione parallela. Le prove Windows
-nella suite simulano le API ACL; non sostituiscono una verifica su Windows reale.
+root di fixture e non è predisposta per esecuzione parallela. I test nativi Windows
+richiedono un runner Windows e dichiarano gli skip per capacità non disponibili;
+i mock di drive, ACL e ADS verificano separatamente errori e ordine delle chiamate.
+Una suite locale su un altro OS non dimostra l'equivalenza delle chiamate Win32.
+I backend drive/ADS conservano quindi i binding esistenti dietro il nuovo confine:
+una loro sostituzione richiede prima prove native di conformità. Anche SMB/NFS
+richiedono un ambiente reale per dichiarare garanzie aggiuntive di persistenza.
+
+## Log nell'applicazione
+
+Il logger condiviso `PylizLib` mantiene il proprio `NullHandler`: la libreria non
+installa handler e non cambia il livello globale. L'applicazione configura il
+logging secondo le proprie esigenze. Gli eventi INFO descrivono le operazioni
+e il recupero effettivo; DEBUG espone fasi, decisioni del journal già persistite,
+formato dei backup e conteggi della ricerca. Query, contenuti dei file, preview
+e JSON completi non vengono aggiunti ai log. Alcuni messaggi contengono ID e
+percorsi necessari a identificare la fase; l'applicazione gestisce la loro
+visibilità.
