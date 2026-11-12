@@ -328,12 +328,19 @@ class SnapshotEditor:
         """
         for index, assoc in enumerate(plan.additions):
             manifest = {}
+            copy_parent = staging_path / f".addition_source_{index}"
             assoc.copy_install_to(
-                staging_path / additions[index]["staged"],
+                copy_parent,
                 message_callback=message_callback,
                 copy_strategy=self.storage.settings.copy_strategy,
                 manifest=manifest,
             )
+            copied_association = copy_parent / assoc.directory_name
+            staged_association = staging_path / additions[index]["staged"]
+            if staged_association.exists() or staged_association.is_symlink():
+                raise FileExistsError(f"Snapshot addition staging path '{staged_association}' is already occupied.")
+            rename_and_sync(copied_association, staged_association)
+            copy_parent.rmdir()
 
     def _publish_edits(self, plan: EditPlan, journal: SnapshotTransactionJournal, moves: list[dict], additions: list[dict]) -> None:
         """Stage original names, persist publishing phase, then publish and verify targets.
