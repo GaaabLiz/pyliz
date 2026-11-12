@@ -1,9 +1,10 @@
 """Shared association decoding with explicit modern/legacy error vocabulary."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-from pylizlib.core.os.snap.domain import validate_directory_component
+from pylizlib.core.os.snap.domain import SnapDirAssociation, validate_directory_component
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST, ArchivedAssociation
 
 
@@ -94,3 +95,17 @@ def parse_associations(raw_associations: object, policy: AssociationManifestPoli
         seen_names.add(directory_name)
         associations.append(ArchivedAssociation(folder_id, index, directory_name, original_path))
     return associations
+
+
+def association_identities(associations: Iterable[SnapDirAssociation | ArchivedAssociation]) -> set[tuple[str, int, str]]:
+    """Compare exported associations using stable ID, index and physical storage name.
+
+    Args:
+        associations (Iterable[SnapDirAssociation | ArchivedAssociation]): Domain or
+            archived associations whose three identity fields should be compared.
+
+    Returns:
+        set[tuple[str, int, str]]: Identity triples, independent of enumeration order.
+        Domain directory_name validation retains its existing model side effects.
+    """
+    return {(item.folder_id, item.index, item.directory_name) for item in associations}

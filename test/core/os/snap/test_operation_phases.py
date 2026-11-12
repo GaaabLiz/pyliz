@@ -6,11 +6,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from pylizlib.core.os.snap.domain import Snapshot
+from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
+from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotSettings
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.operations.edits import SnapshotEditor
 from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
+from pylizlib.core.os.snap.searcher import SnapshotSearcher, SnapshotSearchParams, _ResultPage
 from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError
 
 
@@ -43,3 +45,48 @@ def test_sync_and_edit_log_only_completed_operations(tmp_path, caplog):
         manager.update_from_actions_list([])
     for event in ("Synchronizing snapshot id=empty", "Synchronized snapshot id=empty", "Editing snapshot id=empty", "Edited snapshot id=empty"):
         assert event in caplog.text
+
+
+def test_import_restore_and_search_logs_omit_query_and_contents(tmp_path, caplog):
+    """Operation logs identify committed work without recording the search query."""
+    manager = SnapshotManager(Snapshot("logged", "name", ""), tmp_path / "source-catalogue", SnapshotSettings())
+    manager.create()
+    archive = manager.create_backup(tmp_path / "backups", "", BackupType.SNAPSHOT_DIRECTORY)
+    target = tmp_path / "target-catalogue"
+    target.mkdir()
+    catalogue = SnapshotCatalogue(target, SnapshotSettings())
+    with caplog.at_level("DEBUG", logger="PylizLib"):
+        catalogue.import_snapshot(archive)
+        catalogue.restore_backup(archive)
+        snapshot = catalogue.get_by_id("logged")
+        SnapshotSearcher(catalogue).search(snapshot, SnapshotSearchParams("private-query-marker"))
+    assert "Imported snapshot id=logged" in caplog.text
+    assert "Restored backup snapshot=logged type=SNAPSHOT_DIRECTORY" in caplog.text
+    assert "Finished snapshot search snapshot=logged results=0" in caplog.text
+    assert "private-query-marker" not in caplog.text
+
+
+def test_chunk_observer_truthiness_is_checked_at_each_chunk(tmp_path):
+    """Adapters preserve custom observer truthiness without an extra initial check."""
+
+    class AlternatingObserver:
+        """Enable every second notification through a stateful truthiness check."""
+
+        checks = 0
+        calls = 0
+
+        def __bool__(self):
+            """Record one truthiness check for each decoded chunk."""
+            self.checks += 1
+            return self.checks % 2 == 0
+
+        def __call__(self, name, total, processed):
+            """Count enabled notifications without cancelling the file scan."""
+            self.calls += 1
+
+    path = tmp_path / "text"
+    path.write_text("abcdef", encoding="utf-8")
+    observer = AlternatingObserver()
+    SnapshotSearcher(None)._search_in_file(path, SnapshotSearchParams("absent", chunk_size=1), None, "snapshot", _ResultPage(0, 10), observer, 1, 1)
+    assert observer.checks == 6
+    assert observer.calls == 3

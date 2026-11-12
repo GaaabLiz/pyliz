@@ -10,6 +10,7 @@ from pathlib import Path
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import BackupType, SnapshotBackupInfo, SnapshotSettings
 from pylizlib.core.os.snap.operations.archives import SnapshotLookup, _ArchiveMetadata
+from pylizlib.core.os.snap.operations.backup.associations import association_identities
 from pylizlib.core.os.snap.operations.backup.inspection import BackupArchiveInspector
 from pylizlib.core.os.snap.operations.backup.planning import AssociationRestoreTask, RestorePlanner
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
@@ -39,8 +40,8 @@ class SnapshotTreeRestorer:
         if metadata.info.snapshot_id is not None and restored_snapshot.id != metadata.info.snapshot_id:
             raise ValueError("Snapshot-directory JSON ID does not match the archive metadata.")
         if metadata.associations is not None:
-            archived_associations = {(item.folder_id, item.index, item.directory_name) for item in metadata.associations}
-            snapshot_associations = {(item.folder_id, item.index, item.directory_name) for item in restored_snapshot.directories}
+            archived_associations = association_identities(metadata.associations)
+            snapshot_associations = association_identities(restored_snapshot.directories)
             if archived_associations != snapshot_associations:
                 raise ValueError("Snapshot-directory associations do not match the archive metadata.")
         if metadata.manifest_name is not None:
@@ -156,6 +157,7 @@ class BackupRestorer:
         if info.backup_type == BackupType.SNAPSHOT_DIRECTORY and destination_mapping is not None:
             raise ValueError("Destination remapping is only supported for associated-directories backups.")
 
+        logger.info("Restoring backup snapshot=%s type=%s", info.snapshot_id, info.backup_type.name)
         restore_space_requirements = []
         if info.backup_type == BackupType.ASSOCIATED_DIRECTORIES:
             associations, origin_os = self.planner.associations_from(metadata)
@@ -188,6 +190,7 @@ class BackupRestorer:
 
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
                 self.tree_restorer.restore(temp_dir_path, metadata)
-                return
+            else:
+                self.association_restorer.restore(metadata, temp_dir_path, destination_mapping)
 
-            self.association_restorer.restore(metadata, temp_dir_path, destination_mapping)
+        logger.info("Restored backup snapshot=%s type=%s", info.snapshot_id, info.backup_type.name)
