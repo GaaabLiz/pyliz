@@ -88,9 +88,7 @@ class TestSnapshotManagerCreate(unittest.TestCase):
         mgr.create(progress_callback=progress.append)
 
         association = snap.directories[0]
-        expected_bytes = sum(
-            entry["size"] for entry in association.integrity_manifest.values() if entry["type"] == "file"
-        )
+        expected_bytes = sum(entry["size"] for entry in association.integrity_manifest.values() if entry["type"] == "file")
         self.assertEqual(association.mb_size, expected_bytes / (1024 * 1024))
         self.assertEqual(snap.date_created, created_at)
         self.assertIsNotNone(snap.capture_started_at)
@@ -430,10 +428,7 @@ class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
             id="SameIndexNames",
             name="Same index names",
             desc="",
-            directories=[
-                SnapDirAssociation(index=1, original_path=str(source), folder_id=f"assoc-{index}")
-                for index, source in enumerate(sources)
-            ],
+            directories=[SnapDirAssociation(index=1, original_path=str(source), folder_id=f"assoc-{index}") for index, source in enumerate(sources)],
         )
         mgr = self._mgr(snap)
         mgr.create()
@@ -501,7 +496,7 @@ class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
         assoc = snap.directories[0]
         before = mgr.path_snapshot_json.read_bytes()
 
-        with patch("os.unlink", side_effect=PermissionError("association is locked")):
+        with patch("pylizlib.core.os.path.shutil.rmtree", side_effect=PermissionError("association is locked")):
             with self.assertRaisesRegex(PermissionError, "association is locked"):
                 mgr.uninstall_directory_by_folder_id(assoc.folder_id)
 
@@ -628,9 +623,7 @@ class TestSnapshotManagerUpdateAssocDirs(unittest.TestCase):
         loaded = SnapshotSerializer.from_json(mgr.path_snapshot_json)
         self.assertIsNotNone(loaded.date_last_modified)
         self.assertIn("new_file.txt", loaded.directories[0].integrity_manifest)
-        expected_bytes = sum(
-            entry["size"] for entry in loaded.directories[0].integrity_manifest.values() if entry["type"] == "file"
-        )
+        expected_bytes = sum(entry["size"] for entry in loaded.directories[0].integrity_manifest.values() if entry["type"] == "file")
         self.assertEqual(loaded.directories[0].mb_size, expected_bytes / (1024 * 1024))
         self.assertIsNotNone(loaded.capture_started_at)
         self.assertIsNotNone(loaded.capture_completed_at)
@@ -1148,6 +1141,7 @@ class TestSnapshotManagerActionsAndBackup(unittest.TestCase):
             for blocked in (root, root / "nested" if root == self._src[0] else root / snap.directories[0].directory_name / "nested"):
                 for error in (PermissionError(errno.EACCES, "scan denied", str(blocked)), OSError(errno.EIO, "scan failed", str(blocked))):
                     with self.subTest(backup_type=backup_type, blocked=blocked, error=error):
+
                         def fail_scan(path):
                             if Path(path) == blocked:
                                 raise error

@@ -9,7 +9,7 @@ import regex
 from pylizlib.core.data.text.results import ResultPage
 from pylizlib.core.data.text.search import TextFileSearcher, TextSearchOptions
 
-CASES = json.loads((Path(__file__).parent / "fixtures" / "streaming_contracts.json").read_text())
+CASES = json.loads((Path(__file__).parent / "fixtures" / "streaming_contracts.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["name"] for case in CASES])

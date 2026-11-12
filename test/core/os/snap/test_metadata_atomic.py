@@ -121,4 +121,3 @@ def test_full_json_save_uses_atomic_writer_and_preserves_recoverable_bytes(tmp_p
 
     assert json.loads(metadata_path.read_text(encoding="utf-8"))["name"] == "after"
     assert MetadataFile.previous_path(metadata_path).read_bytes() == previous_bytes
-

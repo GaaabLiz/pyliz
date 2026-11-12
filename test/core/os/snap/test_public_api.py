@@ -16,6 +16,14 @@ from pylizlib.core.os import snap
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "public_api.json").read_text())
 
 
+def _ast_dump(node):
+    """Keep fixture comparison stable across Python AST dump versions."""
+    try:
+        return ast.dump(node, show_empty=True)
+    except TypeError:
+        return ast.dump(node)
+
+
 def test_original_exports_and_class_locations_are_preserved():
     """Old exports remain stable while documented features extend the package API."""
     assert snap.__all__ == [
@@ -45,9 +53,9 @@ def test_original_method_signatures_fields_and_enum_values_are_preserved():
         for name, declaration in expected["methods"].items():
             method = methods[name]
             actual = {
-                "args": ast.dump(method.args),
-                "returns": ast.dump(method.returns) if method.returns else None,
-                "decorators": [ast.dump(d) for d in method.decorator_list],
+                "args": _ast_dump(method.args),
+                "returns": _ast_dump(method.returns) if method.returns else None,
+                "decorators": [_ast_dump(d) for d in method.decorator_list],
             }
             assert actual == declaration, f"{qualified_name}.{name}"
         fields = {n.target.id: ast.dump(n) for n in cls.body if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name)}
