@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.path import remove_directory_or_move_to_temp
+from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.model_state import CapturedContentState

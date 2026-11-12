@@ -496,7 +496,7 @@ class TestSnapshotManagerDirectoryManagement(unittest.TestCase):
         assoc = snap.directories[0]
         before = mgr.path_snapshot_json.read_bytes()
 
-        with patch("pylizlib.core.os.path.shutil.rmtree", side_effect=PermissionError("association is locked")):
+        with patch("pylizlib.core.os.filesystem.directories.shutil.rmtree", side_effect=PermissionError("association is locked")):
             with self.assertRaisesRegex(PermissionError, "association is locked"):
                 mgr.uninstall_directory_by_folder_id(assoc.folder_id)
 

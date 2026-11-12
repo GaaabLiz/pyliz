@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.os.path import remove_directory_or_move_to_temp
+from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,

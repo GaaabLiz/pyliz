@@ -13,10 +13,12 @@ The project is both an importable library and a source for optional application 
 | `pylizlib/core/app/` | Application configuration and INI/TOML helpers |
 | `pylizlib/core/data/` | General data helpers and text search, encoding, matching, and previews |
 | `pylizlib/core/domain/`, `handler/`, `log/`, `network/` | Shared domain models, operation handlers, logging, and network helpers |
-| `pylizlib/core/os/paths/` | Path spelling, identity, and containment |
-| `pylizlib/core/os/filesystem/` | Filesystem entries, tree scans, metadata, atomic writes, and durability primitives |
+| `pylizlib/core/os/paths/` | Lexical path spelling and normalization, locations, identity, containment, and safety checks |
+| `pylizlib/core/os/filesystem/` | Directory and file operations, file-type checks, capacity, tree scans, metadata, atomic writes, and durability primitives |
 | `pylizlib/core/os/archives/zip/` | ZIP validation, extraction, and publication primitives |
-| `pylizlib/core/os/windows/` | Windows drives, security descriptors, and alternate data streams |
+| `pylizlib/core/os/windows/` | Windows drives, process/service inspection, commands, security descriptors, and alternate data streams |
+| `pylizlib/core/network/` | HTTP requests, response wrappers, SSL helpers, and downloads |
+| `pylizlib/core/os/path.py`, `file.py`, `utils.py` | Compatibility facades; new code should import from the focused modules above |
 | `pylizlib/core/os/snap/` | Snapshot public API, models, operations, storage, recovery, copying strategies, and search |
 | `pylizlib/media/` | Media models and processing utilities |
 | `pylizlib/ai/` | Optional AI media scanning providers and orchestration |
@@ -49,6 +51,7 @@ Common project checks are `make lint`, `make format-check`, and `make test`. The
 ## Compatibility and change guidance
 
 - Prefer focused changes over broad refactors. Preserve public re-exports and compatibility facades unless a task explicitly changes them.
+- Keep new filesystem/path helpers in `core/os/paths/` or `core/os/filesystem/`; keep HTTP transfer code in `core/network/`. The root `core/os/path.py`, `file.py`, and `utils.py` modules preserve legacy imports and should not accumulate new implementation.
 - Treat snapshot JSON fields, legacy metadata, backup manifests, ZIP layouts, and transaction states as persisted contracts.
 - For filesystem changes, test both success and relevant failure paths. Verify that a failed preflight leaves targets untouched and that cleanup after a committed operation cannot trigger rollback.
 - Keep tests deterministic and offline by default. Use synthetic files instead of downloaded media for filesystem and snapshot scenarios.

@@ -95,3 +95,57 @@ def normalize_rooted_path(value: str, *, allow_relative: bool = True, path_label
 
     # Anchor without resolving links or collapsing ``..`` across a symlink.
     return (Path.cwd() / Path(value)).as_posix()
+
+
+def get_second_to_last_directory(path):
+    """
+    Get the second to last directory in a path as a string
+    :param path: path string to get the second to last directory from
+    :return: the second to last directory in the path as a string (only name not path).
+
+    Args:
+        path (str | Path): Path spelling to inspect.
+
+    Returns:
+        str | None: The second-to-last normalized component, or None if fewer than two components exist.
+    """
+
+    # Divide il percorso in una lista di componenti
+    path_components = os.path.normpath(path).split(os.sep)
+
+    # Controlla che il percorso abbia almeno due componenti
+    if len(path_components) < 2:
+        return None
+
+    # Restituisce il secondo componente dal fondo della lista
+    return path_components[-2]
+
+
+def get_filename(path):
+    """
+    Get the filename from a path
+    :param path: path to get the filename from
+    :return: the filename from the path
+
+    Args:
+        path (str | Path): Path spelling whose final component is requested.
+
+    Returns:
+        str: Final path component, or an empty string for a trailing separator.
+    """
+    return os.path.basename(path)
+
+
+def get_filename_no_ext(path):
+    """
+    Get the filename without the extension from a path
+    :param path: path to get the filename without the extension from
+    :return: the filename without the extension from the path
+
+    Args:
+        path (str | Path): Path spelling whose final component is requested.
+
+    Returns:
+        str: Final component without its final extension.
+    """
+    return os.path.splitext(os.path.basename(path))[0]
