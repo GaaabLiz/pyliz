@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+from unittest.mock import Mock
 
 import pytest
 
@@ -42,3 +43,15 @@ def test_general_primitives_import_without_snapshot_dependencies():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("enumerate_entries", [iter_files_strict, iter_tree_entries_strict])
+def test_both_enumerators_are_lazy_and_propagate_scan_failures(tmp_path, monkeypatch, enumerate_entries):
+    """Sharing traversal does not swallow I/O errors or move work to construction."""
+    scan = Mock(side_effect=OSError("scan denied"))
+    monkeypatch.setattr("pylizlib.core.os.filesystem.tree.os.scandir", scan)
+    entries = enumerate_entries(tmp_path)
+    scan.assert_not_called()
+    with pytest.raises(OSError, match="scan denied"):
+        next(entries)
+    scan.assert_called_once_with(tmp_path)
