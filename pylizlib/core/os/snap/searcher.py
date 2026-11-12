@@ -24,6 +24,8 @@ from typing import Optional, Protocol
 
 import regex as regex_engine
 
+from pylizlib.core.data.text.encoding import EncodingDetector
+from pylizlib.core.data.text.preview import line_preview, needs_complete_line_preview
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.callbacks import SnapshotProgressCallback
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
@@ -226,9 +228,7 @@ class SnapshotSearcher:
         if page.full:
             return
         if not snapshot_path or not snapshot_path.is_dir():
-            logger.warning(
-                f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory."
-            )
+            logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
             return
 
         files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions, params.max_files)
@@ -346,73 +346,18 @@ class SnapshotSearcher:
 
     def _detect_encoding(self, file_path: Path, preferred_encoding: str | None) -> tuple[str, bool, bool]:
         """Detect BOM, UTF-16 layout, UTF-8, or CP1252 and identify obvious binary data."""
-        with file_path.open("rb") as file_stream:
-            sample = file_stream.read(self._DETECTION_SAMPLE_BYTES)
-
-        if preferred_encoding:
-            return preferred_encoding, False, False
-        if sample.startswith(codecs.BOM_UTF32_LE):
-            encoding = "utf-32"
-        elif sample.startswith(codecs.BOM_UTF32_BE):
-            encoding = "utf-32"
-        elif sample.startswith(codecs.BOM_UTF8):
-            encoding = "utf-8-sig"
-        elif sample.startswith(codecs.BOM_UTF16_LE) or sample.startswith(codecs.BOM_UTF16_BE):
-            encoding = "utf-16"
-        else:
-            encoding = self._detect_bomless_utf16(sample) or ""
-            if not encoding:
-                try:
-                    codecs.getincrementaldecoder("utf-8")().decode(
-                        sample,
-                        final=len(sample) < self._DETECTION_SAMPLE_BYTES,
-                    )
-                    encoding = "utf-8"
-                except UnicodeDecodeError:
-                    encoding = "cp1252"
-                    text = sample.decode(encoding, errors="replace")
-                    if self._looks_binary(sample, text):
-                        return encoding, True, True
-                    return encoding, False, True
-
-        try:
-            codecs.lookup(encoding)
-        except LookupError:
-            raise ValueError(f"Unknown text encoding: {encoding}")
-        if self._looks_binary(
-            sample,
-            sample.decode(encoding, errors="replace"),
-            allow_nul=encoding.startswith(("utf-16", "utf-32")),
-        ):
-            return encoding, True, False
-        return encoding, False, False
+        decision = EncodingDetector(self._DETECTION_SAMPLE_BYTES).detect(file_path, preferred_encoding)
+        return decision.encoding, decision.binary, decision.used_fallback
 
     @staticmethod
     def _detect_bomless_utf16(sample: bytes) -> str | None:
         """Recognize ASCII-heavy UTF-16 data from its alternating NUL bytes."""
-        pairs = len(sample) // 2
-        if pairs < 4:
-            return None
-        even_nuls = sum(byte == 0 for byte in sample[: pairs * 2 : 2])
-        odd_nuls = sum(byte == 0 for byte in sample[1 : pairs * 2 : 2])
-        threshold = max(3, pairs // 4)
-        if odd_nuls >= threshold and even_nuls <= pairs // 20:
-            return "utf-16-le"
-        if even_nuls >= threshold and odd_nuls <= pairs // 20:
-            return "utf-16-be"
-        return None
+        return EncodingDetector.detect_bomless_utf16(sample)
 
     @staticmethod
     def _looks_binary(sample: bytes, decoded: str, allow_nul: bool = False) -> bool:
         """Use conservative NUL/control-character checks for obvious binary files."""
-        if not sample:
-            return False
-        if b"\x00" in sample and not allow_nul:
-            return True
-        if not decoded:
-            return False
-        printable = sum(character.isprintable() or character in "\r\n\t\f" for character in decoded)
-        return printable / len(decoded) < 0.65
+        return EncodingDetector.looks_binary(sample, decoded, allow_nul)
 
     def _scan_file(
         self,
@@ -637,10 +582,7 @@ class SnapshotSearcher:
         final: bool,
     ) -> bool:
         """Wait for EOF or a newline before returning an untruncated short line."""
-        if final or buffer_starts_mid_line or buffer.find("\n", match_start) >= 0:
-            return False
-        line_start = buffer.rfind("\n", 0, match_start) + 1
-        return len(buffer) - line_start <= max_chars
+        return needs_complete_line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
 
     @staticmethod
     def _line_preview(
@@ -651,26 +593,7 @@ class SnapshotSearcher:
         final: bool,
     ) -> str:
         """Return a bounded preview of the line containing a match."""
-        line_start = buffer.rfind("\n", 0, match_start) + 1
-        line_end = buffer.find("\n", match_start)
-        right_truncated = line_end < 0 and not final
-        if line_end < 0:
-            line_end = len(buffer)
-        line = buffer[line_start:line_end]
-        left_truncated = line_start == 0 and buffer_starts_mid_line
-        if len(line) <= max_chars and not left_truncated and not right_truncated:
-            return line.strip()
-
-        relative_match = max(0, match_start - line_start)
-        start = max(0, relative_match - max_chars // 3)
-        start = min(start, max(0, len(line) - max_chars))
-        end = min(len(line), start + max_chars)
-        preview = line[start:end]
-        if left_truncated or start > 0:
-            preview = "…" + preview
-        if right_truncated or end < len(line):
-            preview += "…"
-        return preview.strip()
+        return line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
 
     def _collect_files(
         self,
