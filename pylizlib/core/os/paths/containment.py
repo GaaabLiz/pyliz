@@ -3,12 +3,12 @@
 from pathlib import Path
 
 
-def assert_destination_outside_source(source: Path, destination: Path) -> None:
+def assert_destination_outside_source(source: Path | str, destination: Path | str) -> None:
     """Reject recursive tree copies, resolving both paths through aliases.
 
     Args:
-        source (Path): Source tree, resolved without requiring every entry to exist.
-        destination (Path): Proposed copy target, resolved using the same policy.
+        source (Path | str): Source tree, resolved without requiring every entry to exist.
+        destination (Path | str): Proposed copy target, resolved using the same policy.
 
     Returns:
         None: If destination is neither source nor structurally inside source.

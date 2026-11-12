@@ -6,7 +6,17 @@ import shutil
 import pytest
 
 from pylizlib.core.os.filesystem.fingerprints import fingerprint_tree
-from pylizlib.core.os.filesystem.metadata import TreeMetadataCopier
+from pylizlib.core.os.filesystem.metadata import TreeMetadataCopier, copy_extended_attributes
+
+
+@pytest.mark.parametrize("missing", ["listxattr", "getxattr", "setxattr"])
+def test_extended_attributes_require_all_three_runtime_functions(tmp_path, monkeypatch, missing):
+    """Missing xattr capability performs no partial attribute read or write."""
+    calls = []
+    for name in ("listxattr", "getxattr", "setxattr"):
+        monkeypatch.setattr(os, name, None if name == missing else lambda *args, **kwargs: calls.append(args), raising=False)
+    assert copy_extended_attributes(tmp_path / "source", tmp_path / "destination") is None
+    assert calls == []
 
 
 def test_metadata_recreates_hardlinks_and_orders_platform_backends(tmp_path, monkeypatch):
