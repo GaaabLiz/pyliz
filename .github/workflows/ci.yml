@@ -121,12 +121,50 @@ jobs:
       - name: Run tests
         run: make ci-test
 
+  snapshot-platforms:
+    name: Snapshot contracts (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    needs: ci-config
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ${{ fromJSON(needs.ci-config.outputs.python_versions) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Make
+        if: runner.os == 'Windows'
+        run: choco install make --yes
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ needs.ci-config.outputs.uv_version }}
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install library and development tools
+        run: uv sync --group dev --locked
+
+      - name: Run snapshot and reusable-primitive contracts
+        run: >-
+          uv run pytest test/core/test_documentation_contracts.py
+          test/core/test_documentation_build.py test/core/test_snapshot_dependencies.py
+          test/core/os/snap test/core/os/filesystem test/core/os/paths
+          test/core/os/windows test/core/data/text -q -ra
+
   build-package:
     name: Build and smoke-test distributions
     needs:
       - ci-config
       - quality
       - tests
+      - snapshot-platforms
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
