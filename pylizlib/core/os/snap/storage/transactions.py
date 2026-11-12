@@ -1,16 +1,18 @@
 """Persistent intent records and idempotent recovery for snapshot directory swaps."""
 
-import errno
 import json
 import os
 import shutil
-import stat
 import uuid
 from copy import deepcopy
 from dataclasses import fields
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.filesystem.durability import rename_and_sync as rename_and_sync
+from pylizlib.core.os.filesystem.durability import sync_directory as _sync_directory
+from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
+from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot, validate_directory_component
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
@@ -18,52 +20,6 @@ from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 TRANSACTION_DIRECTORY = ".pyliz_transactions"
 JOURNAL_FILENAME = "journal.json"
 _VALID_STATES = {"prepared", "rollback_decided", "commit_decided", "committed"}
-_UNSUPPORTED_DIRECTORY_SYNC = {
-    errno.EBADF,
-    errno.EINVAL,
-    getattr(errno, "ENOTSUP", errno.EINVAL),
-    getattr(errno, "EOPNOTSUPP", errno.EINVAL),
-}
-
-
-def rename_and_sync(source: Path, destination: Path) -> None:
-    """Rename one transaction entry and flush both affected parent directories.
-
-    Directory fsync orders filesystem namespace changes before a later journal
-    state can be considered durable. Some platforms and remote filesystems do
-    not support it; those environments retain atomic rename semantics but
-    cannot confirm server-side persistence.
-    """
-    source = Path(source)
-    destination = Path(destination)
-    source.rename(destination)
-    parents = {source.parent, destination.parent}
-    for parent in parents:
-        if not _sync_directory(parent):
-            logger.warning(f"Directory-entry durability is unavailable for transaction path '{parent}'.")
-
-
-def _sync_directory(path: Path) -> bool:
-    """Request a directory-entry flush, returning False when unsupported."""
-    if os.name == "nt" or not getattr(os, "O_DIRECTORY", 0):
-        return False
-    flags = os.O_RDONLY | os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        if error.errno in _UNSUPPORTED_DIRECTORY_SYNC:
-            return False
-        raise
-    try:
-        try:
-            os.fsync(descriptor)
-        except OSError as error:
-            if error.errno in _UNSUPPORTED_DIRECTORY_SYNC:
-                return False
-            raise
-        return True
-    finally:
-        os.close(descriptor)
 
 
 class TransactionRecoveryError(RuntimeError):
@@ -407,8 +363,7 @@ def _validate_replacement_entries(operation: str, data: dict, storage, workspace
             allowed = path.parent == root and any(path.name.startswith(f"{association.directory_name}_staging_") for association in associations.values())
         elif operation == "install":
             allowed = any(
-                path.parent == live.parent and path.name.startswith(f"{live.name}_staging_")
-                for live in (Path(os.path.abspath(association.original_path)) for association in associations.values())
+                path.parent == live.parent and path.name.startswith(f"{live.name}_staging_") for live in (Path(os.path.abspath(association.original_path)) for association in associations.values())
             )
         else:
             allowed = False
@@ -567,7 +522,7 @@ def _validate_edit(data: dict, storage, workspace: Path) -> None:
             raise TransactionRecoveryError("Edit journal addition must have a target name.")
         if is_addition and "source" in item:
             raise TransactionRecoveryError("Edit journal addition cannot contain a source name.")
-        for key in (("target",) if is_addition else ("source", "target")):
+        for key in ("target",) if is_addition else ("source", "target"):
             if item.get(key) is not None:
                 validate_directory_component(item[key], f"edit transaction {key}")
         if item.get("target") is not None:
@@ -673,24 +628,3 @@ def _recover_snapshot_tree(journal: SnapshotTransactionJournal, state: str, data
         if not _lexists(destination):
             raise TransactionRecoveryError(f"Committed snapshot destination '{destination}' is missing; original data was preserved.")
         journal.cleanup()
-
-
-def _lexists(path: Path) -> bool:
-    """Check for a path entry without following a dangling symlink."""
-    try:
-        path.lstat()
-        return True
-    except FileNotFoundError:
-        return False
-
-
-def _remove_path(path: Path) -> None:
-    """Remove a file, link or tree without following a directory symlink."""
-    try:
-        mode = path.lstat().st_mode
-    except FileNotFoundError:
-        return
-    if stat.S_ISDIR(mode) and not is_link_or_junction(path):
-        shutil.rmtree(path)
-    else:
-        path.unlink()
