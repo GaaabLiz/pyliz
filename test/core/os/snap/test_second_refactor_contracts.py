@@ -15,6 +15,14 @@ from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal
 
 
+def _ast_dump(node):
+    """Keep fixture comparison stable across Python AST dump versions."""
+    try:
+        return ast.dump(node, show_empty=True)
+    except TypeError:
+        return ast.dump(node)
+
+
 def test_current_public_declarations_remain_compatible():
     """Protect APIs added after the first refactor, including class identities."""
     fixture = json.loads((Path(__file__).parent / "fixtures" / "public_api_v2.json").read_text())
@@ -28,9 +36,9 @@ def test_current_public_declarations_remain_compatible():
         for method_name, signature in expected["methods"].items():
             method = methods[method_name]
             assert {
-                "args": ast.dump(method.args),
-                "returns": ast.dump(method.returns) if method.returns else None,
-                "decorators": [ast.dump(value) for value in method.decorator_list],
+                "args": _ast_dump(method.args),
+                "returns": _ast_dump(method.returns) if method.returns else None,
+                "decorators": [_ast_dump(value) for value in method.decorator_list],
             } == signature, f"{name}.{method_name}"
 
 

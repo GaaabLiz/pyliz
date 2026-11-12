@@ -192,7 +192,7 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
         dest = CATALOGUE_PATH / snap.id
         before = {p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}
 
-        with patch("os.unlink", side_effect=PermissionError("snapshot is locked")):
+        with patch("pylizlib.core.os.path.shutil.rmtree", side_effect=PermissionError("snapshot is locked")):
             with self.assertRaisesRegex(PermissionError, "snapshot is locked"):
                 self.cat.delete(snap)
 

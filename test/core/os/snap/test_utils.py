@@ -220,9 +220,12 @@ class TestSnapshotUtilsEdits(unittest.TestCase):
 
         edits = SnapshotUtils.get_edits_between_snapshots(old, new)
 
-        self.assertEqual({edit.folder_id: edit.action_type for edit in edits}, {
-            old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
-        })
+        self.assertEqual(
+            {edit.folder_id: edit.action_type for edit in edits},
+            {
+                old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
+            },
+        )
         self.assertEqual(new.directories[0].directory_name, old.directories[1].directory_name)
 
     def test_replacing_association_at_same_path_is_remove_and_add(self):
@@ -232,10 +235,13 @@ class TestSnapshotUtilsEdits(unittest.TestCase):
 
         edits = SnapshotUtils.get_edits_between_snapshots(old, new)
 
-        self.assertEqual({edit.folder_id: edit.action_type for edit in edits}, {
-            old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
-            "replacement": SnapEditType.ADD_DIR,
-        })
+        self.assertEqual(
+            {edit.folder_id: edit.action_type for edit in edits},
+            {
+                old.directories[0].folder_id: SnapEditType.REMOVE_DIR,
+                "replacement": SnapEditType.ADD_DIR,
+            },
+        )
 
 
 class TestSnapshotUtilsSort(unittest.TestCase):

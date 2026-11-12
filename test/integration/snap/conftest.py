@@ -23,11 +23,7 @@ def snapshot_workspace(request: pytest.FixtureRequest) -> Path:
     for this test is removed.
     """
     run_root_value = os.environ.get("PYLIZ_SNAPSHOT_INTEGRATION_RUN_ROOT")
-    run_root = (
-        Path(run_root_value).resolve()
-        if run_root_value
-        else (REPOSITORY_ROOT / "test_local" / "snapshot_integration").resolve()
-    )
+    run_root = Path(run_root_value).resolve() if run_root_value else (REPOSITORY_ROOT / "test_local" / "snapshot_integration").resolve()
     run_root.mkdir(parents=True, exist_ok=True)
 
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", request.node.name).strip("_.") or "scenario"
