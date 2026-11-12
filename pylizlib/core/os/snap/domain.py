@@ -310,23 +310,69 @@ class SnapshotSettings:
     max_archive_entries: int | None = DEFAULT_MAX_ARCHIVE_ENTRIES
 
     def __setattr__(self, name, value):
-        """Keep the selected copier in sync when settings are changed at runtime."""
+        """Assign a setting while keeping copy strategy and metadata mode synchronized.
+
+        Args:
+            name (str): Setting attribute being assigned.
+            value (object): New value, validated when assigning strategy or mode.
+
+        Returns:
+            None: The setting is assigned after any required strategy wrapping.
+
+        Raises:
+            TypeError: If copy_strategy or copy_metadata_mode has an invalid type.
+
+        Notes:
+            Switching away from EXTENDED unwraps its delegate. Assigning an explicit
+            extended strategy while BASIC is already selected retains that strategy.
+        """
         if name == "copy_strategy":
-            if not isinstance(value, DirectoryCopyStrategy):
-                raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
-            mode = self.__dict__.get("copy_metadata_mode", CopyMetadataMode.BASIC)
-            if mode is CopyMetadataMode.EXTENDED and not isinstance(value, ExtendedMetadataCopyStrategy):
-                value = ExtendedMetadataCopyStrategy(value)
+            value = self._copy_strategy_for_assignment(value)
         elif name == "copy_metadata_mode":
-            if not isinstance(value, CopyMetadataMode):
-                raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
-            previous_mode = self.__dict__.get("copy_metadata_mode")
-            strategy = self.__dict__.get("copy_strategy")
-            if value is CopyMetadataMode.EXTENDED and isinstance(strategy, DirectoryCopyStrategy) and not isinstance(strategy, ExtendedMetadataCopyStrategy):
-                object.__setattr__(self, "copy_strategy", ExtendedMetadataCopyStrategy(strategy))
-            elif previous_mode is CopyMetadataMode.EXTENDED and value is CopyMetadataMode.BASIC and isinstance(strategy, ExtendedMetadataCopyStrategy):
-                object.__setattr__(self, "copy_strategy", strategy.delegate)
+            self._update_strategy_for_mode(value)
         object.__setattr__(self, name, value)
+
+    def _copy_strategy_for_assignment(self, value: object) -> DirectoryCopyStrategy:
+        """Validate a strategy and add only the wrapper required by the current mode.
+
+        Args:
+            value (object): Strategy supplied during construction or later mutation.
+
+        Returns:
+            DirectoryCopyStrategy: The same strategy, or one extended-metadata wrapper
+            around it. Already-extended strategies are never wrapped a second time.
+
+        Raises:
+            TypeError: If value does not implement the public strategy ABC.
+        """
+        if not isinstance(value, DirectoryCopyStrategy):
+            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+        mode = self.__dict__.get("copy_metadata_mode", CopyMetadataMode.BASIC)
+        if mode is CopyMetadataMode.EXTENDED and not isinstance(value, ExtendedMetadataCopyStrategy):
+            value = ExtendedMetadataCopyStrategy(value)
+        return value
+
+    def _update_strategy_for_mode(self, value: object) -> None:
+        """Adjust the strategy before the new metadata mode itself is assigned.
+
+        Args:
+            value (object): Proposed CopyMetadataMode, validated before any mutation.
+
+        Returns:
+            None: The strategy is wrapped/unwrapped only for the existing mode rules;
+            the caller remains responsible for assigning copy_metadata_mode afterward.
+
+        Raises:
+            TypeError: If value is not a CopyMetadataMode.
+        """
+        if not isinstance(value, CopyMetadataMode):
+            raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
+        previous_mode = self.__dict__.get("copy_metadata_mode")
+        strategy = self.__dict__.get("copy_strategy")
+        if value is CopyMetadataMode.EXTENDED and isinstance(strategy, DirectoryCopyStrategy) and not isinstance(strategy, ExtendedMetadataCopyStrategy):
+            object.__setattr__(self, "copy_strategy", ExtendedMetadataCopyStrategy(strategy))
+        elif previous_mode is CopyMetadataMode.EXTENDED and value is CopyMetadataMode.BASIC and isinstance(strategy, ExtendedMetadataCopyStrategy):
+            object.__setattr__(self, "copy_strategy", strategy.delegate)
 
     def __post_init__(self):
         """Validate copy configuration and the legacy-install flag."""
@@ -555,10 +601,7 @@ class Snapshot:
             name=self.name,
             desc=self.desc,
             author=self.author,
-            directories=[
-                self._clone_association(dir_assoc)
-                for dir_assoc in self.directories
-            ],
+            directories=[self._clone_association(dir_assoc) for dir_assoc in self.directories],
             tags=list(self.tags),
             date_created=self.date_created,
             date_modified=self.date_modified,
@@ -578,11 +621,7 @@ class Snapshot:
             original_path=dir_assoc.original_path,
             folder_id=dir_assoc.folder_id,
             mb_size=dir_assoc.mb_size,
-            integrity_manifest=(
-                {path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()}
-                if dir_assoc.integrity_manifest is not None
-                else None
-            ),
+            integrity_manifest=({path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()} if dir_assoc.integrity_manifest is not None else None),
         )
         clone._set_storage_name(dir_assoc.directory_name)
         return clone
