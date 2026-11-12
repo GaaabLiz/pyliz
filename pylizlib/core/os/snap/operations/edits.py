@@ -133,7 +133,9 @@ class SnapshotEditor:
         """Build a complete plan before staging or publishing any association."""
         recover_storage_transactions(self.storage)
         plan = SnapshotEditPlanner(self.storage).build(edits)
+        logger.info("Editing snapshot id=%s actions=%s", self.storage.snapshot.id, len(edits))
         self._apply_plan(plan, message_callback)
+        logger.info("Edited snapshot id=%s", self.storage.snapshot.id)
 
     def _apply_plan(self, plan: EditPlan, message_callback=None) -> None:
         """Journal staged moves and the proposed JSON before final publication."""
@@ -146,40 +148,14 @@ class SnapshotEditor:
         )
         staging_path = journal.workspace
         try:
-            for index, assoc in enumerate(plan.additions):
-                manifest = {}
-                assoc.copy_install_to(
-                    staging_path / additions[index]["staged"],
-                    message_callback=message_callback,
-                    copy_strategy=self.storage.settings.copy_strategy,
-                    manifest=manifest,
-                )
+            self._stage_additions(plan, additions, staging_path, message_callback)
             metadata = prepare_snapshot_metadata(self.storage, staging_path)
             journal.update_payload(metadata=metadata)
 
-            for index, move in enumerate(plan.moves):
-                rename_and_sync(move.source, staging_path / f"original_{index}")
-
-            journal.update_payload(phase="publishing")
-            publications = [(staging_path / move["staged"], self.storage.child_path(move["target"])) for move in moves if move["target"] is not None]
-            publications.extend((staging_path / addition["staged"], self.storage.child_path(addition["target"])) for addition in additions)
-            for staged, target in publications:
-                if target.exists() or target.is_symlink():
-                    raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
-                rename_and_sync(staged, target)
-
-            for assoc in self.storage.snapshot.directories:
-                expected_path = self.storage.child_path(assoc.directory_name)
-                if not expected_path.is_dir():
-                    raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
+            self._publish_edits(plan, journal, moves, additions)
             journal.set_state("commit_decided")
         except Exception as error:
-            try:
-                journal.decide_rollback(self.storage)
-                self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
-            except Exception as rollback_error:
-                logger.error(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
-                raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
+            self._rollback_failed_edit(journal, plan, error)
             raise
 
         try:
@@ -188,12 +164,7 @@ class SnapshotEditor:
         except Exception as error:
             if getattr(error, "published", False) is True:
                 raise
-            try:
-                journal.decide_rollback(self.storage)
-                self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
-            except Exception as rollback_error:
-                logger.error(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
-                raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
+            self._rollback_failed_edit(journal, plan, error)
             raise
 
         journal.set_state("committed")
@@ -203,3 +174,42 @@ class SnapshotEditor:
     def _restore_snapshot_model(snapshot: Snapshot, previous: Snapshot) -> None:
         """Restore a failed edit's model while preserving existing association objects."""
         restore_snapshot_model(snapshot, previous)
+
+    def _rollback_failed_edit(self, journal: SnapshotTransactionJournal, plan: EditPlan, error: Exception) -> None:
+        """Restore persisted copies and the complete caller-owned model after failure."""
+        try:
+            journal.decide_rollback(self.storage)
+            self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
+        except Exception as rollback_error:
+            logger.error(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+            raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
+
+    def _stage_additions(self, plan: EditPlan, additions: list[dict], staging_path: Path, message_callback) -> None:
+        """Capture every newly associated source before renaming stored originals."""
+        for index, assoc in enumerate(plan.additions):
+            manifest = {}
+            assoc.copy_install_to(
+                staging_path / additions[index]["staged"],
+                message_callback=message_callback,
+                copy_strategy=self.storage.settings.copy_strategy,
+                manifest=manifest,
+            )
+
+    def _publish_edits(self, plan: EditPlan, journal: SnapshotTransactionJournal, moves: list[dict], additions: list[dict]) -> None:
+        """Stage original names, persist publishing phase, then publish and verify targets."""
+        staging_path = journal.workspace
+        for index, move in enumerate(plan.moves):
+            rename_and_sync(move.source, staging_path / f"original_{index}")
+
+        journal.update_payload(phase="publishing")
+        publications = [(staging_path / move["staged"], self.storage.child_path(move["target"])) for move in moves if move["target"] is not None]
+        publications.extend((staging_path / addition["staged"], self.storage.child_path(addition["target"])) for addition in additions)
+        for staged, target in publications:
+            if target.exists() or target.is_symlink():
+                raise FileExistsError(f"Snapshot destination '{target}' is already occupied.")
+            rename_and_sync(staged, target)
+
+        for assoc in self.storage.snapshot.directories:
+            expected_path = self.storage.child_path(assoc.directory_name)
+            if not expected_path.is_dir():
+                raise RuntimeError(f"Integrity check failed: Expected snapshot directory '{expected_path}' is missing.")
