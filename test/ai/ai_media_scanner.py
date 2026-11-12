@@ -6,6 +6,14 @@ from pathlib import Path
 from PIL import Image
 
 from pylizlib.ai import AiMediaScanner, AiScanResult, AiScanTool
+from pylizlib.ai.domain import AiPayloadMediaInfo
+from pylizlib.ai.providers import (
+    BaseAiProvider,
+    EasyOcrProvider,
+    JoyTagProvider,
+    NudeNetProvider,
+)
+from pylizlib.ai.utils import unique_preserving_order
 from pylizlib.media.lizmedia import LizMedia
 
 
@@ -195,6 +203,50 @@ class AiMediaScannerTestCase(unittest.TestCase):
         self.assertTrue(media.is_video)
         self.assertEqual(media.ai_tags, ["motion"])
         self.assertEqual(media.ai_file_name, "test.mp4")
+
+    def test_unique_preserving_order(self):
+        items = [" apple ", "banana", "apple", "  cherry ", "banana", ""]
+        res = unique_preserving_order(items)
+        self.assertEqual(res, ["apple", "banana", "cherry"])
+
+    def test_tool_normalization_empty_raises(self):
+        with self.assertRaises(ValueError):
+            AiScanTool.normalize_many([])
+
+    def test_ai_payload_str_representation(self):
+        payload = AiPayloadMediaInfo(
+            description="desc",
+            tags=["t1"],
+            filename="f.png",
+            text=["text1"],
+        )
+        self.assertIn("desc", str(payload))
+        self.assertIn("f.png", str(payload))
+
+    def test_provider_tools_and_explicit_detection(self):
+        self.assertEqual(JoyTagProvider.tool, AiScanTool.TAGS)
+        self.assertEqual(EasyOcrProvider.tool, AiScanTool.OCR)
+        self.assertEqual(NudeNetProvider.tool, AiScanTool.NSFW)
+
+        nude_provider = NudeNetProvider(inference_threshold=0.5)
+        # Low confidence -> False
+        low_conf = [{"class": "FEMALE_GENITALIA_EXPOSED", "score": 0.2}]
+        self.assertFalse(nude_provider._contains_explicit_detection(low_conf))
+
+        # Explicit label above threshold -> True
+        high_conf = [{"class": "FEMALE_GENITALIA_EXPOSED", "score": 0.8}]
+        self.assertTrue(nude_provider._contains_explicit_detection(high_conf))
+
+        # Safe label above threshold -> False
+        safe = [{"class": "FACE_FEMALE", "score": 0.9}]
+        self.assertFalse(nude_provider._contains_explicit_detection(safe))
+
+    def test_base_provider_raises_not_implemented(self):
+        class DummyProvider(BaseAiProvider):
+            tool = AiScanTool.TAGS
+
+        with self.assertRaises(TypeError):
+            DummyProvider()
 
 
 if __name__ == "__main__":
