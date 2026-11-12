@@ -58,7 +58,7 @@ def test_original_method_signatures_fields_and_enum_values_are_preserved():
                 "decorators": [_ast_dump(d) for d in method.decorator_list],
             }
             assert actual == declaration, f"{qualified_name}.{name}"
-        fields = {n.target.id: ast.dump(n) for n in cls.body if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name)}
+        fields = {n.target.id: _ast_dump(n) for n in cls.body if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name)}
         for name, declaration in expected["fields"].items():
             assert fields[name] == declaration, f"{qualified_name}.{name}"
         runtime_class = getattr(module, class_name)

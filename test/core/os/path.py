@@ -492,7 +492,7 @@ class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
                 important.write_text("must remain visible")
                 messages = []
 
-                with patch("os.unlink", side_effect=PermissionError("directory is locked")):
+                with patch("pylizlib.core.os.path.shutil.rmtree", side_effect=PermissionError("directory is locked")):
                     with self.assertRaisesRegex(PermissionError, "directory is locked"):
                         remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
 
