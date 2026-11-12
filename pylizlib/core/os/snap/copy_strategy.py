@@ -16,6 +16,8 @@ from pylizlib.core.os.filesystem.fingerprints import fingerprint_tree
 from pylizlib.core.os.filesystem.metadata import TreeMetadataCopier, copy_extended_attributes, copy_posix_owner_group
 from pylizlib.core.os.snap.callbacks import CopyProgressCallback as ProgressCallback
 from pylizlib.core.os.snap.callbacks import MessageCallback
+from pylizlib.core.os.snap.copying.contracts import MetadataCopier, MetadataCopyCapability
+from pylizlib.core.os.snap.copying.provider import ProviderCopySession
 from pylizlib.core.os.snap.copying.session import _FileCopySession
 from pylizlib.core.os.snap.integrity import (
     IntegrityManifest,
@@ -230,16 +232,16 @@ class ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
         with tempfile.TemporaryDirectory(prefix=".extended_metadata_", dir=destination.parent) as temporary_directory:
             staged = Path(temporary_directory) / "copy"
             staged_manifest = {} if manifest is not None else None
-            provider_delegate = isinstance(self.delegate, ProviderSnapshotCopyStrategy)
-            if provider_delegate:
-                self.delegate._copy_directory_with_metadata_mode(
+            supports_metadata_copy = isinstance(self.delegate, MetadataCopyCapability)
+            if supports_metadata_copy:
+                self.delegate.copy_directory_with_metadata(
                     source,
                     staged,
                     progress_callback,
                     message_callback,
                     manifest=staged_manifest,
                     expected_manifest=expected_manifest,
-                    copy_metadata_mode=CopyMetadataMode.EXTENDED,
+                    metadata_copier=ExtendedMetadataCopyStrategy._preserve_metadata,
                 )
             else:
                 self.delegate.copy_directory(
@@ -250,7 +252,7 @@ class ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
                     manifest=staged_manifest,
                     expected_manifest=expected_manifest,
                 )
-            if not provider_delegate:
+            if not supports_metadata_copy:
                 self._preserve_metadata(source, staged)
             if destination.exists() or destination.is_symlink():
                 raise FileExistsError(f"Copy destination '{destination}' was created during copying.")
@@ -365,78 +367,20 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
         """Copy from the provider using the standard metadata policy."""
-        return self._copy_directory_with_metadata_mode(
-            source,
-            destination,
-            progress_callback,
-            message_callback,
-            manifest=manifest,
-            expected_manifest=expected_manifest,
-            copy_metadata_mode=CopyMetadataMode.BASIC,
-        )
+        return ProviderCopySession(self.provider, self.delegate).copy(source, destination, progress_callback, message_callback, manifest=manifest, expected_manifest=expected_manifest)
 
-    def _copy_directory_with_metadata_mode(
+    def copy_directory_with_metadata(
         self,
         source: Path,
         destination: Path,
         progress_callback: ProgressCallback | None = None,
         message_callback: MessageCallback | None = None,
         *,
+        metadata_copier: MetadataCopier,
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
-        copy_metadata_mode: CopyMetadataMode = CopyMetadataMode.BASIC,
     ) -> Path:
-        """Copy within the provider context, then verify and publish the staged tree.
-
-        The output manifest is updated only after successful publication. Extended
-        metadata is read from the provider's stable tree, not the live source."""
-        if not isinstance(copy_metadata_mode, CopyMetadataMode):
-            raise TypeError("copy_metadata_mode must be a CopyMetadataMode.")
-        destination = Path(destination)
-        if destination.exists() or destination.is_symlink():
-            raise FileExistsError(f"Copy destination '{destination}' already exists.")
-        assert_no_symlinks(Path(source))
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".provider_copy_", dir=destination.parent) as temporary_directory:
-            staged = Path(temporary_directory) / "copy"
-            observed: IntegrityManifest | None = {} if manifest is not None or expected_manifest is not None else None
-            self._copy_from_provider(source, staged, progress_callback, message_callback, observed, copy_metadata_mode)
-            if expected_manifest is not None:
-                assert_manifest_matches(dict(expected_manifest), observed or {})
-            if destination.exists() or destination.is_symlink():
-                raise FileExistsError(f"Copy destination '{destination}' was created during copying.")
-            staged.rename(destination)
-            if manifest is not None:
-                manifest.clear()
-                manifest.update(observed or {})
-        return destination
-
-    def _copy_from_provider(
-        self,
-        source: Path,
-        destination: Path,
-        progress_callback: ProgressCallback | None,
-        message_callback: MessageCallback | None,
-        observed_manifest: MutableMapping[str, dict[str, str | int | None]] | None,
-        copy_metadata_mode: CopyMetadataMode,
-    ) -> Path:
-        """Copy only while the provider context holds its stable source available."""
-        with self.provider.create_snapshot(Path(source)) as stable_source:
-            stable_source = Path(stable_source)
-            if _is_link_or_junction(stable_source) or not stable_source.is_dir():
-                raise NotADirectoryError(f"Snapshot provider returned invalid source '{stable_source}'.")
-            assert_no_symlinks(stable_source)
-            if observed_manifest is None:
-                copied = self.delegate.copy_directory(stable_source, destination, progress_callback, message_callback)
-            else:
-                copied = self.delegate.copy_directory(
-                    stable_source,
-                    destination,
-                    progress_callback,
-                    message_callback,
-                    manifest=observed_manifest,
-                )
-            if copy_metadata_mode is CopyMetadataMode.EXTENDED:
-                ExtendedMetadataCopyStrategy._preserve_metadata(stable_source, copied)
-            assert_no_symlinks(copied)
-            return copied
+        """Apply the supplied metadata hook while the provider's source stays valid."""
+        return ProviderCopySession(self.provider, self.delegate).copy(
+            source, destination, progress_callback, message_callback, metadata_copier=metadata_copier, manifest=manifest, expected_manifest=expected_manifest
+        )
