@@ -58,9 +58,9 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
         with patch.object(Path, "resolve", side_effect=OSError("cannot resolve path")):
             self.assertTrue(is_critical_system_path("/tmp/unverified"))
 
-    def test_invalid_path_returns_false(self):
+    def test_invalid_path_is_treated_as_critical(self):
         with patch.object(Path, "resolve", side_effect=ValueError("Invalid path")):
-            self.assertFalse(is_critical_system_path("/any/path"))
+            self.assertTrue(is_critical_system_path("/any/path"))
 
 
 class GetFolderSizeMbTestCase(unittest.TestCase):
@@ -189,14 +189,14 @@ class IsSoftwareInstalledTestCase(unittest.TestCase):
 
 
 class IsCommandAvailableWithRunTestCase(unittest.TestCase):
-    @patch("pylizlib.core.os.utils.subprocess.run")
-    @patch("pylizlib.core.os.utils.shutil.which", return_value="/usr/bin/git")
+    @patch("subprocess.run")
+    @patch("pylizlib.core.os.commands.shutil.which", return_value="/usr/bin/git")
     def test_available(self, mock_which, mock_run):
         self.assertTrue(is_command_available_with_run("git"))
         mock_which.assert_called_once_with("git")
         mock_run.assert_not_called()
 
-    @patch("pylizlib.core.os.utils.shutil.which", return_value=None)
+    @patch("pylizlib.core.os.commands.shutil.which", return_value=None)
     def test_not_available(self, mock_which):
         self.assertFalse(is_command_available_with_run("nonexistent_cmd"))
         mock_which.assert_called_once_with("nonexistent_cmd")
