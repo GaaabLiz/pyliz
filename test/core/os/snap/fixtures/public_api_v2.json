@@ -1,0 +1,695 @@
+{
+  "revision": "5e9baf67bbd3634aa81462ae5293fb3c251945d0",
+  "exports": [
+    "BackupType",
+    "SnapDirAssociation",
+    "SnapEditAction",
+    "SnapEditType",
+    "Snapshot",
+    "SnapshotBackupInfo",
+    "SnapshotSettings",
+    "SnapshotSortKey",
+    "DirectoryCopyStrategy",
+    "SequentialFileCopyStrategy",
+    "VerifiedFileCopyStrategy",
+    "SourceSnapshotProvider",
+    "ProviderSnapshotCopyStrategy",
+    "SourceChangedError",
+    "IntegrityManifest",
+    "SnapshotIntegrityError",
+    "SnapshotSerializer",
+    "SnapshotUtils",
+    "SnapshotManager",
+    "SnapshotCatalogue",
+    "QueryType",
+    "SearchTarget",
+    "SnapshotProgressCallback",
+    "SnapshotSearcher",
+    "SnapshotSearchParams",
+    "SnapshotSearchResult",
+    "SnapshotInstallMetadataError",
+    "SnapshotIncompleteError",
+    "CopyMetadataMode",
+    "ExtendedMetadataCopyStrategy"
+  ],
+  "classes": {
+    "BackupType": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {}
+    },
+    "SnapDirAssociation": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {
+        "record_captured_content": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='manifest', annotation=Name(id='IntegrityManifest', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "next_index": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "directory_name": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "gen_random": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load())), arg(arg='folder_id_length', annotation=Name(id='int', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=4)])",
+          "returns": "Constant(value='SnapDirAssociation')",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "gen_random_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='count', annotation=Name(id='int', ctx=Load())), arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Constant(value='SnapDirAssociation'), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "copy_install_to": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='catalogue_target_path', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[arg(arg='copy_strategy', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='manifest', annotation=BinOp(left=Name(id='IntegrityManifest', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Name(id='IntegrityManifest', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        }
+      }
+    },
+    "SnapEditAction": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        }
+      }
+    },
+    "SnapEditType": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {}
+    },
+    "Snapshot": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "tags_as_string": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "get_for_table_array": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key_list', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "folder_name": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "get_assoc_dir_mb_size": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='float', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "add_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='value', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "remove_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "has_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": []
+        },
+        "get_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='default', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value='')])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": []
+        },
+        "clear_all_data": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "edit_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='new_value', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "clone": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value='Snapshot')",
+          "decorators": []
+        }
+      }
+    },
+    "SnapshotBackupInfo": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {}
+    },
+    "SnapshotSettings": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {
+        "bck_before_install_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "bck_before_modify_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "bck_before_delete_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        }
+      }
+    },
+    "SnapshotSortKey": {
+      "module": "pylizlib.core.os.snap.domain",
+      "methods": {}
+    },
+    "DirectoryCopyStrategy": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='abstractmethod', ctx=Load())"
+          ]
+        }
+      }
+    },
+    "SequentialFileCopyStrategy": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      }
+    },
+    "VerifiedFileCopyStrategy": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='max_attempts', annotation=Name(id='int', ctx=Load())), arg(arg='delegate', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=3), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      }
+    },
+    "SourceSnapshotProvider": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "create_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='ContextManager', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='abstractmethod', ctx=Load())"
+          ]
+        }
+      }
+    },
+    "ProviderSnapshotCopyStrategy": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='provider', annotation=Name(id='SourceSnapshotProvider', ctx=Load())), arg(arg='delegate', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      }
+    },
+    "SourceChangedError": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {}
+    },
+    "SnapshotIntegrityError": {
+      "module": "pylizlib.core.os.snap.integrity",
+      "methods": {}
+    },
+    "SnapshotSerializer": {
+      "module": "pylizlib.core.os.snap.serializer",
+      "methods": {
+        "read_bytes": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bytes', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "read_text": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "write_bytes": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load())), arg(arg='contents', annotation=Name(id='bytes', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "write_text": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load())), arg(arg='contents', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "to_json": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "from_json": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='filepath', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Snapshot', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "update_field": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='filepath', annotation=Name(id='Path', ctx=Load())), arg(arg='field_name', annotation=Name(id='str', ctx=Load())), arg(arg='new_value')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        }
+      }
+    },
+    "SnapshotUtils": {
+      "module": "pylizlib.core.os.snap.utils",
+      "methods": {
+        "iter_files_strict": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='root', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Iterator', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "write_verified_zip": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='zip_path', annotation=Name(id='Path', ctx=Load())), arg(arg='files', annotation=Subscript(value=Name(id='Iterable', ctx=Load()), slice=Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='Path', ctx=Load()), Name(id='Path', ctx=Load())], ctx=Load()), ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "cleanup_after_commit": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='paths', annotation=Subscript(value=Name(id='Iterable', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())), arg(arg='operation', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "assert_no_symlinks": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='root', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "publish_snapshot_tree": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='snapshot_id', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[arg(arg='replace_existing', annotation=Name(id='bool', ctx=Load())), arg(arg='prepare_staging'), arg(arg='copy_strategy', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback'), arg(arg='operation', annotation=Name(id='str', ctx=Load()))], kw_defaults=[Constant(value=False), Constant(value=None), Constant(value=None), Constant(value=None), Constant(value='Snapshot copy')], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "gen_random_snap": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load())), arg(arg='id_length', annotation=Name(id='int', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=10)])",
+          "returns": "Name(id='Snapshot', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_from_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='path_snapshot', annotation=Name(id='Path', ctx=Load())), arg(arg='json_filename', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "BinOp(left=Name(id='Snapshot', ctx=Load()), op=BitOr(), right=Constant(value=None))",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "validate_snapshot_root": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_child_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='child_name', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_json_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='json_filename', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_edits_between_snapshots": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='old', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='new', annotation=Name(id='Snapshot', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "sort_snapshots": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='snapshots', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())), arg(arg='sort_by', annotation=Constant(value='SnapshotSortKey')), arg(arg='reverse', annotation=Name(id='bool', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        }
+      }
+    },
+    "SnapshotManager": {
+      "module": "pylizlib.core.os.snap.manager",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='settings', annotation=Name(id='SnapshotSettings', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Call(func=Name(id='SnapshotSettings', ctx=Load()), args=[], keywords=[])])",
+          "returns": null,
+          "decorators": []
+        },
+        "create": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[arg(arg='replace_existing', annotation=Name(id='bool', ctx=Load()))], kw_defaults=[Constant(value=False)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "delete": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_json_data_fields": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_json_base_fields": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "install_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "uninstall_directory_by_folder_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='folder_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_from_actions_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='edits', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "duplicate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_associated_dirs_from_system": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "remove_installed_copies": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "install": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='enable_everyone_full_control', annotation=Name(id='bool', ctx=Load())), arg(arg='clear_destination', annotation=Name(id='bool', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False), Constant(value=True), Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "create_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_path', annotation=Name(id='Path', ctx=Load())), arg(arg='prefix', annotation=Name(id='str', ctx=Load())), arg(arg='backup_type', annotation=Constant(value='BackupType')), arg(arg='is_export', annotation=Name(id='bool', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      }
+    },
+    "SnapshotCatalogue": {
+      "module": "pylizlib.core.os.snap.catalogue",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='path_catalogue', annotation=Name(id='Path', ctx=Load())), arg(arg='settings', annotation=Name(id='SnapshotSettings', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Call(func=Name(id='SnapshotSettings', ctx=Load()), args=[], keywords=[])])",
+          "returns": null,
+          "decorators": []
+        },
+        "list_backups": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_dir', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotBackupInfo', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "restore_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "restore_backup_with_mapping": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_zip_path', annotation=Name(id='Path', ctx=Load())), arg(arg='destination_mapping', annotation=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='Path', ctx=Load()))], ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "delete_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "set_catalogue_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='new_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "add": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "delete": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "get_all": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[arg(arg='strict', annotation=Name(id='bool', ctx=Load()))], kw_defaults=[Constant(value=False)], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "get_by_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "update_snapshot_by_objs": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='old', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='new', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_snapshot_by_edits": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='edits', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "duplicate_by_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_assoc_dirs": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_catalogue": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='file_name', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value='catalogue_export.zip')])",
+          "returns": null,
+          "decorators": []
+        },
+        "import_catalogue": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "import_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_assoc_with_installed": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "remove_installed_copies": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "install": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='clear_destination', annotation=Name(id='bool', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=True), Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "exists": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": []
+        },
+        "get_snap_directory_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "BinOp(left=Name(id='Path', ctx=Load()), op=BitOr(), right=Constant(value=None))",
+          "decorators": []
+        }
+      }
+    },
+    "QueryType": {
+      "module": "pylizlib.core.os.snap.searcher",
+      "methods": {}
+    },
+    "SearchTarget": {
+      "module": "pylizlib.core.os.snap.searcher",
+      "methods": {}
+    },
+    "SnapshotSearcher": {
+      "module": "pylizlib.core.os.snap.searcher",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='catalogue', annotation=Name(id='SnapshotCatalogue', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "search": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='params', annotation=Name(id='SnapshotSearchParams', ctx=Load())), arg(arg='on_progress', annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='SnapshotProgressCallback', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotSearchResult', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "search_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshots', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())), arg(arg='params', annotation=Name(id='SnapshotSearchParams', ctx=Load())), arg(arg='on_progress', annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='SnapshotProgressCallback', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotSearchResult', ctx=Load()), ctx=Load())",
+          "decorators": []
+        }
+      }
+    },
+    "SnapshotSearchParams": {
+      "module": "pylizlib.core.os.snap.searcher",
+      "methods": {}
+    },
+    "SnapshotSearchResult": {
+      "module": "pylizlib.core.os.snap.searcher",
+      "methods": {}
+    },
+    "SnapshotInstallMetadataError": {
+      "module": "pylizlib.core.os.snap.operations.install",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='metadata_published', annotation=BinOp(left=Name(id='bool', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='durability_confirmed', annotation=BinOp(left=Name(id='bool', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        }
+      }
+    },
+    "SnapshotIncompleteError": {
+      "module": "pylizlib.core.os.snap.operations.archives",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='operation', annotation=Name(id='str', ctx=Load())), arg(arg='missing_folders'), arg(arg='unexpected_entries')], kwonlyargs=[], kw_defaults=[], defaults=[Tuple(elts=[], ctx=Load()), Tuple(elts=[], ctx=Load())])",
+          "returns": null,
+          "decorators": []
+        }
+      }
+    },
+    "CopyMetadataMode": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {}
+    },
+    "ExtendedMetadataCopyStrategy": {
+      "module": "pylizlib.core.os.snap.copy_strategy",
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='delegate', annotation=Name(id='DirectoryCopyStrategy', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      }
+    }
+  }
+}
