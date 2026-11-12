@@ -42,22 +42,7 @@ def iter_files_strict(root: Path) -> Iterator[Path]:
         ValueError: If a link or junction is encountered.
         OSError: If stat or enumeration fails, including a missing root.
     """
-    root = Path(root)
-    root_mode = root.lstat().st_mode
-    if is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
-        raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
-    pending = [root]
-    while pending:
-        with os.scandir(pending.pop()) as entries:
-            for entry in entries:
-                mode = entry.stat(follow_symlinks=False).st_mode
-                path = Path(entry.path)
-                if stat.S_ISLNK(mode) or is_link_or_junction(path):
-                    raise ValueError(f"Directory tree contains symbolic link '{path}'.")
-                if stat.S_ISDIR(mode):
-                    pending.append(path)
-                elif stat.S_ISREG(mode):
-                    yield path
+    yield from _iter_entries_strict(root, include_directories=False)
 
 
 def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
@@ -80,23 +65,7 @@ def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
         ValueError: If a link or junction is encountered.
         OSError: If stat or enumeration fails, including a missing root.
     """
-    root = Path(root)
-    root_mode = root.lstat().st_mode
-    if is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
-        raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
-    pending = [root]
-    while pending:
-        with os.scandir(pending.pop()) as entries:
-            for entry in entries:
-                mode = entry.stat(follow_symlinks=False).st_mode
-                path = Path(entry.path)
-                if stat.S_ISLNK(mode) or is_link_or_junction(path):
-                    raise ValueError(f"Directory tree contains symbolic link '{path}'.")
-                if stat.S_ISDIR(mode):
-                    yield path
-                    pending.append(path)
-                elif stat.S_ISREG(mode):
-                    yield path
+    yield from _iter_entries_strict(root, include_directories=True)
 
 
 def assert_no_symlinks(root: Path) -> None:
@@ -137,3 +106,39 @@ def assert_no_symlinks(root: Path) -> None:
                     raise ValueError(f"Directory tree contains symbolic link '{entry.path}'.")
                 if stat.S_ISDIR(mode):
                     pending.append(Path(entry.path))
+
+
+def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[Path]:
+    """Apply one traversal/link policy for both public entry enumerators.
+
+    Args:
+        root (Path): Existing real directory checked lazily on first iteration.
+        include_directories (bool): Yield child directories before descent when True;
+            otherwise retain only regular files. Special entries remain omitted.
+
+    Yields:
+        Path: Accepted entries in the original filesystem/stack traversal order.
+
+    Raises:
+        NotADirectoryError: If root is not a real directory.
+        ValueError: If a link or junction is encountered.
+        OSError: If stat or enumeration fails.
+    """
+    root = Path(root)
+    root_mode = root.lstat().st_mode
+    if is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
+        raise NotADirectoryError(f"Archive source '{root}' is not a directory.")
+    pending = [root]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                mode = entry.stat(follow_symlinks=False).st_mode
+                path = Path(entry.path)
+                if stat.S_ISLNK(mode) or is_link_or_junction(path):
+                    raise ValueError(f"Directory tree contains symbolic link '{path}'.")
+                if stat.S_ISDIR(mode):
+                    if include_directories:
+                        yield path
+                    pending.append(path)
+                elif stat.S_ISREG(mode):
+                    yield path
