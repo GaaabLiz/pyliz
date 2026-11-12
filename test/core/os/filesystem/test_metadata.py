@@ -3,6 +3,8 @@
 import os
 import shutil
 
+import pytest
+
 from pylizlib.core.os.filesystem.fingerprints import fingerprint_tree
 from pylizlib.core.os.filesystem.metadata import TreeMetadataCopier
 
@@ -52,3 +54,22 @@ def test_fingerprint_detects_same_size_changes_and_empty_directories(tmp_path):
     assert before["file"][1] == 5
     (tmp_path / "file").write_bytes(b"other")
     assert fingerprint_tree(tmp_path)["file"] != before["file"]
+
+
+def test_metadata_failure_propagates_without_removing_caller_owned_tree(tmp_path):
+    """Metadata orchestration owns no staging cleanup; the copy coordinator does."""
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    original = OSError("metadata unavailable")
+
+    def failed_backend(source, destination):
+        """Fail the platform-selected inode metadata phase."""
+        raise original
+
+    copier = TreeMetadataCopier(owner_group=failed_backend, windows_streams=failed_backend)
+    with pytest.raises(OSError) as error:
+        copier.preserve(source, destination)
+    assert error.value is original
+    assert destination.is_dir()

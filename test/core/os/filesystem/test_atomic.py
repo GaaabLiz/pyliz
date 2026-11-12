@@ -46,3 +46,23 @@ def test_entry_removal_does_not_follow_dangling_links(tmp_path):
     remove_entry(link)
     assert not entry_exists(link)
     assert remove_entry(link) is None
+
+
+def test_atomic_write_rejects_a_concurrently_changed_previous_version(tmp_path, monkeypatch):
+    """Previous-version inspection must finish before any staging file is created."""
+    path = tmp_path / "target"
+    path.write_bytes(b"old")
+    read = AtomicFile.read_bytes
+
+    def read_then_change(path, opener=None):
+        """Simulate an external writer changing the file between read and recheck."""
+        contents = read(path, opener=opener)
+        path.write_bytes(b"concurrent version")
+        return contents
+
+    monkeypatch.setattr(AtomicFile, "read_bytes", read_then_change)
+    with pytest.raises(OSError, match="changed while preparing"):
+        AtomicFile.write_bytes(path, b"requested")
+    assert path.read_bytes() == b"concurrent version"
+    assert not AtomicFile.previous_path(path).exists()
+    assert not list(tmp_path.glob(".*.tmp"))

@@ -353,14 +353,7 @@ class AtomicFile:
         current_stat = cls._regular_file_stat(path)
         previous_bytes = None
         if current_stat is not None:
-            previous_bytes = cls.read_bytes(path, opener=opener)
-            after_read_stat = cls._regular_file_stat(path)
-            if (
-                after_read_stat is None
-                or not os.path.samestat(current_stat, after_read_stat)
-                or (current_stat.st_size != after_read_stat.st_size or current_stat.st_mtime_ns != after_read_stat.st_mtime_ns)
-            ):
-                raise OSError(f"{cls.path_label} '{path}' changed while preparing its replacement.")
+            previous_bytes = cls._read_previous_version(path, current_stat, opener)
 
         previous_path = cls.previous_path(path)
         cls._regular_file_stat(previous_path)
@@ -390,9 +383,27 @@ class AtomicFile:
             if not directory_synced:
                 logger.warning(f"Metadata '{path}' was atomically published, but parent-directory durability is unavailable.")
         finally:
-            for temporary_path in (new_temp, previous_temp):
-                if temporary_path is not None:
-                    try:
-                        temporary_path.unlink(missing_ok=True)
-                    except OSError as error:
-                        logger.warning(f"Could not remove metadata staging file '{temporary_path}': {error}")
+            cls._cleanup_temporaries(new_temp, previous_temp)
+
+    @classmethod
+    def _read_previous_version(cls, path: Path, current_stat: os.stat_result, opener: Callable) -> bytes:
+        """Read the prior version and reject a file changed during that read."""
+        previous_bytes = cls.read_bytes(path, opener=opener)
+        after_read_stat = cls._regular_file_stat(path)
+        if (
+            after_read_stat is None
+            or not os.path.samestat(current_stat, after_read_stat)
+            or (current_stat.st_size != after_read_stat.st_size or current_stat.st_mtime_ns != after_read_stat.st_mtime_ns)
+        ):
+            raise OSError(f"{cls.path_label} '{path}' changed while preparing its replacement.")
+        return previous_bytes
+
+    @classmethod
+    def _cleanup_temporaries(cls, new_temp: Path | None, previous_temp: Path | None) -> None:
+        """Remove only still-owned temporary entries without masking the main result."""
+        for temporary_path in (new_temp, previous_temp):
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError as error:
+                    logger.warning(f"Could not remove metadata staging file '{temporary_path}': {error}")

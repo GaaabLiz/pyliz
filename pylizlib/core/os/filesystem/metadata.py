@@ -5,6 +5,7 @@ import os
 import shutil
 import stat
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from pylizlib.core.os.filesystem.tree import assert_no_symlinks, iter_tree_entries_strict
@@ -43,6 +44,22 @@ def copy_posix_owner_group(source: Path, destination: Path) -> None:
     chown(destination, source_stat.st_uid, source_stat.st_gid)
 
 
+@dataclass(frozen=True)
+class MetadataTree:
+    """Retain file pairs, directory pairs and hard-link groups for one metadata pass.
+
+    Attributes:
+        files (list[tuple[Path, Path]]): Source/target regular-file pairs in visit order.
+        directories (list[tuple[Path, Path]]): Source/target directories, including root.
+        hardlink_groups (dict[tuple[int, int], list[Path]]): Target paths grouped by
+            source device/inode. Only entries with multiple source links are grouped.
+    """
+
+    files: list[tuple[Path, Path]]
+    directories: list[tuple[Path, Path]]
+    hardlink_groups: dict[tuple[int, int], list[Path]]
+
+
 class TreeMetadataCopier:
     """Preserve supported metadata on a fully copied, link-free destination tree."""
 
@@ -64,6 +81,18 @@ class TreeMetadataCopier:
         """Apply extended metadata to a fully copied, link-free staging tree."""
         assert_no_symlinks(source)
         assert_no_symlinks(destination)
+
+        # Collect topology before replacing any destination hard links.
+        tree = self._collect_entries(source, destination)
+        self._recreate_hardlinks(tree.hardlink_groups)
+
+        # Inode metadata is applied once per file, then to deepest directories first.
+        ordered_entries = self._order_entries(tree)
+        self._apply_entry_metadata(ordered_entries)
+
+    @staticmethod
+    def _collect_entries(source: Path, destination: Path) -> MetadataTree:
+        """Inspect source topology and pair each regular entry with its copied target."""
         entries = [(source, destination)]
         entries.extend((path, destination / path.relative_to(source)) for path in iter_tree_entries_strict(source))
 
@@ -83,8 +112,11 @@ class TreeMetadataCopier:
                     hardlink_groups.setdefault((source_stat.st_dev, source_stat.st_ino), []).append(destination_path)
             else:
                 raise ValueError(f"Extended metadata copy does not accept special file '{source_path}'.")
+        return MetadataTree(file_entries, directory_entries, hardlink_groups)
 
-        # Recreate hard links inside this tree before applying inode metadata.
+    @staticmethod
+    def _recreate_hardlinks(hardlink_groups: dict[tuple[int, int], list[Path]]) -> None:
+        """Recreate destination hard links before inode metadata is applied."""
         for destinations in hardlink_groups.values():
             if len(destinations) > 1:
                 first, *duplicates = destinations
@@ -92,6 +124,11 @@ class TreeMetadataCopier:
                     duplicate.unlink()
                     os.link(first, duplicate)
 
+    @staticmethod
+    def _order_entries(tree: MetadataTree) -> list[tuple[Path, Path]]:
+        """Deduplicate source inodes, then order directories from deepest to root."""
+        file_entries = tree.files
+        directory_entries = tree.directories
         unique_files = []
         seen_inodes = set()
         for source_path, destination_path in file_entries:
@@ -102,6 +139,10 @@ class TreeMetadataCopier:
                 unique_files.append((source_path, destination_path))
 
         ordered_entries = unique_files + sorted(directory_entries, key=lambda pair: len(pair[0].parts), reverse=True)
+        return ordered_entries
+
+    def _apply_entry_metadata(self, ordered_entries: list[tuple[Path, Path]]) -> None:
+        """Apply ownership/streams, stat and xattrs, with Windows DACLs last."""
         for source_path, destination_path in ordered_entries:
             if os.name == "nt":
                 self.copy_streams(source_path, destination_path)
