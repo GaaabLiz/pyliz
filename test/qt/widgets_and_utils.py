@@ -2,6 +2,10 @@ import os
 import unittest
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("PySide6.QtWidgets")
+
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,

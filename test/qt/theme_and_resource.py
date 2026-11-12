@@ -1,6 +1,11 @@
 import os
 import unittest
 
+import pytest
+
+pytest.importorskip("PySide6.QtGui")
+pytest.importorskip("PySide6.QtWidgets")
+
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication
 

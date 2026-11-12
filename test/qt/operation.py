@@ -1,6 +1,10 @@
 import os
 import unittest
 
+import pytest
+
+pytest.importorskip("PySide6.QtCore")
+
 from PySide6.QtCore import QCoreApplication
 
 from pylizlib.qt.handler.operation_core import GenericTask, Operation, Task

@@ -3,6 +3,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
+pytest.importorskip("PySide6.QtGui")
+pytest.importorskip("PySide6.QtWidgets")
+
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
