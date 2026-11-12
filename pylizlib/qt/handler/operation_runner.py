@@ -1,7 +1,6 @@
-import time
 from typing import Callable
 
-from PySide6.QtCore import QObject, QThreadPool, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, Signal
 
 from pylizlib.core.handler.progress import QueueProgress, QueueProgressMode
 from pylizlib.core.log.pylizLogger import logger
@@ -15,6 +14,7 @@ class RunnerStatistics:
         self.total_operations = len(operations)
         self.completed_operations = 0
         self.failed_operations = 0
+        self.cancelled_operations = 0
         self.pending_operations = 0
         self.total_progress = 0
 
@@ -23,6 +23,8 @@ class RunnerStatistics:
                 self.completed_operations += 1
             elif operation.is_failed():
                 self.failed_operations += 1
+            elif operation.status == OperationStatus.Cancelled:
+                self.cancelled_operations += 1
             elif operation.is_in_progress():
                 self.total_progress += operation.progress
             elif operation.is_pending():
@@ -190,7 +192,6 @@ class OperationRunner(QObject):
         if self._finished_emitted:
             return
         self._finished_emitted = True
-        time.sleep(0.1)
         statistics = RunnerStatistics(self._all_operations)
         self.runner_finish.emit(statistics)
         if self.on_runner_finished:

@@ -133,8 +133,11 @@ class Operation(QRunnable):
                 self.current_task = task
                 result = task.execute()
                 task.result = result
-                task.update_task_progress(100)
-                task.update_task_status(OperationStatus.Completed)
+                if self._is_cancelled or task.is_cancelled:
+                    task.update_task_status(OperationStatus.Cancelled)
+                else:
+                    task.update_task_progress(100)
+                    task.update_task_status(OperationStatus.Completed)
             except Exception as e:
                 task.update_task_status(OperationStatus.Failed)
                 logger.error("Error in task %s: %s", task.name, e)

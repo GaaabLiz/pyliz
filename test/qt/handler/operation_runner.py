@@ -2,13 +2,11 @@ import threading
 import time
 import unittest
 
-from PySide6.QtCore import QCoreApplication
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QCoreApplication, QThreadPool
 
 from pylizlib.qt.handler.operation_core import GenericTask, Operation
 from pylizlib.qt.handler.operation_domain import OperationInfo, OperationStatus
-from pylizlib.qt.handler.operation_runner import OperationRunner
-from pylizlib.qt.handler.operation_runner import RunnerStatistics
+from pylizlib.qt.handler.operation_runner import OperationRunner, RunnerStatistics
 
 
 class OperationRunnerTestCase(unittest.TestCase):
@@ -58,6 +56,20 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(cancelled_task.status, OperationStatus.Cancelled)
         self.assertEqual(operation.status, OperationStatus.Cancelled)
 
+    def test_cooperatively_cancelled_running_task_is_not_reported_completed(self):
+        def cancel_and_return(task):
+            task.cancel()
+            return "partial result"
+
+        task = GenericTask("cooperative", cancel_and_return)
+        operation = Operation([task], OperationInfo("test", "test"))
+
+        operation.execute()
+
+        self.assertEqual(task.status, OperationStatus.Cancelled)
+        self.assertEqual(task.result, "partial result")
+        self.assertEqual(operation.status, OperationStatus.Cancelled)
+
     def test_stop_waits_for_running_worker_and_does_not_start_queued_operation(self):
         entered = threading.Event()
         release = threading.Event()
@@ -89,6 +101,15 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(runner.active_operations, 0)
         self.assertEqual(running.status, OperationStatus.Cancelled)
         self.assertEqual(queued.status, OperationStatus.Cancelled)
+        statistics = RunnerStatistics(runner._all_operations)
+        self.assertEqual(statistics.cancelled_operations, 2)
+        self.assertEqual(
+            statistics.completed_operations
+            + statistics.failed_operations
+            + statistics.cancelled_operations
+            + statistics.pending_operations,
+            statistics.total_operations,
+        )
 
     def test_runner_finished_callback_runs_on_runner_thread(self):
         callback_threads = []
