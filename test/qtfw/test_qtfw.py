@@ -5,6 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytest.importorskip("PySide6.QtGui")
+pytest.importorskip("PySide6.QtWidgets")
+pytest.importorskip("qfluentwidgets")
+
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QWidget

@@ -2,6 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("PySide6.QtCore")
+
 from PySide6.QtCore import QSettings
 
 from pylizlib.qt.domain.config import QtConfigItem
