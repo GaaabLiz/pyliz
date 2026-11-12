@@ -268,12 +268,12 @@ class QtFwWidgetsTestCase(unittest.TestCase):
         card.add_software_data(sw2)
         card.update_all()
 
-        w1 = card.groups["git"]
+        w1 = card.groups[os.path.normcase(os.path.abspath(os.fspath(sw1.path)))]
         self.assertEqual(w1.label_installed.text(), "✅")
         self.assertEqual(w1.label_running.text(), "🟢")
         self.assertEqual(w1.label_version.text(), "2.40")
 
-        w2 = card.groups["docker"]
+        w2 = card.groups[os.path.normcase(os.path.abspath(os.fspath(sw2.path)))]
         self.assertEqual(w2.label_installed.text(), "🚫")
         self.assertEqual(w2.label_running.text(), "🔴")
 

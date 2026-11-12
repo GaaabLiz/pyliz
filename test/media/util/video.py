@@ -1,11 +1,12 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from pylizlib.media.domain.video import Frame, SceneType
+from pylizlib.media.domain.video import Frame, FrameOptions, SceneType
 from pylizlib.media.util.video import VideoUtils
 
 
@@ -151,11 +152,6 @@ class VideoUtilsTestCase(unittest.TestCase):
         # Exception
         mock_cap_cls.side_effect = Exception("error")
         self.assertIsNone(VideoUtils.get_video_frame_rate("vid.mp4"))
-
-
-from pathlib import Path
-
-from pylizlib.media.domain.video import FrameOptions
 
 
 class VideoUtilsTestCaseExpandedTestCase(unittest.TestCase):

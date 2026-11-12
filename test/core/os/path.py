@@ -597,7 +597,7 @@ class PathMatcherTestCase(unittest.TestCase):
             lines = out_file.read_text().strip().splitlines()
             self.assertEqual(len(lines), 4)
 
-    def test_match_with_file_list(self):
+    def test_match_with_file_list_expanded(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
             pm = PathMatcher()
@@ -609,7 +609,7 @@ class PathMatcherTestCase(unittest.TestCase):
             intersection, perc = pm.match_with_file_list(list_file)
             self.assertEqual(intersection, 2)
 
-    def test_log_all(self):
+    def test_log_all_expanded(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
             pm = PathMatcher()
@@ -652,8 +652,8 @@ class PathExtraCoverageTestCase(unittest.TestCase):
             _build_tree(td)
             found_files = []
             scan_directory(td, on_file=lambda f: found_files.append(f), on_folder=lambda d: None)
-            self.assertIn("a.txt", found_files)
-            self.assertIn("c.txt", found_files)
+            self.assertIn(str(Path(td) / "a.txt"), found_files)
+            self.assertIn(str(Path(td) / "sub1" / "c.txt"), found_files)
 
     def test_dir_contains_image_and_video(self):
         with tempfile.TemporaryDirectory() as td:

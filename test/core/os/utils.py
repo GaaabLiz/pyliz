@@ -64,7 +64,6 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
             self.assertFalse(is_critical_system_path("/any/path"))
 
 
-
 class GetFolderSizeMbTestCase(unittest.TestCase):
     def test_known_size(self):
         with tempfile.TemporaryDirectory() as td:
@@ -191,15 +190,17 @@ class IsSoftwareInstalledTestCase(unittest.TestCase):
 
 
 class IsCommandAvailableWithRunTestCase(unittest.TestCase):
-    @patch("subprocess.run")
-    def test_available(self, mock_run):
-        mock_run.return_value = None
+    @patch("pylizlib.core.os.utils.subprocess.run")
+    @patch("pylizlib.core.os.utils.shutil.which", return_value="/usr/bin/git")
+    def test_available(self, mock_which, mock_run):
         self.assertTrue(is_command_available_with_run("git"))
-        mock_run.assert_called_once_with(["git"], check=True)
+        mock_which.assert_called_once_with("git")
+        mock_run.assert_not_called()
 
-    @patch("subprocess.run", side_effect=FileNotFoundError)
-    def test_not_available(self, mock_run):
+    @patch("pylizlib.core.os.utils.shutil.which", return_value=None)
+    def test_not_available(self, mock_which):
         self.assertFalse(is_command_available_with_run("nonexistent_cmd"))
+        mock_which.assert_called_once_with("nonexistent_cmd")
 
 
 class OpenSystemFolderTestCase(unittest.TestCase):
