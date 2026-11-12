@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from pylizlib.core.os.snap.domain import Snapshot, SnapshotSettings
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -18,9 +18,12 @@ class SnapshotMetadata(Protocol):
     still cannot prove remote-server stable-media persistence. Raw-byte access
     is part of this contract because an edit rollback restores the original
     JSON bytes rather than regenerating potentially different metadata.
+
+    Parameters are positional-only in this capability contract: adapters may
+    retain their own public keyword names, such as the serializer's filepath.
     """
 
-    def to_json(self, snapshot: Snapshot, path: Path) -> None:
+    def to_json(self, snapshot: Snapshot, path: Path, /) -> None:
         """Validate and persist the complete snapshot using its existing format.
 
         Args:
@@ -33,7 +36,7 @@ class SnapshotMetadata(Protocol):
         """
         ...
 
-    def from_json(self, path: Path) -> Snapshot:
+    def from_json(self, path: Path, /) -> Snapshot:
         """Read persisted metadata with its legacy defaults and validation.
 
         Args:
@@ -45,7 +48,7 @@ class SnapshotMetadata(Protocol):
         """
         ...
 
-    def read_bytes(self, path: Path) -> bytes:
+    def read_bytes(self, path: Path, /) -> bytes:
         """Read the exact file contents for recovery without following links.
 
         Args:
@@ -56,7 +59,7 @@ class SnapshotMetadata(Protocol):
         """
         ...
 
-    def write_bytes(self, path: Path, contents: bytes) -> None:
+    def write_bytes(self, path: Path, contents: bytes, /) -> None:
         """Restore exact metadata bytes using protected file access.
 
         Args:
@@ -69,7 +72,7 @@ class SnapshotMetadata(Protocol):
         """
         ...
 
-    def update_field(self, path: Path, field_name: str, new_value) -> None:
+    def update_field(self, path: Path, field_name: str, new_value, /) -> None:
         """Update a raw JSON field without discarding unknown extension fields.
 
         Args:
@@ -110,7 +113,9 @@ class SnapshotStorage:
     path_catalogue: Path
     path_snapshot: Path
     path_snapshot_json: Path
-    metadata: SnapshotMetadata = SnapshotSerializer
+
+    # The class object provides bound class/static methods, as verified by the adapter tests.
+    metadata: SnapshotMetadata = cast(SnapshotMetadata, SnapshotSerializer)
 
     def root_path(self) -> Path:
         """Revalidate the root and reject an ID changed after manager creation.
