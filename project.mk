@@ -106,8 +106,9 @@ CI_UV_VERSION ?= 0.13.6
 CI_QUALITY_TARGETS ?= lint format-check
 
 # Override this for unittest, nox, tox, or a project-specific test runner.
-# CI tests exercise media APIs, so install the media extra when running them.
-CI_TEST_COMMAND ?= uv run --extra media pytest $(TESTS_PATH)
+# CI tests exercise media and Qt APIs, including Fluent Widgets, so install
+# the corresponding extras when running them.
+CI_TEST_COMMAND ?= uv run --extra media --extra qt --extra qtfw pytest $(TESTS_PATH)
 
 # Enable/disable API docs generation during the release workflow.
 # When enabled, CI includes docs/api/ in the generated-files pull request.
