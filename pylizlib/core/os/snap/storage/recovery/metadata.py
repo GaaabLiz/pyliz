@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import fields
 from pathlib import Path
 
-from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot, validate_directory_component
+from pylizlib.core.os.snap.domain import SnapDirAssociation, validate_directory_component
+from pylizlib.core.os.snap.model_state import restore_snapshot_model
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 
 
@@ -110,20 +110,5 @@ def _refresh_snapshot_model(storage) -> None:
         None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
     """
     previous = storage.metadata.from_json(storage.path_snapshot_json)
-    current = storage.snapshot
-    existing = {association.folder_id: association for association in current.directories}
-    directories = []
-    for persisted in previous.directories:
-        association = existing.get(persisted.folder_id)
-        if association is None:
-            association = deepcopy(persisted)
-        else:
-            for model_field in fields(SnapDirAssociation):
-                if model_field.name != "_current_index":
-                    setattr(association, model_field.name, deepcopy(getattr(persisted, model_field.name)))
-            association._set_storage_name(persisted.directory_name)
-        directories.append(association)
-    for model_field in fields(Snapshot):
-        if model_field.name != "directories":
-            setattr(current, model_field.name, deepcopy(getattr(previous, model_field.name)))
-    current.directories[:] = directories
+    association_fields = tuple(field.name for field in fields(SnapDirAssociation) if field.name != "_current_index")
+    restore_snapshot_model(storage.snapshot, previous, association_fields=association_fields)
