@@ -362,7 +362,7 @@ class GetPathItemsTestCase(unittest.TestCase):
             self.assertEqual(relative_items, {"cycle", "external", "inside", "inside/file.txt"})
 
     def test_permission_error_ignored(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         mock_entry = MagicMock()
         mock_entry.path = "/mock/forbidden"

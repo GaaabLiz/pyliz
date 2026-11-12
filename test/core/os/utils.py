@@ -2,10 +2,10 @@ import getpass
 import os
 import platform
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-import sys
 from unittest.mock import MagicMock, patch
 
 import psutil

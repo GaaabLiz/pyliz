@@ -3,7 +3,7 @@ import re
 import shutil
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from pylizlib.core.log.loggiz import (
     Loggiz,

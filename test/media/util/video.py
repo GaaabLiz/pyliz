@@ -1,13 +1,11 @@
 import os
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import cv2
 import numpy as np
 
-from pylizlib.media.domain.video import Frame, FrameOptions, SceneType
+from pylizlib.media.domain.video import Frame, SceneType
 from pylizlib.media.util.video import VideoUtils
 
 
