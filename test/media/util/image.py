@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -85,9 +86,6 @@ class ImageUtilsTestCase(unittest.TestCase):
         with patch("pylizlib.media.util.image.logger.error") as mock_log:
             self.assertIsNone(ImageUtils.check_sd_metadata("broken.png"))
             mock_log.assert_called_once()
-
-
-from pathlib import Path
 
 
 class ImageUtilsTestCaseExpandedTestCase(unittest.TestCase):

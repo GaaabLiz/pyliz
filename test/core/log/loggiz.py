@@ -167,7 +167,7 @@ class LoggizLoggerTestCase(unittest.TestCase):
         LoggizLogger.error_tag("NONE", "should not appear")
 
 
-class LoggizLoggerTestCase(unittest.TestCase):
+class LoggizLoggerTestCase_expanded(unittest.TestCase):
     def test_get_tag_string(self):
         tag_no_ansi = LoggizLogger.get_tag_string("TEST", ansify=False)
         self.assertEqual(tag_no_ansi, f"{config.tag_char_start}TEST{config.tag_char_end}")

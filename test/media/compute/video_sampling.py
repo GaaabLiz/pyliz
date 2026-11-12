@@ -1,9 +1,14 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import cv2
+import numpy as np
 
-from pylizlib.media.compute.video_sampling import _build_frame_indices, sample_video_frames_with_count
+from pylizlib.media.compute.video_sampling import (
+    _build_frame_indices,
+    sample_video_frames,
+    sample_video_frames_with_count,
+)
 
 
 class SampleVideoFramesWithCountTestCase(unittest.TestCase):
@@ -46,15 +51,6 @@ class SampleVideoFramesWithCountTestCase(unittest.TestCase):
         self.assertEqual(expected_count, 5)
         self.assertEqual(capture.read.call_count, 5)
         capture.release.assert_called_once()
-
-
-from unittest.mock import MagicMock, patch
-
-import numpy as np
-
-from pylizlib.media.compute.video_sampling import (
-    sample_video_frames,
-)
 
 
 class VideoSamplingTestCase(unittest.TestCase):

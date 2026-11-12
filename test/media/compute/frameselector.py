@@ -9,7 +9,7 @@ from pylizlib.media.compute.frameselector import (
     DynamicFrameSelector,
     UniformFrameSelector,
 )
-from pylizlib.media.domain.video import FrameOptions
+from pylizlib.media.domain.video import FrameOptions, SceneType
 
 
 class UniformFrameSelectorLoggerTestCase(unittest.TestCase):
@@ -176,9 +176,6 @@ class AllFrameSelectorTestCase(unittest.TestCase):
         self.assertEqual(len(frames), 2)
         self.assertEqual(frames[0].timestamp, 0.04)
         capture.release.assert_called_once()
-
-
-from pylizlib.media.domain.video import SceneType
 
 
 class FrameSelectorTestCase(unittest.TestCase):

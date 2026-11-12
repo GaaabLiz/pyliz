@@ -210,7 +210,7 @@ class ProvidersMockTestCase(unittest.TestCase):
         dummy_frames = [np.zeros((16, 16, 3), dtype=np.uint8)]
 
         with patch.object(prov, "_get_detector", return_value=mock_det):
-            with patch("pylizlib.ai.providers.sample_video_frames", return_value=dummy_frames):
+            with patch("pylizlib.ai.providers.sample_video_frames_with_count", return_value=(dummy_frames, len(dummy_frames))):
                 with patch.object(prov, "_detect_frame", return_value=True):
                     res = prov.scan(media)
                     self.assertTrue(res.nsfw)
@@ -223,7 +223,7 @@ class ProvidersMockTestCase(unittest.TestCase):
         dummy_frames = [np.zeros((16, 16, 3), dtype=np.uint8)]
 
         with patch.object(prov, "_get_detector", return_value=mock_det):
-            with patch("pylizlib.ai.providers.sample_video_frames", return_value=dummy_frames):
+            with patch("pylizlib.ai.providers.sample_video_frames_with_count", return_value=(dummy_frames, len(dummy_frames))):
                 with patch.object(prov, "_detect_frame", return_value=False):
                     res = prov.scan(media)
                     self.assertFalse(res.nsfw)
