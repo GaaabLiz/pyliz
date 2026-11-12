@@ -245,10 +245,13 @@ class TestLizMedia(unittest.TestCase):
         mock_parser_manager.return_value.parse.return_value = SimpleNamespace(prompt="a cat", steps=20)
         mock_metadata_handler.return_value.get_image_creation_date.return_value = None
 
+        xmp_sidecar = Path("/path/to/test_image.xmp")
+        aae_sidecar = Path("/path/to/test_image.aae")
+        eagle_metadata_path = Path("/path/to/metadata.json")
         media = LizMedia(self.mock_path)
-        media.attach_sidecar_file(Path("/path/to/test_image.xmp"))
-        media.attach_sidecar_file(Path("/path/to/test_image.aae"))
-        media.attach_eagle_metadata_path(Path("/path/to/metadata.json"))
+        media.attach_sidecar_file(xmp_sidecar)
+        media.attach_sidecar_file(aae_sidecar)
+        media.attach_eagle_metadata_path(eagle_metadata_path)
         media.attach_eagle_metadata(SimpleNamespace(source="eagle", rating=5))
         media.base64_content = "YWJj"
         media.apply_ai_scan_result(
@@ -281,15 +284,15 @@ class TestLizMedia(unittest.TestCase):
         self.assertIsNone(payload["duration_sec"])
         self.assertIsNone(payload["duration_min"])
         self.assertIsNone(payload["frame_rate"])
-        self.assertEqual(payload["eagle_metadata_path"], "/path/to/metadata.json")
+        self.assertEqual(payload["eagle_metadata_path"], str(eagle_metadata_path))
         self.assertEqual(payload["eagle_metadata"], {"source": "eagle", "rating": 5})
         self.assertEqual(
             payload["attached_sidecar_files"],
-            ["/path/to/test_image.xmp", "/path/to/test_image.aae"],
+            [str(xmp_sidecar), str(aae_sidecar)],
         )
         self.assertTrue(payload["has_xmp_sidecar"])
         self.assertTrue(payload["has_aae_sidecar"])
-        self.assertEqual(payload["xmp_sidecar"], "/path/to/test_image.xmp")
+        self.assertEqual(payload["xmp_sidecar"], str(xmp_sidecar))
         self.assertEqual(payload["base64_content"], "YWJj")
         self.assertEqual(payload["ai_ocr_text"], ["hello"])
         self.assertTrue(payload["ai_has_ocr_text"])
