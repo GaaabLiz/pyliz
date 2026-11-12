@@ -1,5 +1,5 @@
-import os
 import keyword
+import os
 import re
 import tempfile
 import xml.etree.ElementTree as ET
@@ -138,7 +138,8 @@ def exec_gen_res_py(qrc_file_path, output_file_path, main_class_name="ResourcesI
         # Aggiungi la definizione della classe
         content.append("")
         content.append(f"    class {class_name}:")
-        content.append(f'        """Resource with prefix \'{prefix}\'"""')
+        class_docstring = f"Resource with prefix {prefix!r}"
+        content.append(f"        {class_docstring!r}")
         content.append("")
 
         # Aggiungi tutte le risorse per questo prefix

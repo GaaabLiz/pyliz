@@ -1,4 +1,3 @@
-import os
 import shutil
 import subprocess
 import sys
@@ -51,7 +50,8 @@ class GenerateQrcTestCase(unittest.TestCase):
                 "<file>assets/dark-theme.svg</file>"
                 "<file>assets/dark theme.png</file>"
                 "<file>assets/1-logo.svg</file>"
-                "</qresource></RCC>",
+                '</qresource><qresource prefix="quoted&quot;&quot;&quot;">'
+                "<file>assets/dark-theme.svg</file></qresource></RCC>",
                 encoding="utf-8",
             )
             output_path = root / "resource_ids.py"
@@ -64,6 +64,7 @@ class GenerateQrcTestCase(unittest.TestCase):
             self.assertIn("DARK_THEME =", source)
             self.assertIn("DARK_THEME_2 =", source)
             self.assertIn("_1_LOGO =", source)
+            self.assertIn("class quoted:", source)
 
     def test_resource_ids_match_qt_aliases_and_empty_prefix(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
