@@ -24,6 +24,7 @@ from typing import Optional, Protocol
 import regex as regex_engine
 
 from pylizlib.core.data.text.encoding import EncodingDetector
+from pylizlib.core.data.text.models import TimedPattern
 from pylizlib.core.data.text.preview import line_preview, needs_complete_line_preview
 from pylizlib.core.data.text.results import ResultPage as _ResultPage
 from pylizlib.core.data.text.search import TextFileSearcher
@@ -284,7 +285,7 @@ class SnapshotSearcher:
         return _ResultPage(params.result_offset, params.max_results)
 
     @staticmethod
-    def _compile_regex(params: SnapshotSearchParams) -> Optional[regex_engine.Pattern]:
+    def _compile_regex(params: SnapshotSearchParams) -> Optional[TimedPattern]:
         """Compile a regex query, logging invalid patterns without raising.
 
         Args:
@@ -292,7 +293,7 @@ class SnapshotSearcher:
                 configuration.
 
         Returns:
-            Optional[regex_engine.Pattern]: Compiled regex for REGEX mode, otherwise None; invalid regex syntax is
+            Optional[TimedPattern]: Compiled regex for REGEX mode, otherwise None; invalid regex syntax is
                 logged and also yields None.
         """
         if params.query_type != QueryType.REGEX:
@@ -308,7 +309,7 @@ class SnapshotSearcher:
         snapshot: Snapshot,
         snapshot_path: Path | None,
         params: SnapshotSearchParams,
-        compiled_regex: Optional[regex_engine.Pattern],
+        compiled_regex: Optional[TimedPattern],
         on_progress: Optional[SnapshotProgressCallback],
         page: _ResultPage,
     ) -> None:
@@ -320,7 +321,7 @@ class SnapshotSearcher:
             snapshot_path (Path | None): Stored snapshot directory to validate or search.
             params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
                 None produces no regex matches.
             on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
                 processed_files), also during chunks; only literal False cancels the current snapshot.
@@ -398,7 +399,7 @@ class SnapshotSearcher:
         self,
         file_path: Path,
         params: SnapshotSearchParams,
-        compiled_regex: Optional[regex_engine.Pattern],
+        compiled_regex: Optional[TimedPattern],
         snapshot_name: str,
         page: _ResultPage,
         on_progress: Optional[SnapshotProgressCallback],
@@ -411,7 +412,7 @@ class SnapshotSearcher:
             file_path (Path): Native candidate file path to filter, inspect or search.
             params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
                 None produces no regex matches.
             snapshot_name (str): Snapshot display label copied into each public search result.
             page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
@@ -556,7 +557,7 @@ class SnapshotSearcher:
     def _matches(
         text: str,
         params: SnapshotSearchParams,
-        compiled_regex: Optional[regex_engine.Pattern],
+        compiled_regex: Optional[TimedPattern],
     ) -> bool:
         """Match a filename using the same text and timed-regex rules as content.
 
@@ -564,7 +565,7 @@ class SnapshotSearcher:
             text (str): Filename or text string to match using the selected literal/regex policy.
             params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
                 None produces no regex matches.
 
         Returns:

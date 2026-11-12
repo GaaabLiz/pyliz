@@ -50,6 +50,31 @@ def test_regex_multiline_and_callback_error_remain_distinct(tmp_path):
     assert error.value is original
 
 
+def test_timed_pattern_is_a_structural_capability(tmp_path):
+    """A wrapper can supply matching and timeout support without C-type inheritance."""
+    calls = []
+
+    class RecordingPattern:
+        """Delegate matching while recording the engine's requested timeout."""
+
+        def finditer(self, text, *, pos, timeout):
+            """Return real matches and retain the search bounds for assertions."""
+            calls.append((pos, timeout))
+            return regex.finditer("needle", text, pos=pos, timeout=timeout)
+
+        def search(self, text, *, timeout):
+            """Supply the filename-search part of the same capability."""
+            return regex.search("needle", text, timeout=timeout)
+
+    path = tmp_path / "text"
+    path.write_text("first needle\nsecond needle\n", encoding="utf-8")
+    params = TextSearchOptions("needle", literal=False, chunk_size=4, max_context_chars=100, regex_timeout_seconds=0.25)
+    page = ResultPage(0, 10)
+    assert TextFileSearcher().search_file(path, params, RecordingPattern(), page, None) is False
+    assert [match.line_number for match in page.results] == [1, 2]
+    assert calls and all(timeout == 0.25 for _, timeout in calls)
+
+
 def test_text_engine_import_does_not_load_snapshots():
     """Reusable text search must remain independent from snapshot API imports."""
     code = "import sys; import pylizlib.core.data.text.search; assert not any(name.startswith('pylizlib.core.os.snap') for name in sys.modules)"

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import regex as regex_engine
-
-from pylizlib.core.data.text.models import MatchPage, TextMatch, TextSearchConfiguration
+from pylizlib.core.data.text.models import MatchPage, TextMatch, TextSearchConfiguration, TimedPattern
 from pylizlib.core.data.text.preview import line_preview, needs_complete_line_preview
 from pylizlib.core.data.text.window import BufferScanOutcome, TextWindow
 from pylizlib.core.log.pylizLogger import logger
@@ -95,19 +93,19 @@ class BufferMatcher:
         file_path (Path): Native file path associated with the match or current scan.
         params (TextSearchConfiguration): Query, encoding and resource limits; the search observes this live
             configuration.
-        compiled_regex (regex_engine.Pattern | None): Compiled regex used when literal matching is disabled; None
+        compiled_regex (TimedPattern | None): Compiled regex used when literal matching is disabled; None
             produces no regex matches.
         page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
     """
 
-    def __init__(self, file_path: Path, params: TextSearchConfiguration, compiled_regex: regex_engine.Pattern | None, page: MatchPage):
+    def __init__(self, file_path: Path, params: TextSearchConfiguration, compiled_regex: TimedPattern | None, page: MatchPage):
         """Bind live query options and the result sink for one file attempt.
 
         Args:
             file_path (Path): Native candidate file path to filter, inspect or search.
             params (TextSearchConfiguration): Query, encoding and resource limits; the search observes this live
                 configuration.
-            compiled_regex (regex_engine.Pattern | None): Compiled regex used when literal matching is disabled; None
+            compiled_regex (TimedPattern | None): Compiled regex used when literal matching is disabled; None
                 produces no regex matches.
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
 
