@@ -1,9 +1,7 @@
 """Snapshot backup creation and catalogue restore operations."""
 
-import json
 import os
 import shutil
-import stat
 import tempfile
 import zipfile
 from collections.abc import Callable, Mapping
@@ -14,24 +12,20 @@ from typing import Protocol
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInfo, SnapshotSettings, validate_directory_component
+from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInfo, SnapshotSettings
 from pylizlib.core.os.snap.operations.backup_manifest import (
-    BACKUP_MANIFEST_NAME,
     LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST,
-    LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT,
     ArchivedAssociation,
-    build_backup_manifest,
-    parse_backup_manifest,
 )
-from pylizlib.core.os.snap.operations.backup_names import build_backup_filename, parse_backup_filename
+from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.storage.archives import _write_verified_zip_exclusive, extract_zip, validate_zip_archive
+from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.paths import get_snapshot_json_path, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, recover_storage_transactions, rename_and_sync
-from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
+from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 
 ASSOCIATED_DIRECTORIES_MANIFEST = LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST
 
@@ -68,158 +62,17 @@ class SnapshotIncompleteError(ValueError):
 
 
 class SnapshotArchiveService:
-    """Build and verify ZIP backups of one stored snapshot or its live copies."""
+    """Compatible backup facade preserving the storage object and clock hook."""
 
     def __init__(self, storage: SnapshotStorage):
-        """Bind the snapshot state and current copy/metadata dependencies."""
+        """Bind the snapshot state and copy/metadata dependencies."""
         self.storage = storage
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
-        """
-        Creates, verifies and atomically publishes a zip archive of the snapshot's data.
-        Failures propagate to the caller so protected operations cannot continue.
+        """Create a verified AD/SD backup using the dedicated creator."""
+        from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
 
-        Args:
-            backup_path: The directory where the backup zip file will be saved.
-            prefix: A prefix for the backup filename.
-            backup_type: The type of backup to create (associated directories or the snapshot directory).
-            is_export: If True, the filename will be formatted as an export.
-
-        Returns:
-            The path of the verified, published archive.
-
-        Raises:
-            SnapshotIncompleteError: If any associated source folder is missing or
-                ceases to be readable as a directory during enumeration.
-        """
-        try:
-            if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
-                raise ValueError(f"Unsupported backup type: {backup_type}")
-            recover_storage_transactions(self.storage)
-            self.storage.snapshot.validate()
-            self.storage.root_path()
-            snapshot_json_path = self.storage.child_path(self.storage.settings.json_filename)
-            if backup_type == BackupType.SNAPSHOT_DIRECTORY and not snapshot_json_path.is_file():
-                raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-            base_zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
-            archived_roots = (
-                [Path(association.original_path) for association in self.storage.snapshot.directories]
-                if backup_type == BackupType.ASSOCIATED_DIRECTORIES
-                else [self.storage.root_path()]
-            )
-            self._validate_archive_destination(backup_path / base_zip_name, archived_roots)
-
-            backup_path.mkdir(parents=True, exist_ok=True)
-
-            entries = list(self._files_to_archive(backup_type))
-            if any(archive_name == Path(BACKUP_MANIFEST_NAME) for _, archive_name in entries):
-                raise ValueError(f"Snapshot content conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
-            manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp)
-            entries.append((manifest_path, Path(BACKUP_MANIFEST_NAME)))
-            try:
-                collision_index = 0
-                while True:
-                    collision_suffix = f"_{collision_index}" if collision_index else ""
-                    zip_name = f"{base_zip_name[:-4]}{collision_suffix}.zip"
-                    zip_path = backup_path / zip_name
-                    if zip_path.exists() or zip_path.is_symlink():
-                        collision_index += 1
-                        continue
-                    try:
-                        return _write_verified_zip_exclusive(zip_path, entries, message_callback)
-                    except FileExistsError:
-                        if not (zip_path.exists() or zip_path.is_symlink()):
-                            raise
-                        collision_index += 1
-            finally:
-                if manifest_path is not None:
-                    try:
-                        manifest_path.unlink(missing_ok=True)
-                    except OSError as error:
-                        logger.warning(f"Could not remove temporary associated-directories manifest '{manifest_path}': {error}")
-        except Exception as e:
-            logger.error(f"Failed to create backup for snapshot '{self.storage.snapshot.id}': {e}")
-            raise
-
-    @staticmethod
-    def _validate_archive_destination(destination: Path, archived_roots: list[Path]) -> None:
-        """Reject a ZIP destination inside any tree that the archive enumerates."""
-        try:
-            resolved_destination = destination.resolve(strict=False)
-            resolved_roots = [(root, root.resolve(strict=False)) for root in archived_roots]
-        except Exception as error:
-            raise ValueError(f"Cannot verify backup destination '{destination}': {error}") from error
-
-        for source_root, resolved_root in resolved_roots:
-            if resolved_destination.is_relative_to(resolved_root):
-                raise ValueError(f"Backup destination '{destination}' is inside archived source '{source_root}'.")
-
-    def _write_backup_manifest(self, directory: Path, backup_type: BackupType, prefix: str, is_export: bool, timestamp: str) -> Path:
-        """Write a temporary typed manifest with identity and associations for either backup type."""
-        data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp)
-        temporary_path = None
-        try:
-            temporary_file_context = tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=directory,
-                prefix=".backup_metadata_",
-                suffix=".partial",
-                delete=False,
-            )
-            with temporary_file_context as temporary_file:
-                temporary_path = Path(temporary_file.name)
-                json.dump(data, temporary_file, ensure_ascii=False, indent=2)
-            return temporary_path
-        except Exception:
-            if temporary_path is not None:
-                try:
-                    temporary_path.unlink(missing_ok=True)
-                except OSError as error:
-                    logger.warning(f"Could not remove unfinished backup manifest '{temporary_path}': {error}")
-            raise
-
-    def _files_to_archive(self, backup_type: BackupType):
-        """Enumerate stored or live files using their distinct existing link policies."""
-        if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
-            sources = []
-            missing_folders = []
-            for association in self.storage.snapshot.directories:
-                folder = Path(association.original_path)
-                try:
-                    mode = folder.stat().st_mode
-                except (FileNotFoundError, NotADirectoryError):
-                    missing_folders.append(association.original_path)
-                    continue
-                if not stat.S_ISDIR(mode):
-                    missing_folders.append(association.original_path)
-                    continue
-                sources.append((association, folder))
-
-            if missing_folders:
-                raise SnapshotIncompleteError("Associated-directory backup", missing_folders)
-
-            # Enumerate every source before yielding any member to the ZIP writer.
-            entries = []
-            for association, folder in sources:
-                entries.append((folder, Path(association.directory_name)))
-                try:
-                    for tree_entry in iter_tree_entries_strict(folder):
-                        entries.append((tree_entry, Path(association.directory_name) / tree_entry.relative_to(folder)))
-                except (FileNotFoundError, NotADirectoryError):
-                    missing_folders.append(association.original_path)
-
-            if missing_folders:
-                raise SnapshotIncompleteError("Associated-directory backup", missing_folders)
-
-            yield from entries
-        else:
-            snapshot_root = self.storage.root_path()
-            assert_no_symlinks(snapshot_root)
-            for tree_entry in iter_tree_entries_strict(snapshot_root):
-                yield tree_entry, tree_entry.relative_to(self.storage.path_snapshot)
+        return BackupCreator(self.storage, now=datetime.now).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
 
 
 class SnapshotLookup(Protocol):
@@ -386,124 +239,16 @@ class CatalogueBackupService:
         backup_zip_path.unlink()
 
     def _read_archive_metadata(self, backup_zip_path: Path) -> _ArchiveMetadata:
-        """Read archive identity and type from embedded metadata, falling back for legacy ZIPs."""
-        try:
-            with zipfile.ZipFile(backup_zip_path, "r") as archive:
-                names = archive.namelist()
-                if BACKUP_MANIFEST_NAME in names:
-                    if names.count(BACKUP_MANIFEST_NAME) != 1:
-                        raise ValueError("Snapshot backup archive contains duplicate backup manifests.")
-                    try:
-                        manifest_data = json.loads(archive.read(BACKUP_MANIFEST_NAME).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Snapshot backup manifest is invalid: {error}") from error
-                    manifest = parse_backup_manifest(manifest_data)
-                    info = SnapshotBackupInfo(
-                        backup_zip_path,
-                        backup_zip_path.name,
-                        manifest.snapshot_id,
-                        manifest.backup_type,
-                        manifest.prefix,
-                        manifest.created_at,
-                        manifest.is_export,
-                    )
-                    return _ArchiveMetadata(info, manifest.associations, manifest.os_created, BACKUP_MANIFEST_NAME)
+        """Inspect embedded identity and format without extracting the archive."""
+        from pylizlib.core.os.snap.operations.backup.inspection import BackupArchiveInspector
 
-                if ASSOCIATED_DIRECTORIES_MANIFEST in names:
-                    if names.count(ASSOCIATED_DIRECTORIES_MANIFEST) != 1:
-                        raise ValueError("Associated-directories archive contains duplicate legacy manifests.")
-                    try:
-                        legacy_data = json.loads(archive.read(ASSOCIATED_DIRECTORIES_MANIFEST).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Associated-directories manifest is invalid: {error}") from error
-                    snapshot_id, origin_os, associations = self._parse_legacy_associations_manifest(legacy_data)
-                    filename_info = self.parse_info(backup_zip_path)
-                    info = self._replace_info_identity(filename_info, snapshot_id, BackupType.ASSOCIATED_DIRECTORIES)
-                    return _ArchiveMetadata(info, tuple(associations), origin_os, ASSOCIATED_DIRECTORIES_MANIFEST)
+        return BackupArchiveInspector(self.settings, self.parse_info).read(backup_zip_path)
 
-                if self.settings.json_filename in names:
-                    if names.count(self.settings.json_filename) != 1:
-                        raise ValueError("Snapshot-directory archive contains duplicate snapshot metadata files.")
-                    try:
-                        snapshot_data = json.loads(archive.read(self.settings.json_filename).decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise ValueError(f"Snapshot-directory metadata is invalid: {error}") from error
-                    if not isinstance(snapshot_data, dict) or not isinstance(snapshot_data.get("id"), str) or not snapshot_data["id"]:
-                        raise ValueError("Snapshot-directory metadata has no snapshot ID.")
-                    validate_directory_component(snapshot_data["id"], "backup snapshot ID")
-                    origin_os = snapshot_data.get("os_created")
-                    if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
-                        raise ValueError("Snapshot-directory metadata contains an invalid originating OS.")
-                    filename_info = self.parse_info(backup_zip_path)
-                    info = self._replace_info_identity(filename_info, snapshot_data["id"], BackupType.SNAPSHOT_DIRECTORY)
-                    return _ArchiveMetadata(info, None, origin_os)
-        except zipfile.BadZipFile:
-            # Preserve the legacy error mapping: extraction reports malformed ZIPs.
-            return _ArchiveMetadata(self.parse_info(backup_zip_path))
-        except ValueError:
-            raise
-        except Exception as error:
-            raise IOError(f"Failed to inspect backup archive '{backup_zip_path}': {error}") from error
+    def _parse_legacy_associations_manifest(self, data: object) -> tuple[str, str | None, list[ArchivedAssociation]]:
+        """Read a legacy v1/v2 manifest using the compatibility codec."""
+        from pylizlib.core.os.snap.operations.backup.manifest import parse_legacy_associations_manifest
 
-        return _ArchiveMetadata(self.parse_info(backup_zip_path))
-
-    @staticmethod
-    def _replace_info_identity(info: SnapshotBackupInfo, snapshot_id: str, backup_type: BackupType) -> SnapshotBackupInfo:
-        """Retain filename-only convenience fields while replacing ID and type from archive data."""
-        return SnapshotBackupInfo(info.path, info.file_name, snapshot_id, backup_type, info.prefix, info.created_at, info.is_export)
-
-    def _parse_legacy_associations_manifest(
-        self,
-        data: object,
-    ) -> tuple[str, str | None, list[ArchivedAssociation]]:
-        """Read a version 1 or 2 AD manifest written before the unified backup format."""
-        if (
-            not isinstance(data, dict)
-            or data.get("format") != LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT
-            or type(data.get("version")) is not int
-            or data["version"] not in {1, 2}
-        ):
-            raise ValueError("Unsupported or invalid associated-directories manifest format.")
-        origin_os = data.get("os_created")
-        if origin_os is not None and (not isinstance(origin_os, str) or not origin_os):
-            raise ValueError("Associated-directories manifest contains an invalid originating OS.")
-        if data["version"] == 2 and origin_os is None:
-            raise ValueError("Associated-directories manifest does not record its originating OS.")
-        snapshot_id = data.get("snapshot_id")
-        if not isinstance(snapshot_id, str) or not snapshot_id:
-            raise ValueError("Associated-directories manifest has no snapshot ID.")
-        validate_directory_component(snapshot_id, "backup snapshot ID")
-        raw_associations = data.get("associations")
-        if not isinstance(raw_associations, list):
-            raise ValueError("Associated-directories manifest has no association list.")
-
-        associations = []
-        seen_ids = set()
-        seen_names = set()
-        for raw in raw_associations:
-            if not isinstance(raw, dict):
-                raise ValueError("Associated-directories manifest entries must be objects.")
-            folder_id = raw.get("folder_id")
-            index = raw.get("index")
-            directory_name = raw.get("directory_name")
-            original_path = raw.get("original_path")
-            if not isinstance(folder_id, str) or not folder_id:
-                raise ValueError("Associated-directories manifest contains an invalid folder ID.")
-            if type(index) is not int or index < 0:
-                raise ValueError(f"Associated-directories manifest contains an invalid index for '{folder_id}'.")
-            validate_directory_component(directory_name, "archive association directory name")
-            if directory_name in {BACKUP_MANIFEST_NAME, ASSOCIATED_DIRECTORIES_MANIFEST}:
-                raise ValueError("Associated-directories manifest name conflicts with an archived association.")
-            if not isinstance(original_path, str) or not original_path or "\x00" in original_path:
-                raise ValueError(f"Associated-directories manifest contains an invalid original path for '{folder_id}'.")
-            if not Path(original_path).is_absolute() and not PureWindowsPath(original_path).is_absolute():
-                raise ValueError(f"Associated-directories manifest path for '{folder_id}' must be absolute.")
-            if folder_id in seen_ids or directory_name in seen_names:
-                raise ValueError("Associated-directories manifest contains duplicate association identities or names.")
-            seen_ids.add(folder_id)
-            seen_names.add(directory_name)
-            associations.append(ArchivedAssociation(folder_id, index, directory_name, original_path))
-        return snapshot_id, origin_os, associations
+        return parse_legacy_associations_manifest(data)
 
     def _restore_snapshot_directory(self, temp_dir_path: Path, metadata: _ArchiveMetadata) -> None:
         """Replace a complete snapshot root after checking its embedded identity and associations."""
@@ -572,10 +317,7 @@ class CatalogueBackupService:
             )
             recover_storage_transactions(storage)
             origin_os = snapshot.os_created
-            associations = [
-                ArchivedAssociation(association.folder_id, association.index, association.directory_name, association.original_path)
-                for association in snapshot.directories
-            ]
+            associations = [ArchivedAssociation(association.folder_id, association.index, association.directory_name, association.original_path) for association in snapshot.directories]
 
         return associations, origin_os
 
@@ -631,9 +373,7 @@ class CatalogueBackupService:
         )
         extracted_by_name = {entry.name: entry for entry in extracted_entries}
         missing_folders = [
-            association.original_path
-            for association in associations
-            if association.directory_name not in extracted_by_name or not extracted_by_name[association.directory_name].is_dir()
+            association.original_path for association in associations if association.directory_name not in extracted_by_name or not extracted_by_name[association.directory_name].is_dir()
         ]
         unexpected_entries = [entry.name for entry in extracted_entries if entry.name not in dir_name_to_assoc or not entry.is_dir()]
         if not associations and not extracted_entries:
