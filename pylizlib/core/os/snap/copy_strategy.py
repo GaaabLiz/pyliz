@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import errno
-import hashlib
 import os
 import shutil
 import stat
@@ -14,14 +12,19 @@ from enum import Enum
 from pathlib import Path
 from typing import ContextManager
 
+from pylizlib.core.os.filesystem.fingerprints import fingerprint_tree
+from pylizlib.core.os.filesystem.metadata import TreeMetadataCopier, copy_extended_attributes, copy_posix_owner_group
 from pylizlib.core.os.snap.callbacks import CopyProgressCallback as ProgressCallback
 from pylizlib.core.os.snap.callbacks import MessageCallback
+from pylizlib.core.os.snap.copying.session import _FileCopySession
 from pylizlib.core.os.snap.integrity import (
     IntegrityManifest,
     assert_manifest_matches,
     validate_integrity_manifest,
 )
-from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks, is_link_or_junction, iter_tree_entries_strict
+from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks, is_link_or_junction
+from pylizlib.core.os.windows.security import copy_security
+from pylizlib.core.os.windows.streams import copy_streams
 
 
 class SourceChangedError(RuntimeError):
@@ -72,73 +75,6 @@ def _remove_tree(path: Path) -> None:
 def _is_link_or_junction(path: Path) -> bool:
     """Compatibility helper for the common storage entry check."""
     return is_link_or_junction(path)
-
-
-class _FileCopySession:
-    """Per-call byte counters and manifest recording for sequential file copying.
-
-    A strategy remains reusable: this mutable state belongs to one destination,
-    not to the strategy instance or a process-wide default settings object.
-    """
-
-    def __init__(
-        self, destination: Path, capture_integrity: bool, observed: IntegrityManifest | None, total_bytes: int, progress_callback: ProgressCallback | None, message_callback: MessageCallback | None
-    ):
-        """Capture the already-computed totals without performing additional I/O."""
-        self.destination = destination
-        self.capture_integrity = capture_integrity
-        self.observed = observed
-        self.total_bytes = total_bytes
-        self.copied_bytes = 0
-        self.progress_callback = progress_callback
-        self.message_callback = message_callback
-        self.last_progress: tuple[int, int] | None = None
-
-    def copy_file(self, src: str, dst: str, *, follow_symlinks: bool = True) -> str:
-        """Copy and optionally hash exactly the bytes written, then report progress."""
-        if self.message_callback:
-            self.message_callback(f"Copia in corso: {Path(src).name}")
-        if self.capture_integrity:
-            digest = hashlib.sha256()
-            file_size = 0
-            with open(src, "rb") as source_file, open(dst, "xb") as destination_file:
-                for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
-                    destination_file.write(chunk)
-                    digest.update(chunk)
-                    file_size += len(chunk)
-            shutil.copystat(src, dst, follow_symlinks=follow_symlinks)
-            relative_path = Path(dst).relative_to(self.destination).as_posix()
-            assert self.observed is not None
-            self.observed[relative_path] = {"type": "file", "size": file_size, "sha256": digest.hexdigest()}
-            result = dst
-        else:
-            result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
-        if self.progress_callback:
-            self.copied_bytes += Path(dst).stat().st_size
-            total_bytes = max(self.total_bytes, self.copied_bytes)
-            self.progress_callback(self.copied_bytes, total_bytes)
-            self.last_progress = (self.copied_bytes, total_bytes)
-        return result
-
-    def finish(self) -> None:
-        """Report the exact completed total, including when no files were copied."""
-        if self.progress_callback and self.last_progress != (self.copied_bytes, self.copied_bytes):
-            self.progress_callback(self.copied_bytes, self.copied_bytes)
-            self.last_progress = (self.copied_bytes, self.copied_bytes)
-
-    def record_directories(self) -> None:
-        """Record stored directories, including empty ones, after file copying."""
-        assert self.observed is not None
-
-        def raise_walk_error(error: OSError) -> None:
-            """Propagate a walk failure instead of treating an incomplete scan as success."""
-            raise error
-
-        for current, directories, _ in os.walk(self.destination, onerror=raise_walk_error):
-            directories[:] = sorted(directories)
-            for name in directories:
-                relative_path = (Path(current) / name).relative_to(self.destination).as_posix()
-                self.observed[relative_path] = {"type": "directory", "size": 0, "sha256": None}
 
 
 class SequentialFileCopyStrategy(DirectoryCopyStrategy):
@@ -248,157 +184,29 @@ class ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
     @staticmethod
     def _copy_extended_attributes(source: Path, destination: Path) -> None:
         """Copy every extended attribute exposed by the local Python runtime."""
-        list_xattr = getattr(os, "listxattr", None)
-        get_xattr = getattr(os, "getxattr", None)
-        set_xattr = getattr(os, "setxattr", None)
-        if not all((list_xattr, get_xattr, set_xattr)):
-            return
-        try:
-            names = list_xattr(source, follow_symlinks=False)
-        except OSError as error:
-            unsupported = {getattr(errno, "ENOTSUP", -1), getattr(errno, "EOPNOTSUPP", -2), getattr(errno, "ENOSYS", -3)}
-            if error.errno in unsupported:
-                return
-            raise
-        for name in names:
-            value = get_xattr(source, name, follow_symlinks=False)
-            set_xattr(destination, name, value, follow_symlinks=False)
+        copy_extended_attributes(source, destination)
 
     @staticmethod
     def _copy_posix_owner_group(source: Path, destination: Path) -> None:
         """Copy POSIX ownership when the caller has the required privilege."""
-        source_stat = source.stat(follow_symlinks=False)
-        destination_stat = destination.stat(follow_symlinks=False)
-        if (source_stat.st_uid, source_stat.st_gid) == (destination_stat.st_uid, destination_stat.st_gid):
-            return
-        chown = getattr(os, "chown", None)
-        if chown is None:
-            raise NotImplementedError("This platform cannot copy POSIX ownership.")
-        chown(destination, source_stat.st_uid, source_stat.st_gid)
+        copy_posix_owner_group(source, destination)
 
     @staticmethod
     def _copy_windows_security(source: Path, destination: Path) -> None:
         """Copy the Windows owner, group and discretionary access control list."""
-        try:
-            import win32security
-        except ImportError as error:
-            raise NotImplementedError("Extended Windows security copying requires pywin32.") from error
-
-        security_information = (
-            win32security.OWNER_SECURITY_INFORMATION
-            | win32security.GROUP_SECURITY_INFORMATION
-            | win32security.DACL_SECURITY_INFORMATION
-        )
-        descriptor = win32security.GetFileSecurity(str(source), security_information)
-        win32security.SetFileSecurity(str(destination), security_information, descriptor)
+        copy_security(source, destination)
 
     @staticmethod
     def _copy_windows_streams(source: Path, destination: Path) -> None:
         """Copy NTFS alternate data streams exposed by FindFirstStreamW."""
-        import ctypes
-        from ctypes import wintypes
-
-        class FindStreamData(ctypes.Structure):
-            """Win32 stream enumeration result layout."""
-
-            _fields_ = [("stream_size", ctypes.c_longlong), ("stream_name", wintypes.WCHAR * 296)]
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        find_first = kernel32.FindFirstStreamW
-        find_first.argtypes = [wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(FindStreamData), wintypes.DWORD]
-        find_first.restype = wintypes.HANDLE
-        find_next = kernel32.FindNextStreamW
-        find_next.argtypes = [wintypes.HANDLE, ctypes.POINTER(FindStreamData)]
-        find_next.restype = wintypes.BOOL
-        find_close = kernel32.FindClose
-        find_close.argtypes = [wintypes.HANDLE]
-        find_close.restype = wintypes.BOOL
-
-        stream_data = FindStreamData()
-        handle = find_first(str(source), 0, ctypes.byref(stream_data), 0)
-        invalid_handle = ctypes.c_void_p(-1).value
-        if handle == invalid_handle:
-            error_code = ctypes.get_last_error()
-            # These filesystems expose no alternate data streams.
-            if error_code in (1, 38, 50):
-                return
-            raise ctypes.WinError(error_code)
-
-        try:
-            while True:
-                stream_name = stream_data.stream_name
-                if stream_name != "::$DATA" and stream_name.endswith(":$DATA"):
-                    stream_suffix = stream_name[:-6]
-                    with open(f"{source}{stream_suffix}", "rb") as input_stream:
-                        with open(f"{destination}{stream_suffix}", "wb") as output_stream:
-                            shutil.copyfileobj(input_stream, output_stream)
-                if not find_next(handle, ctypes.byref(stream_data)):
-                    error_code = ctypes.get_last_error()
-                    if error_code != 38:  # ERROR_HANDLE_EOF
-                        raise ctypes.WinError(error_code)
-                    break
-        finally:
-            find_close(handle)
+        copy_streams(source, destination)
 
     @classmethod
     def _preserve_metadata(cls, source: Path, destination: Path) -> None:
         """Apply extended metadata to a fully copied, link-free staging tree."""
-        assert_no_symlinks(source)
-        assert_no_symlinks(destination)
-        entries = [(source, destination)]
-        entries.extend((path, destination / path.relative_to(source)) for path in iter_tree_entries_strict(source))
-
-        file_entries = []
-        directory_entries = []
-        hardlink_groups: dict[tuple[int, int], list[Path]] = {}
-        for source_path, destination_path in entries:
-            mode = source_path.lstat().st_mode
-            if stat.S_ISDIR(mode):
-                directory_entries.append((source_path, destination_path))
-            elif stat.S_ISREG(mode):
-                file_entries.append((source_path, destination_path))
-                source_stat = source_path.stat(follow_symlinks=False)
-                if source_stat.st_nlink > 1:
-                    if not source_stat.st_ino:
-                        raise NotImplementedError(f"Cannot identify hard links for '{source_path}' on this filesystem.")
-                    hardlink_groups.setdefault((source_stat.st_dev, source_stat.st_ino), []).append(destination_path)
-            else:
-                raise ValueError(f"Extended metadata copy does not accept special file '{source_path}'.")
-
-        # Recreate hard links inside this tree before applying inode metadata.
-        for destinations in hardlink_groups.values():
-            if len(destinations) > 1:
-                first, *duplicates = destinations
-                for duplicate in duplicates:
-                    duplicate.unlink()
-                    os.link(first, duplicate)
-
-        unique_files = []
-        seen_inodes = set()
-        for source_path, destination_path in file_entries:
-            source_stat = source_path.stat(follow_symlinks=False)
-            identity = (source_stat.st_dev, source_stat.st_ino)
-            if identity not in seen_inodes:
-                seen_inodes.add(identity)
-                unique_files.append((source_path, destination_path))
-
-        ordered_entries = unique_files + sorted(directory_entries, key=lambda pair: len(pair[0].parts), reverse=True)
-        for source_path, destination_path in ordered_entries:
-            if os.name == "nt":
-                cls._copy_windows_streams(source_path, destination_path)
-            else:
-                cls._copy_posix_owner_group(source_path, destination_path)
-            # Ownership changes can clear set-id or capability bits.
-            shutil.copystat(source_path, destination_path, follow_symlinks=False)
-            if os.name != "nt":
-                # Apply ACL xattrs after copystat because chmod can adjust ACL masks.
-                cls._copy_extended_attributes(source_path, destination_path)
-
-        if os.name == "nt":
-            # DACLs are applied last because a source ACL can deny the current
-            # process access needed to finish metadata updates on the staging tree.
-            for source_path, destination_path in ordered_entries:
-                cls._copy_windows_security(source_path, destination_path)
+        TreeMetadataCopier(
+            owner_group=cls._copy_posix_owner_group, attributes=cls._copy_extended_attributes, windows_streams=cls._copy_windows_streams, windows_security=cls._copy_windows_security
+        ).preserve(source, destination)
 
     def copy_directory(
         self,
@@ -475,34 +283,7 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
         """Fingerprint source files and directories, rejecting links and special files.
 
         This scan representation is distinct from the persisted integrity manifest."""
-        assert_no_symlinks(root)
-        root_mode = root.lstat().st_mode
-        if _is_link_or_junction(root) or not stat.S_ISDIR(root_mode):
-            raise NotADirectoryError(f"Copy source '{root}' is not a real directory.")
-
-        manifest: dict[str, tuple[str, int | str]] = {".": ("directory", 0)}
-        pending = [root]
-        while pending:
-            current = pending.pop()
-            with os.scandir(current) as entries:
-                for entry in entries:
-                    relative = Path(entry.path).relative_to(root).as_posix()
-                    entry_path = Path(entry.path)
-                    mode = entry.stat(follow_symlinks=False).st_mode
-                    if stat.S_ISLNK(mode) or _is_link_or_junction(entry_path):
-                        raise ValueError(f"Verified copy does not accept symbolic links: '{entry.path}'.")
-                    if stat.S_ISDIR(mode):
-                        manifest[relative] = ("directory", 0)
-                        pending.append(Path(entry.path))
-                    elif stat.S_ISREG(mode):
-                        digest = hashlib.sha256()
-                        with Path(entry.path).open("rb") as file:
-                            for chunk in iter(lambda: file.read(1024 * 1024), b""):
-                                digest.update(chunk)
-                        manifest[relative] = (digest.hexdigest(), entry.stat(follow_symlinks=False).st_size)
-                    else:
-                        raise ValueError(f"Verified copy does not accept special file '{entry.path}'.")
-        return manifest
+        return fingerprint_tree(root)
 
     def copy_directory(
         self,
