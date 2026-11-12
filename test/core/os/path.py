@@ -597,6 +597,128 @@ class PathMatcherTestCase(unittest.TestCase):
             lines = out_file.read_text().strip().splitlines()
             self.assertEqual(len(lines), 4)
 
+    def test_match_with_file_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=True)
+
+            list_file = Path(td) / "match_candidates.txt"
+            list_file.write_text("a.txt\nsub1/c.txt\nnonexistent.txt\n")
+
+            intersection, perc = pm.match_with_file_list(list_file)
+            self.assertEqual(intersection, 2)
+
+    def test_log_all(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td))
+            with patch("builtins.print") as mock_print:
+                pm.log_all()
+                self.assertTrue(mock_print.called)
+
+
+class PathExtraCoverageTestCase(unittest.TestCase):
+    def test_check_path_dir_permission_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch("os.access", side_effect=[False, True, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+            with patch("os.access", side_effect=[True, False, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+    def test_check_path_file_permission_and_type_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            test_file = Path(td) / "test.txt"
+            test_file.write_text("hello")
+
+            with patch("os.access", side_effect=[False, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_file(str(test_file))
+
+            with patch("os.access", side_effect=[True, False]):
+                with self.assertRaises(PermissionError):
+                    check_path_file(str(test_file))
+
+            # Not a file
+            with self.assertRaises(NotADirectoryError):
+                check_path_file(td)
+
+    def test_scan_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            found_files = []
+            scan_directory(td, on_file=lambda f: found_files.append(f), on_folder=lambda d: None)
+            self.assertIn("a.txt", found_files)
+            self.assertIn("c.txt", found_files)
+
+    def test_dir_contains_image_and_video(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(dir_contains_image(td))
+            self.assertFalse(dir_contains_video(td))
+
+            _build_tree(td)
+            self.assertTrue(dir_contains_image(td))
+            self.assertTrue(dir_contains_video(td))
+
+    def test_remove_directory_with_message_callback(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "remove_me"
+            target.mkdir()
+            (target / "file1.txt").write_text("content")
+            sub = target / "sub"
+            sub.mkdir()
+            (sub / "file2.txt").write_text("content")
+
+            messages = []
+            remove_directory_or_move_to_temp(target, message_callback=lambda m: messages.append(m))
+            self.assertFalse(target.exists())
+            self.assertTrue(len(messages) > 0)
+
+    def test_remove_directory_move_to_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "move_me"
+            target.mkdir()
+            (target / "file.txt").write_text("hello")
+
+            messages = []
+            # temp_path is None should log error and return
+            remove_directory_or_move_to_temp(target, temp_path=None, move_to_temp=True)
+            self.assertTrue(target.exists())
+
+            # temp_path provided
+            remove_directory_or_move_to_temp(target, temp_path=Path("my_test_temp_pyliz"), move_to_temp=True, message_callback=lambda m: messages.append(m))
+            self.assertFalse(target.exists())
+            self.assertTrue(any("Spostamento" in m for m in messages))
+
+    def test_clear_folder_contents_handles_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            (p / "f1.txt").write_text("hi")
+            with patch("shutil.rmtree", side_effect=OSError("rmtree fail")):
+                with patch.object(Path, "unlink", side_effect=OSError("unlink fail")):
+                    # Should log error and not crash
+                    clear_folder_contents(p)
+
+    def test_duplicate_directory_invalid_src_and_callbacks(self):
+        with tempfile.TemporaryDirectory() as td:
+            non_dir = Path(td) / "not_a_dir.txt"
+            non_dir.write_text("hi")
+            with self.assertRaises(ValueError):
+                duplicate_directory(non_dir)
+
+            src = Path(td) / "source_folder"
+            src.mkdir()
+            (src / "child.txt").write_text("child")
+            messages = []
+            dest = duplicate_directory(src, message_callback=lambda m: messages.append(m))
+            self.assertTrue(dest.exists())
+            self.assertTrue((dest / "child.txt").exists())
+            self.assertTrue(any("Copia in corso" in m for m in messages))
+
 
 if __name__ == "__main__":
     unittest.main()
