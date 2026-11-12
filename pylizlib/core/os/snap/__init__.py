@@ -1,9 +1,11 @@
 """Public snapshot API, retaining original exports and class identities.
 
 operations contains lifecycle, edit, install, sync, backup and transfer flows.
-storage contains path, tree, publication, ZIP and metadata primitives.
-Models retain their legacy construction side effects; see README.md for the
-architecture and the operation-specific recovery boundaries."""
+storage contains snapshot layout, metadata adapters and versioned recovery.
+General path, filesystem, Windows, ZIP and text mechanisms live in their dedicated
+pylizlib.core packages. Model construction normalizes source paths without a
+recursive size scan; Windows mapped-drive normalization can query the OS.
+See README.md for architecture and operation-specific recovery boundaries."""
 
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.copy_strategy import (

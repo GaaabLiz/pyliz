@@ -50,6 +50,8 @@ def validate_zip_archive(
     Notes:
         This validates declared structure and sizes, not CRCs or authenticity.
     """
+
+    # Read the complete member table before creating any extraction destination.
     try:
         with zipfile.ZipFile(zip_path, "r") as archive:
             infos = archive.infolist()
@@ -63,6 +65,7 @@ def validate_zip_archive(
     if max_entries is not None and len(infos) > max_entries:
         raise ValueError(f"Archive contains {len(infos)} entries; configured limit is {max_entries}.")
 
+    # Track normalized member uniqueness and cumulative expanded size in archive order.
     total_bytes = 0
     bytes_by_root = {}
     seen_paths = set()
@@ -82,6 +85,7 @@ def validate_zip_archive(
             raise ValueError(f"Archive contains duplicate member path '{normalized_name}'.")
         seen_paths.add(normalized_name)
 
+        # Reject links and encrypted members before trusting their expansion totals.
         unix_mode = (info.external_attr >> 16) & 0xFFFF
         if info.create_system == 3 and stat.S_ISLNK(unix_mode):
             raise ValueError(f"Archive member '{name}' is a symbolic link.")

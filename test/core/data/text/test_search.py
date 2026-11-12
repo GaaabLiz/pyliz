@@ -55,3 +55,14 @@ def test_text_engine_import_does_not_load_snapshots():
     code = "import sys; import pylizlib.core.data.text.search; assert not any(name.startswith('pylizlib.core.os.snap') for name in sys.modules)"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(("tail", "expected_count"), [("", 0), ("tail" * 10, 1)])
+def test_regex_context_budget_is_not_a_hard_match_length_limit(tmp_path, tail, expected_count):
+    """Preserve the legacy long-span behavior at chunk/EOF boundaries."""
+    path = tmp_path / "text"
+    path.write_text("a" + "x" * 50 + "b\n" + tail, encoding="utf-8")
+    params = TextSearchOptions("a.*b", literal=False, chunk_size=200, max_context_chars=10, max_line_preview_chars=20)
+    page = ResultPage(0, 10)
+    TextFileSearcher().search_file(path, params, regex.compile(params.query), page, None)
+    assert len(page.results) == expected_count

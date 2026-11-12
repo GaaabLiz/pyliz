@@ -19,9 +19,12 @@ def _recover_snapshot_tree(journal: SnapshotTransactionJournal, state: str, data
         state (str): Known recovery decision name; no additional transition graph is imposed.
         data (dict): Operation-specific payload, validated before destructive recovery actions.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     scope_root = Path(journal.payload["scope_root"])
     snapshot_id = validate_directory_component(data.get("snapshot_id"), "transaction snapshot ID")

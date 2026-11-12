@@ -348,6 +348,8 @@ class AtomicFile:
             adapter-compatible error) records an already-published version whose final directory flush failed. Cleanup
             does not delete the published target.
         """
+
+        # Validate byte input and the real parent before reading or creating sibling files.
         path = Path(path)
         if not isinstance(contents, bytes):
             raise TypeError(f"{cls.contents_label} contents must be bytes.")
@@ -356,19 +358,24 @@ class AtomicFile:
         if not stat.S_ISDIR(parent_stat.st_mode) or is_link_or_junction(path.parent):
             raise ValueError(f"{cls.path_label} directory '{path.parent}' is not a real directory.")
 
+        # Capture exact previous bytes only while identity, size and mtime stay consistent.
         current_stat = cls._regular_file_stat(path)
         previous_bytes = None
         if current_stat is not None:
             previous_bytes = cls._read_previous_version(path, current_stat, opener)
 
+        # Choose private same-directory names after validating the prior-version sidecar.
         previous_path = cls.previous_path(path)
         cls._regular_file_stat(previous_path)
         new_temp = cls._temporary_path(path)
         previous_temp = cls._temporary_path(previous_path) if previous_bytes is not None else None
         try:
             file_mode = stat.S_IMODE(current_stat.st_mode) if current_stat is not None else 0o666
+
+            # Persist the proposed bytes before publishing either version name.
             cls._write_temporary(new_temp, contents, opener, file_mode, preserve_mode=current_stat is not None)
 
+            # Retain the old bytes before replacing the current visible name.
             if previous_bytes is not None:
                 previous_mode = stat.S_IMODE(current_stat.st_mode)
                 assert previous_temp is not None
@@ -382,6 +389,8 @@ class AtomicFile:
             cls._regular_file_stat(path)
             cls._replace_sibling(new_temp, path, parent_stat)
             new_temp = None
+
+            # A failure here occurs after publication and needs an explicit published-state error.
             try:
                 directory_synced = cls._sync_parent_directory(path, parent_stat)
             except OSError as error:

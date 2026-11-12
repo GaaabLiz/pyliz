@@ -52,6 +52,7 @@ def copy_streams(source: Path, destination: Path) -> None:
     invalid_handle = ctypes.c_void_p(-1).value
     if handle == invalid_handle:
         error_code = ctypes.get_last_error()
+
         # These filesystems expose no alternate data streams.
         if error_code in (1, 38, 50):
             return

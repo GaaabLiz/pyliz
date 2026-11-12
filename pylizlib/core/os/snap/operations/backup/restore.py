@@ -23,15 +23,39 @@ from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 
 
 class SnapshotTreeRestorer:
-    """Verify and publish the stored tree of an SD backup."""
+    """Verify and publish the stored tree of an SD backup.
+
+    Attributes:
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+    """
 
     def __init__(self, path_catalogue: Path, settings: SnapshotSettings):
-        """Bind snapshot-tree publication policy."""
+        """Bind snapshot-tree publication policy.
+
+        Args:
+            path_catalogue (Path): Catalogue root retained by this collaborator.
+            settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+
+        Returns:
+            None: No return value.
+        """
         self.path_catalogue = path_catalogue
         self.settings = settings
 
     def restore(self, temp_dir_path: Path, metadata: _ArchiveMetadata) -> None:
-        """Replace a complete snapshot root after checking its embedded identity and associations."""
+        """Replace a complete snapshot root after checking its embedded identity and associations.
+
+        Args:
+            temp_dir_path (Path): Extraction root owned by the surrounding temporary-directory context.
+            metadata (_ArchiveMetadata): Validated archive interpretation or staged JSON names used by this operation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         json_path = temp_dir_path / self.settings.json_filename
         if not json_path.is_file():
             raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
@@ -61,25 +85,63 @@ class SnapshotTreeRestorer:
 
 
 class AssociationRestorer:
-    """Stage every AD copy before publishing targets under the existing journal."""
+    """Stage every AD copy before publishing targets under the existing journal.
+
+    Attributes:
+        planner (RestorePlanner): Restore planner owning current settings, catalogue scope and legacy metadata
+            lookup.
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+    """
 
     def __init__(self, planner: RestorePlanner):
-        """Reuse the planner's current settings, lookup and catalogue scope."""
+        """Reuse the planner's current settings, lookup and catalogue scope.
+
+        Args:
+            planner (RestorePlanner): Restore planner owning current settings, catalogue scope and legacy metadata
+                lookup.
+
+        Returns:
+            None: No return value.
+        """
         self.planner = planner
         self.path_catalogue = planner.path_catalogue
         self.settings = planner.settings
 
     def restore(self, metadata: _ArchiveMetadata, temp_dir_path: Path, destination_mapping: Mapping[str, str | Path] | None = None) -> None:
-        """Revalidate extracted AD contents and execute the resulting plan."""
+        """Revalidate extracted AD contents and execute the resulting plan.
+
+        Args:
+            metadata (_ArchiveMetadata): Validated archive interpretation or staged JSON names used by this operation.
+            temp_dir_path (Path): Extraction root owned by the surrounding temporary-directory context.
+            destination_mapping (Mapping[str, str | Path] | None): Overrides keyed by stable folder_id; unmapped AD
+                associations retain their archived source paths.
+
+        Returns:
+            None: No return value.
+        """
         associations, origin_os = self.planner.associations_from(metadata)
         tasks = self.planner.build(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
         self.execute(tasks)
 
     def execute(self, tasks: list[AssociationRestoreTask]) -> None:
-        """Persist recovery paths, stage every copy, publish, then finalize."""
+        """Persist recovery paths, stage every copy, publish, then finalize.
+
+        Args:
+            tasks (list[AssociationRestoreTask]): Complete AD restore plan with distinct extracted source, sibling
+                staging, target and backup paths.
+
+        Returns:
+            None: No return value.
+
+        Notes:
+            Every owned path is journaled before copying. All copies finish before the first destination swap. Failure
+            follows the existing rollback decision, while final cleanup runs only after committed state.
+        """
         journal = SnapshotTransactionJournal.begin(self.path_catalogue, "restore_associations_manifest", {"entries": []})
+
+        # Journal all owned paths before creating the first staging copy.
         try:
-            # Journal all owned paths before creating the first staging copy.
             entries: list[ReplacementEntry] = [
                 {"folder_id": task.folder_id, "stage": task.staged_dir.as_posix(), "destination": task.destination.as_posix(), "backup": task.backup_dest.as_posix(), "had_original": task.had_original}
                 for task in tasks
@@ -104,7 +166,15 @@ class AssociationRestorer:
         journal.finalize([path for task in tasks for path in (task.backup_dest, task.staged_dir)], "Associated-directories restore")
 
     def _stage_copies(self, tasks: list[AssociationRestoreTask]) -> None:
-        """Copy validated extracted roots to their target-volume staging siblings."""
+        """Copy validated extracted roots to their target-volume staging siblings.
+
+        Args:
+            tasks (list[AssociationRestoreTask]): Complete AD restore plan with distinct extracted source, sibling
+                staging, target and backup paths.
+
+        Returns:
+            None: No return value.
+        """
         for task in tasks:
             assert_no_symlinks(task.extracted_dir)
             self.settings.copy_strategy.copy_directory(task.extracted_dir, task.staged_dir)
@@ -112,7 +182,19 @@ class AssociationRestorer:
 
     @staticmethod
     def _publish_copies(tasks: list[AssociationRestoreTask]) -> None:
-        """Swap staged trees in association order while preserving every original."""
+        """Swap staged trees in association order while preserving every original.
+
+        Args:
+            tasks (list[AssociationRestoreTask]): Complete AD restore plan with distinct extracted source, sibling
+                staging, target and backup paths.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
         for task in tasks:
             destination = task.destination
             if task.had_original:
@@ -125,12 +207,39 @@ class AssociationRestorer:
 
 
 class BackupRestorer:
-    """Coordinate preflight, temporary-volume choice, extraction and AD/SD dispatch."""
+    """Coordinate preflight, temporary-volume choice, extraction and AD/SD dispatch.
+
+    Attributes:
+        path_catalogue (Path): Catalogue root retained by this collaborator.
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+        planner (RestorePlanner): Restore planner owning current settings, catalogue scope and legacy metadata
+            lookup.
+        inspector (BackupArchiveInspector): Backup-format inspector preserving modern/legacy precedence.
+        tree_restorer (SnapshotTreeRestorer): SD stored-tree publication coordinator.
+        association_restorer (AssociationRestorer): AD staging/publication coordinator using the shared
+            destination planner.
+        extractor (Callable): Extraction hook accepting the configured ZIP limits and additional byte
+            requirements.
+    """
 
     def __init__(
         self, path_catalogue: Path, settings: SnapshotSettings, lookup: SnapshotLookup, parse_info: Callable[[Path], SnapshotBackupInfo] = parse_backup_filename, *, extractor: Callable = extract_zip
     ):
-        """Bind collaborators while retaining the caller's parser and extraction hooks."""
+        """Bind collaborators while retaining the caller's parser and extraction hooks.
+
+        Args:
+            path_catalogue (Path): Catalogue root retained by this collaborator.
+            settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+            lookup (SnapshotLookup): Catalogue lookup capability used when legacy archive metadata needs a persisted
+                snapshot.
+            parse_info (Callable[[Path], SnapshotBackupInfo]): Legacy filename parser hook; embedded metadata
+                overrides filename identity and type.
+            extractor (Callable): Extraction hook accepting the configured ZIP limits and additional byte
+                requirements.
+
+        Returns:
+            None: No return value.
+        """
         self.path_catalogue = path_catalogue
         self.settings = settings
         self.planner = RestorePlanner(path_catalogue, settings, lookup)
@@ -140,7 +249,26 @@ class BackupRestorer:
         self.extractor = extractor
 
     def restore(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path] | None) -> None:
-        """Validate, extract and dispatch one archive, with optional AD remapping."""
+        """Validate, extract and dispatch one archive, with optional AD remapping.
+
+        Args:
+            backup_zip_path (Path): Backup archive path; embedded metadata takes precedence over legacy filename
+                hints.
+            destination_mapping (Mapping[str, str | Path] | None): Overrides keyed by stable folder_id; unmapped AD
+                associations retain their archived source paths.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+
+        Notes:
+            Preflight may use catalogue lookup for legacy metadata and selects extraction space before copying. AD
+            policy is revalidated after extraction; destination mapping does not bypass originating-OS checks. SD
+            mapping is rejected.
+        """
         recover_pending_transactions(self.path_catalogue)
         if not backup_zip_path.is_file():
             raise ValueError(f"Provided path '{backup_zip_path}' is not a file.")
@@ -171,9 +299,10 @@ class BackupRestorer:
             restore_space_requirements.append((self.path_catalogue, preflight.uncompressed_bytes))
 
         temp_parent = self.settings.archive_temp_directory
+
+        # Put the extracted archive on a destination volume by default so a
+        # large AD restore does not need equivalent space under system temp.
         if temp_parent is None and info.backup_type == BackupType.ASSOCIATED_DIRECTORIES and destinations:
-            # Put the extracted archive on a destination volume by default so a
-            # large AD restore does not need equivalent space under system temp.
             temp_parent = max((destination.parent for destination in destinations), key=lambda path: shutil.disk_usage(path).free)
         if temp_parent is None:
             temp_parent = self.path_catalogue

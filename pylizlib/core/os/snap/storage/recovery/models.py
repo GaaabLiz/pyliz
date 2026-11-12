@@ -28,13 +28,14 @@ class ReplacementEntry(TypedDict):
     """Describe one directory swap; validators retain operation-specific policies.
 
     Attributes:
-        folder_id (str): Stable association identity.
+        folder_id (str): Non-empty stable association identity; physical storage uses its digest, so it need not
+            be a path component.
         stage (str): Staged tree path, with interpretation defined by the operation.
         destination (str): Publication target path.
         backup (str): Generated path retaining the original destination.
         had_original (bool): Whether the target existed before publication.
-        stage_root (str): Optional shared staging root, used for install merge.
-        merge_child (bool): Optional flag identifying a top-level merge child.
+        stage_root (NotRequired[str]): Optional shared staging root, used for install merge.
+        merge_child (NotRequired[bool]): Optional flag identifying a top-level merge child.
     """
 
     folder_id: str
@@ -50,7 +51,7 @@ class EditEntry(TypedDict):
     """Persist relative names for a staged rename, removal or addition.
 
     Attributes:
-        source (str): Original basename, omitted for additions.
+        source (NotRequired[str]): Original basename, omitted for additions.
         target (str | None): Final basename, or None for a removal.
         staged (str): Unique workspace-relative staging basename.
     """
@@ -108,8 +109,8 @@ class JournalCodec:
             None: If the envelope is valid; operation data is validated separately.
 
         Raises:
-            TransactionRecoveryError: If version, scope, operation, state or payload
-                shape is invalid. Existing equality semantics for version are retained.
+            TransactionRecoveryError: If version, scope, operation, state or payload shape is invalid. Existing
+                equality semantics for version are retained.
         """
         from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError
 

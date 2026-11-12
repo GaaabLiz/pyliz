@@ -4,16 +4,18 @@ from pylizlib.core.os.snap.domain import SnapEditAction, SnapEditType, Snapshot
 
 
 def get_edits_between_snapshots(old: Snapshot, new: Snapshot) -> list[SnapEditAction]:
-    """
-    Compares associations by stable folder_id and generates add/remove/rename actions
+    """Compares associations by stable folder_id and generates add/remove/rename actions
     required to transform the old snapshot into the new one.
 
     Args:
-        old: The original Snapshot object.
-        new: The updated Snapshot object.
+        old (Snapshot): The original Snapshot object.
+        new (Snapshot): The updated Snapshot object.
 
     Returns:
-        A list of SnapEditAction objects representing the changes.
+        list[SnapEditAction]: A list of SnapEditAction objects representing the changes.
+
+    Raises:
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
     """
     edits: list[SnapEditAction] = []
 

@@ -19,7 +19,14 @@ from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_ent
 
 
 class BackupCreator:
-    """Build and verify ZIP backups of one stored snapshot or its live copies."""
+    """Build and verify ZIP backups of one stored snapshot or its live copies.
+
+    Attributes:
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
+        now (Callable[[], datetime]): Zero-argument clock called once per backup to produce the existing
+            filename/manifest timestamp.
+    """
 
     def __init__(self, storage: SnapshotStorage, *, now: Callable[[], datetime] = datetime.now):
         """Bind the snapshot state and clock without reading or copying content.
@@ -35,22 +42,25 @@ class BackupCreator:
         self.now = now
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
-        """
-        Creates, verifies and atomically publishes a zip archive of the snapshot's data.
+        """Creates, verifies and atomically publishes a zip archive of the snapshot's data.
         Failures propagate to the caller so protected operations cannot continue.
 
         Args:
-            backup_path: The directory where the backup zip file will be saved.
-            prefix: A prefix for the backup filename.
-            backup_type: The type of backup to create (associated directories or the snapshot directory).
-            is_export: If True, the filename will be formatted as an export.
+            backup_path (Path): The directory where the backup zip file will be saved.
+            prefix (str): A prefix for the backup filename.
+            backup_type (BackupType): The type of backup to create (associated directories or the snapshot directory).
+            is_export (bool): If True, the filename will be formatted as an export.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
 
         Returns:
-            The path of the verified, published archive.
+            Path: The path of the verified, published archive.
 
         Raises:
-            SnapshotIncompleteError: If any associated source folder is missing or
-                ceases to be readable as a directory during enumeration.
+            SnapshotIncompleteError: If any associated source folder is missing or ceases to be readable as a
+                directory during enumeration.
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
         """
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
@@ -90,7 +100,19 @@ class BackupCreator:
 
     @staticmethod
     def _validate_archive_destination(destination: Path, archived_roots: list[Path]) -> None:
-        """Reject a ZIP destination inside any tree that the archive enumerates."""
+        """Reject a ZIP destination inside any tree that the archive enumerates.
+
+        Args:
+            destination (Path): Target path receiving the copied content or metadata.
+            archived_roots (list[Path]): All source tree roots used to reject a backup destination nested inside
+                archived content.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         try:
             resolved_destination = destination.resolve(strict=False)
             resolved_roots = [(root, root.resolve(strict=False)) for root in archived_roots]
@@ -102,7 +124,20 @@ class BackupCreator:
                 raise ValueError(f"Backup destination '{destination}' is inside archived source '{source_root}'.")
 
     def _write_backup_manifest(self, directory: Path, backup_type: BackupType, prefix: str, is_export: bool, timestamp: str) -> Path:
-        """Write a temporary typed manifest with identity and associations for either backup type."""
+        """Write a temporary typed manifest with identity and associations for either backup type.
+
+        Args:
+            directory (Path): Existing directory receiving the temporary manifest file.
+            backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+                (SD).
+            prefix (str): Backup filename prefix recorded unchanged in the archive manifest.
+            is_export (bool): Whether the backup uses the existing export naming convention.
+            timestamp (str): Creation timestamp in YYYYMMDD_HHMMSS format using the existing naive/local naming
+                convention.
+
+        Returns:
+            Path: Temporary UTF-8 JSON manifest path; the caller owns unlinking it after archive publication.
+        """
         data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp)
         temporary_path = None
         try:
@@ -127,7 +162,19 @@ class BackupCreator:
             raise
 
     def _files_to_archive(self, backup_type: BackupType):
-        """Enumerate stored or live files using their distinct existing link policies."""
+        """Enumerate stored or live files using their distinct existing link policies.
+
+        Args:
+            backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+                (SD).
+
+        Yields:
+            tuple[Path, Path]: Source entry and relative archive name, including empty directories.
+
+        Raises:
+            SnapshotIncompleteError: Required association directories are missing or unexpected archive roots are
+                present; inspect the exception lists.
+        """
         if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
             sources = []
             missing_folders = []

@@ -20,7 +20,12 @@ from pylizlib.core.os.snap.storage.transactions import (
 
 @dataclass(frozen=True)
 class EditMove:
-    """Move a stored association to a new name, or remove it when target is None."""
+    """Move a stored association to a new name, or remove it when target is None.
+
+    Attributes:
+        source (Path): Source file or directory whose contents or metadata are read.
+        target (Path | None): Final relative metadata/edit target name, or None for an edit removal.
+    """
 
     source: Path
     target: Path | None
@@ -34,6 +39,13 @@ class EditPlan:
     copy the mutable snapshot model used by the existing public API. The
     persisted model is retained separately so a failed edit can restore the
     caller's live model along with the stored bytes and directory names.
+
+    Attributes:
+        old_json (bytes): Exact previous JSON bytes retained by the edit plan.
+        old_snapshot (Snapshot): Persisted previous snapshot used for complete model rollback.
+        moves (list[EditMove]): Ordered relative rename/removal entries recorded in the edit journal.
+        additions (list[SnapDirAssociation]): New association records or staged addition entries in validated plan
+            order.
     """
 
     old_json: bytes
@@ -43,14 +55,38 @@ class EditPlan:
 
 
 class SnapshotEditPlanner:
-    """Resolve legacy actions against persisted identities before touching copies."""
+    """Resolve legacy actions against persisted identities before touching copies.
+
+    Attributes:
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
+    """
 
     def __init__(self, storage: SnapshotStorage):
-        """Use the live requested model and its protected metadata adapter."""
+        """Use the live requested model and its protected metadata adapter.
+
+        Args:
+            storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+                for this operation.
+
+        Returns:
+            None: No return value.
+        """
         self.storage = storage
 
     def build(self, edits: list[SnapEditAction]) -> EditPlan:
-        """Validate actions and all paths, preserving the legacy preflight order."""
+        """Validate actions and all paths, preserving the legacy preflight order.
+
+        Args:
+            edits (list[SnapEditAction]): Requested association actions, resolved against persisted folder IDs before
+                staging.
+
+        Returns:
+            EditPlan: Validated edit plan with persisted previous bytes/model, ordered moves and live additions.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         self.storage.snapshot.validate()
         self.storage.root_path()
         for edit in edits:
@@ -85,7 +121,22 @@ class SnapshotEditPlanner:
 
     @staticmethod
     def _resolve_legacy_actions(edits: list[SnapEditAction], old: Snapshot, requested: Snapshot) -> dict[str, SnapEditType]:
-        """Resolve each action once against original names or requested additions."""
+        """Resolve each action once against original names or requested additions.
+
+        Args:
+            edits (list[SnapEditAction]): Requested association actions, resolved against persisted folder IDs before
+                staging.
+            old (Snapshot): Original snapshot model used as the association-diff baseline.
+            requested (Snapshot): Requested snapshot model used to resolve additions against stable association IDs.
+
+        Returns:
+            dict[str, SnapEditType]: One action type per stable folder_id, rejecting unresolved/ambiguous or duplicate
+                action identities.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
+
         # Resolve legacy name/path-based actions against the original metadata,
         # before any name is reused by another association.
         actions_by_id = {}
@@ -106,7 +157,22 @@ class SnapshotEditPlanner:
         return actions_by_id
 
     def _validate_filesystem_plan(self, old: Snapshot, moves: list[EditMove], additions: list[SnapDirAssociation]) -> None:
-        """Check every source and destination before the first stored rename."""
+        """Check every source and destination before the first stored rename.
+
+        Args:
+            old (Snapshot): Original snapshot model used as the association-diff baseline.
+            moves (list[EditMove]): Ordered relative rename/removal entries recorded in the edit journal.
+            additions (list[SnapDirAssociation]): New association records or staged addition entries in validated plan
+                order.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+        """
+
         # Validate the complete plan before touching any stored copy.
         sources = {move.source for move in moves}
         targets = [move.target for move in moves if move.target is not None] + [self.storage.child_path(assoc.directory_name) for assoc in additions]
@@ -123,14 +189,37 @@ class SnapshotEditPlanner:
 
 
 class SnapshotEditor:
-    """Stage and publish association edits with persistent crash recovery."""
+    """Stage and publish association edits with persistent crash recovery.
+
+    Attributes:
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
+    """
 
     def __init__(self, storage: SnapshotStorage):
-        """Bind one invocation's model, paths, copy strategy and metadata adapter."""
+        """Bind one invocation's model, paths, copy strategy and metadata adapter.
+
+        Args:
+            storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+                for this operation.
+
+        Returns:
+            None: No return value.
+        """
         self.storage = storage
 
     def apply(self, edits: list[SnapEditAction], message_callback=None) -> None:
-        """Build a complete plan before staging or publishing any association."""
+        """Build a complete plan before staging or publishing any association.
+
+        Args:
+            edits (list[SnapEditAction]): Requested association actions, resolved against persisted folder IDs before
+                staging.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+        """
         recover_storage_transactions(self.storage)
         plan = SnapshotEditPlanner(self.storage).build(edits)
         logger.info("Editing snapshot id=%s actions=%s", self.storage.snapshot.id, len(edits))
@@ -138,7 +227,21 @@ class SnapshotEditor:
         logger.info("Edited snapshot id=%s", self.storage.snapshot.id)
 
     def _apply_plan(self, plan: EditPlan, message_callback=None) -> None:
-        """Journal staged moves and the proposed JSON before final publication."""
+        """Journal staged moves and the proposed JSON before final publication.
+
+        Args:
+            plan (EditPlan): Validated operation plan containing ordered paths and the previous state needed for
+                rollback.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+
+        Notes:
+            The journal owns old names before publication, and cyclic renames are recovered in two passes. A metadata
+            exception reporting published=True is propagated without rolling the edit back.
+        """
         moves = [{"source": move.source.name, "target": move.target.name if move.target is not None else None, "staged": f"original_{index}"} for index, move in enumerate(plan.moves)]
         additions = [{"target": association.directory_name, "staged": f"addition_{index}"} for index, association in enumerate(plan.additions)]
         journal = SnapshotTransactionJournal.begin(
@@ -172,11 +275,36 @@ class SnapshotEditor:
 
     @staticmethod
     def _restore_snapshot_model(snapshot: Snapshot, previous: Snapshot) -> None:
-        """Restore a failed edit's model while preserving existing association objects."""
+        """Restore a failed edit's model while preserving existing association objects.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            previous (Snapshot): Previously persisted model to restore; mutable field values are copied where the
+                complete model helper documents it.
+
+        Returns:
+            None: No return value.
+        """
         restore_snapshot_model(snapshot, previous)
 
     def _rollback_failed_edit(self, journal: SnapshotTransactionJournal, plan: EditPlan, error: Exception) -> None:
-        """Restore persisted copies and the complete caller-owned model after failure."""
+        """Restore persisted copies and the complete caller-owned model after failure.
+
+        Args:
+            journal (SnapshotTransactionJournal): Transaction journal owning staged paths, persisted decisions and
+                cleanup.
+            plan (EditPlan): Validated operation plan containing ordered paths and the previous state needed for
+                rollback.
+            error (Exception): Original failure to propagate or preserve as the cause of a rollback failure.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+                is retained.
+        """
         try:
             journal.decide_rollback(self.storage)
             self._restore_snapshot_model(self.storage.snapshot, plan.old_snapshot)
@@ -185,7 +313,19 @@ class SnapshotEditor:
             raise TransactionRecoveryError(f"Snapshot edit rollback is incomplete; journal retained at '{journal.path}'.") from error
 
     def _stage_additions(self, plan: EditPlan, additions: list[dict], staging_path: Path, message_callback) -> None:
-        """Capture every newly associated source before renaming stored originals."""
+        """Capture every newly associated source before renaming stored originals.
+
+        Args:
+            plan (EditPlan): Validated operation plan containing ordered paths and the previous state needed for
+                rollback.
+            additions (list[dict]): New association records or staged addition entries in validated plan order.
+            staging_path (Path): Private tree receiving a complete copy before any final name is published.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+        """
         for index, assoc in enumerate(plan.additions):
             manifest = {}
             assoc.copy_install_to(
@@ -196,7 +336,24 @@ class SnapshotEditor:
             )
 
     def _publish_edits(self, plan: EditPlan, journal: SnapshotTransactionJournal, moves: list[dict], additions: list[dict]) -> None:
-        """Stage original names, persist publishing phase, then publish and verify targets."""
+        """Stage original names, persist publishing phase, then publish and verify targets.
+
+        Args:
+            plan (EditPlan): Validated operation plan containing ordered paths and the previous state needed for
+                rollback.
+            journal (SnapshotTransactionJournal): Transaction journal owning staged paths, persisted decisions and
+                cleanup.
+            moves (list[dict]): Ordered relative rename/removal entries recorded in the edit journal.
+            additions (list[dict]): New association records or staged addition entries in validated plan order.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+            RuntimeError: The requested operation cannot complete; a wrapped failure retains its original cause where
+                documented.
+        """
         staging_path = journal.workspace
         for index, move in enumerate(plan.moves):
             rename_and_sync(move.source, staging_path / f"original_{index}")

@@ -71,6 +71,7 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
     temporary_path = None
     try:
         zip_path.parent.mkdir(parents=True, exist_ok=True)
+
         # Complete enumeration before creating any archive in the source tree.
         entries = files if isinstance(files, list) else list(files)
         with tempfile.NamedTemporaryFile(dir=zip_path.parent, prefix=".backup_", suffix=".partial", delete=False) as temporary_file:
@@ -83,6 +84,7 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
                 if source.is_dir() and not archive_name.endswith("/"):
                     archive_name += "/"
                 archive.write(source, arcname=archive_name)
+
         # Reopen after close: finalization can fail, and each member must
         # pass its CRC check before the normal filename becomes visible.
         with zipfile.ZipFile(temporary_path, "r") as archive:
@@ -91,10 +93,11 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
                 raise zipfile.BadZipFile(f"Backup validation failed for '{corrupted_member}'.")
         if replace_existing:
             temporary_path.replace(zip_path)
+
+        # A same-filesystem hard link is atomic and fails with EEXIST if a
+        # concurrent writer already published this name. Unlike replace(),
+        # it cannot truncate a completed backup.
         else:
-            # A same-filesystem hard link is atomic and fails with EEXIST if a
-            # concurrent writer already published this name. Unlike replace(),
-            # it cannot truncate a completed backup.
             zip_path.hardlink_to(temporary_path)
         return zip_path
     finally:

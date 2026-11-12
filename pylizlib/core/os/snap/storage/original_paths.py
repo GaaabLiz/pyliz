@@ -24,21 +24,21 @@ def normalize_original_path(value: str, *, allow_relative: bool = True) -> str:
 
     Args:
         value (str): Non-empty POSIX or Windows source without NUL characters.
-        allow_relative (bool): Anchor relative paths to the current CWD when True.
-            Persisted and subsequently mutated associations require False.
+        allow_relative (bool): Anchor relative paths to the current CWD when True. Persisted and subsequently
+            mutated associations require False.
 
     Returns:
         str: Rooted path with forward slashes, using UNC for mapped Windows drives.
 
     Raises:
         TypeError: If value is not a string.
-        ValueError: If the path is invalid, drive-relative, disallowed relative,
-            or a required mapped-drive lookup fails.
+        ValueError: If the path is invalid, drive-relative, disallowed relative, or a required mapped-drive lookup
+            fails.
         OSError: If reading CWD or a native drive operation fails.
 
     Notes:
-        Existence and permissions are checked by the operation using this path.
-        This function may query drive mappings in the current Windows logon session.
+        Existence and permissions are checked by the operation using this path. This function may query drive
+        mappings in the current Windows logon session.
     """
     return normalize_rooted_path(
         value,

@@ -34,14 +34,24 @@ from pylizlib.core.os.snap.domain import Snapshot
 
 
 class QueryType(Enum):
-    """Specifies whether a search query is plain text or a regular expression."""
+    """Select literal text or timed regular-expression matching.
+
+    Attributes:
+        TEXT (QueryType): Case-sensitive literal substring search.
+        REGEX (QueryType): regex-engine matching with the configured per-call timeout.
+    """
 
     TEXT = "text"
     REGEX = "regex"
 
 
 class SearchTarget(Enum):
-    """Specifies whether to search for a file name or within file content."""
+    """Select which part of each candidate file is searched.
+
+    Attributes:
+        FILE_NAME (SearchTarget): Match the basename without decoding file contents.
+        FILE_CONTENT (SearchTarget): Decode content and retain at most one result per starting line.
+    """
 
     FILE_NAME = "name"
     FILE_CONTENT = "content"
@@ -49,11 +59,18 @@ class SearchTarget(Enum):
 
 @dataclass
 class SnapshotSearchResult:
-    """
-    Represents a single search result within a snapshot file.
+    """Represents a single search result within a snapshot file.
 
     A content match is reported once per matching line. For a multiline match,
     ``line_number`` and ``line_content`` refer to the line where the match starts.
+
+    Attributes:
+        file_path (Path): Native file path associated with the match or current scan.
+        searched_text (str): Query text or regex source at the time this result was recorded.
+        snapshot_name (str): Snapshot display label copied into each public search result.
+        line_number (Optional[int]): One-based starting line of a content match; None for filename-only results.
+        line_content (Optional[str]): Stripped content-line preview, possibly with ellipses; None for filename-
+            only results.
     """
 
     file_path: Path
@@ -71,10 +88,27 @@ class SnapshotSearchParams:
     ``search_list`` applies that page across the full list of snapshots.
     ``max_files`` caps the candidate paths retained for a search. Content is
     read in ``chunk_size`` blocks, with each result's line preview capped by
-    ``max_line_preview_chars``. Regex matches can span at most
-    ``max_context_chars`` of content; longer spans are intentionally outside
-    the bounded search window. ``encoding=None`` selects UTF-8, BOM-marked or
-    detectable UTF-16, then Windows-1252 for text that is not valid UTF-8.
+    ``max_line_preview_chars``. ``max_context_chars`` bounds retained regex context; it is not a strict
+    maximum match length. Matches spanning beyond retained context are not
+    guaranteed and can depend on chunk and EOF boundaries. ``encoding=None`` recognizes UTF-8 and UTF-16/32 BOMs, an ASCII-heavy
+    bomless UTF-16 layout, UTF-8, then Windows-1252 fallback.
+
+    Attributes:
+        query (str): Query text or regex source; regex syntax is compiled at search time.
+        search_target (SearchTarget): FILE_NAME for basename matching or FILE_CONTENT for decoded text.
+        query_type (QueryType): TEXT for literal substring matching or REGEX for timed regex matching.
+        extensions (list[str]): Case-insensitive suffix filters, with optional leading dots and compound suffixes;
+            empty accepts all files.
+        encoding (str | None): Explicit text codec, or None for the current BOM/UTF/Windows-1252 detection policy.
+        max_files (int): Maximum candidate paths retained per snapshot, default 10000.
+        max_results (int): Maximum retained page results, default 1000; zero produces an empty page.
+        result_offset (int): Number of matching starting lines/names skipped across the complete search page.
+        chunk_size (int): Decoded characters requested per stream read; default 65536, rather than a byte limit.
+        max_context_chars (int): Retained regex-context budget in characters. It is not a hard maximum match
+            length; spans beyond retained context are not guaranteed.
+        max_line_preview_chars (int): Maximum preview characters before truncation ellipses, default 4096.
+        regex_timeout_seconds (float): Timeout per regex call/window, default 0.1 seconds; not a global query
+            deadline.
     """
 
     query: str
@@ -91,7 +125,19 @@ class SnapshotSearchParams:
     regex_timeout_seconds: float = 0.1
 
     def __post_init__(self) -> None:
-        """Reject invalid limits before any filesystem work begins."""
+        """Reject invalid limits before any filesystem work begins.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+            LookupError: If an explicit encoding name is not a recognized codec.
+
+        Notes:
+            This validates numeric bounds and looks up an explicit codec. It does not compile query regex syntax or
+            make the mutable configuration immutable; regex compilation happens when searching.
+        """
         if self.max_files < 1:
             raise ValueError("max_files must be at least 1")
         if self.max_results < 0:
@@ -114,17 +160,42 @@ class SnapshotPathLookup(Protocol):
     """The only catalogue capability required by snapshot searching."""
 
     def get_snap_directory_path(self, snap: Snapshot) -> Path | None:
-        """Resolve a stored snapshot using the catalogue's current lookup policy."""
+        """Resolve a stored snapshot using the catalogue's current lookup policy.
+
+        Args:
+            snap (Snapshot): Snapshot model identifying the stored tree or operation target.
+
+        Returns:
+            Path | None: Validated stored directory when present, otherwise None; catalogue recovery may run before
+                lookup.
+
+        Notes:
+            The catalogue implementation can invoke recovery while resolving the snapshot. Callers must not assume
+            that this capability is filesystem-read-only.
+        """
         ...
 
 
 class SnapshotSearcher:
-    """Search snapshot files with bounded memory, cancellation, and regex limits."""
+    """Search snapshot files with bounded memory, cancellation, and regex limits.
+
+    Attributes:
+        catalogue (SnapshotPathLookup): Catalogue capability used to resolve stored snapshot paths, including its
+            recovery policy.
+    """
 
     _DETECTION_SAMPLE_BYTES = 8 * 1024
 
     def __init__(self, catalogue: SnapshotCatalogue):
-        """Initialize the searcher with the catalogue path lookup it needs."""
+        """Initialize the searcher with the catalogue path lookup it needs.
+
+        Args:
+            catalogue (SnapshotCatalogue): Catalogue capability used to resolve stored snapshot paths, including its
+                recovery policy.
+
+        Returns:
+            None: No return value.
+        """
         self.catalogue: SnapshotPathLookup = catalogue
 
     def search(
@@ -133,7 +204,25 @@ class SnapshotSearcher:
         params: SnapshotSearchParams,
         on_progress: Optional[SnapshotProgressCallback] = None,
     ) -> list[SnapshotSearchResult]:
-        """Search one snapshot and return at most ``params.max_results`` matches."""
+        """Search one snapshot and return at most ``params.max_results`` matches.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+
+        Returns:
+            list[SnapshotSearchResult]: At most max_results matches after result_offset, in existing traversal order.
+                Content produces at most one result per starting line.
+
+        Notes:
+            A content result represents one starting line, including for multiline regexes. Offsets/results count
+            those lines, not every occurrence. Only literal False from the observer cancels the current snapshot.
+            Observer exceptions propagate unchanged; file read/decode errors are logged and skipped.
+        """
         page = self._new_page(params)
         compiled_regex = self._compile_regex(params)
         if params.query_type == QueryType.REGEX and compiled_regex is None:
@@ -150,7 +239,25 @@ class SnapshotSearcher:
         params: SnapshotSearchParams,
         on_progress: Optional[SnapshotProgressCallback] = None,
     ) -> list[SnapshotSearchResult]:
-        """Search snapshots in order, applying one bounded page across all of them."""
+        """Search snapshots in order, applying one bounded page across all of them.
+
+        Args:
+            snapshots (list[Snapshot]): Snapshot models processed in supplied order; search pagination spans the whole
+                list.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+
+        Returns:
+            list[SnapshotSearchResult]: One bounded page shared across the supplied snapshot order; max_files and
+                callback cancellation remain scoped to each snapshot.
+
+        Notes:
+            One offset/limit page spans all snapshots. max_files and literal-False cancellation apply to each current
+            snapshot, so later snapshots may still be searched. Encoding retry discards the failed file attempt before
+            committing results.
+        """
         page = self._new_page(params)
         compiled_regex = self._compile_regex(params)
         if params.query_type == QueryType.REGEX and compiled_regex is None:
@@ -165,12 +272,29 @@ class SnapshotSearcher:
 
     @staticmethod
     def _new_page(params: SnapshotSearchParams) -> _ResultPage:
-        """Create a result page using the caller's pagination limits."""
+        """Create a result page using the caller's pagination limits.
+
+        Args:
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+
+        Returns:
+            _ResultPage: Empty bounded page initialized with the requested global offset and limit.
+        """
         return _ResultPage(params.result_offset, params.max_results)
 
     @staticmethod
     def _compile_regex(params: SnapshotSearchParams) -> Optional[regex_engine.Pattern]:
-        """Compile a regex query, logging invalid patterns without raising."""
+        """Compile a regex query, logging invalid patterns without raising.
+
+        Args:
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+
+        Returns:
+            Optional[regex_engine.Pattern]: Compiled regex for REGEX mode, otherwise None; invalid regex syntax is
+                logged and also yields None.
+        """
         if params.query_type != QueryType.REGEX:
             return None
         try:
@@ -188,7 +312,23 @@ class SnapshotSearcher:
         on_progress: Optional[SnapshotProgressCallback],
         page: _ResultPage,
     ) -> None:
-        """Search a resolved snapshot directory into an existing bounded page."""
+        """Search a resolved snapshot directory into an existing bounded page.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            snapshot_path (Path | None): Stored snapshot directory to validate or search.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+            page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
+
+        Returns:
+            None: No return value.
+        """
         if page.full:
             return
         if not snapshot_path or not snapshot_path.is_dir():
@@ -236,7 +376,16 @@ class SnapshotSearcher:
             )
 
     def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
-        """Apply file and case-insensitive suffix filters, including compound suffixes."""
+        """Apply file and case-insensitive suffix filters, including compound suffixes.
+
+        Args:
+            file_path (Path): Native candidate file path to filter, inspect or search.
+            extensions (list[str]): Suffix filters, case-insensitive, with optional leading dots and compound
+                suffixes; empty searches all files.
+
+        Returns:
+            bool: Whether the entry is a file and matches any enabled case-insensitive suffix filter.
+        """
         if not file_path.is_file():
             return False
         if not extensions:
@@ -256,25 +405,73 @@ class SnapshotSearcher:
         total_files: int,
         processed_files: int,
     ) -> bool:
-        """Scan a file in chunks; return True when the callback cancels the snapshot."""
+        """Scan a file in chunks; return True when the callback cancels the snapshot.
+
+        Args:
+            file_path (Path): Native candidate file path to filter, inspect or search.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+            snapshot_name (str): Snapshot display label copied into each public search result.
+            page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+            total_files (int): Candidate-file count for the current snapshot, passed unchanged to search observers.
+            processed_files (int): One-based index of the current candidate file, passed unchanged during its chunks.
+
+        Returns:
+            bool: True only when a chunk observer returns literal False; False for normal completion, skipped
+                I/O/decoding or regex timeout.
+
+        Notes:
+            File I/O/decoding failures are logged and skipped. Observer exceptions propagate unchanged. A late UTF-8
+            failure retries the whole file as Windows-1252 without retaining the first attempt's page.
+        """
         from pylizlib.core.os.snap.searching import SnapshotMatchPage, SnapshotTextOptions
 
         on_chunk = None if on_progress is None else (lambda: on_progress(file_path.name, total_files, processed_files) if on_progress else None)
         return TextFileSearcher(self._DETECTION_SAMPLE_BYTES).search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
 
     def _detect_encoding(self, file_path: Path, preferred_encoding: str | None) -> tuple[str, bool, bool]:
-        """Detect BOM, UTF-16 layout, UTF-8, or CP1252 and identify obvious binary data."""
+        """Detect BOM, UTF-16 layout, UTF-8, or CP1252 and identify obvious binary data.
+
+        Args:
+            file_path (Path): Native candidate file path to filter, inspect or search.
+            preferred_encoding (str | None): Explicit codec bypassing automatic classification, or None for
+                BOM/UTF/Windows-1252 detection.
+
+        Returns:
+            tuple[str, bool, bool]: Codec name, binary classification and whether Windows-1252 fallback was selected,
+                in that order.
+        """
         decision = EncodingDetector(self._DETECTION_SAMPLE_BYTES).detect(file_path, preferred_encoding)
         return decision.encoding, decision.binary, decision.used_fallback
 
     @staticmethod
     def _detect_bomless_utf16(sample: bytes) -> str | None:
-        """Recognize ASCII-heavy UTF-16 data from its alternating NUL bytes."""
+        """Recognize ASCII-heavy UTF-16 data from its alternating NUL bytes.
+
+        Args:
+            sample (bytes): Bounded raw byte sample used for encoding or binary detection.
+
+        Returns:
+            str | None: utf-16-le or utf-16-be for the existing alternating-NUL heuristic, otherwise None.
+        """
         return EncodingDetector.detect_bomless_utf16(sample)
 
     @staticmethod
     def _looks_binary(sample: bytes, decoded: str, allow_nul: bool = False) -> bool:
-        """Use conservative NUL/control-character checks for obvious binary files."""
+        """Use conservative NUL/control-character checks for obvious binary files.
+
+        Args:
+            sample (bytes): Bounded raw byte sample used for encoding or binary detection.
+            decoded (str): Sample text already decoded, with replacement characters where the detector permits them.
+            allow_nul (bool): Allow raw NUL bytes for recognized UTF-16/32 samples when True.
+
+        Returns:
+            bool: Whether the sample contains a forbidden NUL or has a printable-character ratio below 0.65.
+        """
         return EncodingDetector.looks_binary(sample, decoded, allow_nul)
 
     @staticmethod
@@ -285,7 +482,18 @@ class SnapshotSearcher:
         buffer_starts_mid_line: bool,
         final: bool,
     ) -> bool:
-        """Wait for EOF or a newline before returning an untruncated short line."""
+        """Wait for EOF or a newline before returning an untruncated short line.
+
+        Args:
+            buffer (str): Current decoded text window; offsets passed with it are relative to this string.
+            match_start (int): Zero-based match start relative to the current text buffer.
+            max_chars (int): Positive preview-width limit in decoded characters, before truncation ellipses.
+            buffer_starts_mid_line (bool): Whether characters preceding the first retained line were discarded.
+            final (bool): Whether this is the EOF scan, so matches and short trailing previews need no further chunk.
+
+        Returns:
+            bool: Whether a short unfinished line requires another chunk before its preview is complete.
+        """
         return needs_complete_line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
 
     @staticmethod
@@ -296,7 +504,18 @@ class SnapshotSearcher:
         buffer_starts_mid_line: bool,
         final: bool,
     ) -> str:
-        """Return a bounded preview of the line containing a match."""
+        """Return a bounded preview of the line containing a match.
+
+        Args:
+            buffer (str): Current decoded text window; offsets passed with it are relative to this string.
+            match_start (int): Zero-based match start relative to the current text buffer.
+            max_chars (int): Positive preview-width limit in decoded characters, before truncation ellipses.
+            buffer_starts_mid_line (bool): Whether characters preceding the first retained line were discarded.
+            final (bool): Whether this is the EOF scan, so matches and short trailing previews need no further chunk.
+
+        Returns:
+            str: Stripped line preview with the configured character cap plus ellipses when either side was truncated.
+        """
         return line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
 
     def _collect_files(
@@ -306,7 +525,21 @@ class SnapshotSearcher:
         extensions: list[str],
         max_files: int,
     ) -> list[Path]:
-        """Collect no more than the configured number of searchable file paths."""
+        """Collect no more than the configured number of searchable file paths.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            snapshot_path (Path): Stored snapshot directory to validate or search.
+            extensions (list[str]): Suffix filters, case-insensitive, with optional leading dots and compound
+                suffixes; empty searches all files.
+            max_files (int): Maximum candidate paths retained for one snapshot; later candidates are not visited after
+                the limit.
+
+        Returns:
+            list[Path]: At most max_files matching paths, visited by association order then the native rglob
+                traversal.
+        """
         files_to_search: list[Path] = []
         for dir_assoc in snapshot.directories:
             copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
@@ -325,7 +558,18 @@ class SnapshotSearcher:
         params: SnapshotSearchParams,
         compiled_regex: Optional[regex_engine.Pattern],
     ) -> bool:
-        """Match a filename using the same text and timed-regex rules as content."""
+        """Match a filename using the same text and timed-regex rules as content.
+
+        Args:
+            text (str): Filename or text string to match using the selected literal/regex policy.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[regex_engine.Pattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+
+        Returns:
+            bool: Whether literal substring or timed regex matching accepts the filename; regex timeouts return False.
+        """
         if params.query_type == QueryType.TEXT:
             return params.query in text
         if compiled_regex is None:

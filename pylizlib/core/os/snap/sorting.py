@@ -8,18 +8,17 @@ def sort_snapshots(
     sort_by: "SnapshotSortKey",
     reverse: bool = False,
 ) -> list[Snapshot]:
-    """
-    Sorts a list of Snapshot objects by a specified key.
+    """Sorts a list of Snapshot objects by a specified key.
     Snapshots with a None value for the key are placed at the end.
     String comparison is case-insensitive.
 
     Args:
-        snapshots: The list of Snapshots to sort.
-        sort_by: The key to sort by, as a SnapshotSortKey enum member.
-        reverse: If True, sorts in descending order.
+        snapshots (list[Snapshot]): The list of Snapshots to sort.
+        sort_by (SnapshotSortKey): The key to sort by, as a SnapshotSortKey enum member.
+        reverse (bool): If True, sorts in descending order.
 
     Returns:
-        A new list containing the sorted Snapshots.
+        list[Snapshot]: A new list containing the sorted Snapshots.
     """
     key_attr = sort_by.value
     snaps_with_value = []
@@ -32,7 +31,15 @@ def sort_snapshots(
             snaps_with_value.append(snap)
 
     def get_key(snapshot: Snapshot):
-        """Use lowercase strings for comparison and retain native non-string values."""
+        """Use lowercase strings for comparison and retain native non-string values.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+
+        Returns:
+            object: Use lowercase strings for comparison and retain native non-string values.
+        """
         value = getattr(snapshot, key_attr)
         if isinstance(value, str):
             return value.lower()

@@ -14,15 +14,21 @@ from pylizlib.core.os.snap.operations.backup_manifest import LEGACY_ASSOCIATED_D
 
 
 class BackupArchiveInspector:
-    """Read embedded identities first, preserving strict modern-manifest precedence."""
+    """Read embedded identities first, preserving strict modern-manifest precedence.
+
+    Attributes:
+        settings (SnapshotSettings): Mutable snapshot settings retained by reference; no defensive copy is made.
+        parse_info (Callable[[Path], SnapshotBackupInfo]): Legacy filename parser hook; embedded metadata
+            overrides filename identity and type.
+    """
 
     def __init__(self, settings: SnapshotSettings, parse_info: Callable[[Path], SnapshotBackupInfo]):
         """Bind metadata naming and the caller's legacy filename parser.
 
         Args:
             settings (SnapshotSettings): Live settings defining the JSON member name.
-            parse_info (Callable[[Path], SnapshotBackupInfo]): Legacy filename hook;
-                embedded identities take precedence over its ID and backup type.
+            parse_info (Callable[[Path], SnapshotBackupInfo]): Legacy filename hook; embedded identities take
+                precedence over its ID and backup type.
 
         Returns:
             None: No archive is opened until read is called.
@@ -31,7 +37,16 @@ class BackupArchiveInspector:
         self.parse_info = parse_info
 
     def read(self, backup_zip_path: Path) -> _ArchiveMetadata:
-        """Read archive identity and type from embedded metadata, falling back for legacy ZIPs."""
+        """Read archive identity and type from embedded metadata, falling back for legacy ZIPs.
+
+        Args:
+            backup_zip_path (Path): Backup archive path; embedded metadata takes precedence over legacy filename
+                hints.
+
+        Returns:
+            _ArchiveMetadata: Archive interpretation using modern manifest, legacy AD metadata, legacy SD JSON, then
+                filename fallback in that order.
+        """
         try:
             with zipfile.ZipFile(backup_zip_path, "r") as archive:
                 names = archive.namelist()
@@ -49,8 +64,9 @@ class BackupArchiveInspector:
                     result = self._read_snapshot_metadata(archive, backup_zip_path, names)
                     logger.debug("Read backup metadata archive=%s format=legacy-sd", backup_zip_path)
                     return result
+
+        # Preserve the legacy error mapping: extraction reports malformed ZIPs.
         except zipfile.BadZipFile:
-            # Preserve the legacy error mapping: extraction reports malformed ZIPs.
             return _ArchiveMetadata(self.parse_info(backup_zip_path))
         except ValueError:
             raise
@@ -61,11 +77,37 @@ class BackupArchiveInspector:
 
     @staticmethod
     def _replace_info_identity(info: SnapshotBackupInfo, snapshot_id: str, backup_type: BackupType) -> SnapshotBackupInfo:
-        """Retain filename-only convenience fields while replacing ID and type from archive data."""
+        """Retain filename-only convenience fields while replacing ID and type from archive data.
+
+        Args:
+            info (SnapshotBackupInfo): Filename-derived backup info whose ID/type may be replaced by embedded
+                metadata.
+            snapshot_id (str): Snapshot ID expected in metadata and used for the destination directory.
+            backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+                (SD).
+
+        Returns:
+            SnapshotBackupInfo: Backup info retaining filename-derived convenience fields with embedded ID and type
+                substituted.
+        """
         return SnapshotBackupInfo(info.path, info.file_name, snapshot_id, backup_type, info.prefix, info.created_at, info.is_export)
 
     def _read_modern_manifest(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
-        """Decode the modern identity while retaining format-specific validation."""
+        """Decode the modern identity while retaining format-specific validation.
+
+        Args:
+            archive (zipfile.ZipFile): Open ZIP object owned and closed by the surrounding inspection context.
+            backup_zip_path (Path): Backup archive path; embedded metadata takes precedence over legacy filename
+                hints.
+            names (list[str]): Archive member-name list already read from the open ZIP.
+
+        Returns:
+            _ArchiveMetadata: Archive metadata containing the unified manifest's authoritative ID, type, origin and
+                associations.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         if names.count(BACKUP_MANIFEST_NAME) != 1:
             raise ValueError("Snapshot backup archive contains duplicate backup manifests.")
         manifest_data = self._read_json_member(archive, BACKUP_MANIFEST_NAME, "Snapshot backup manifest")
@@ -82,7 +124,20 @@ class BackupArchiveInspector:
         return _ArchiveMetadata(info, manifest.associations, manifest.os_created, BACKUP_MANIFEST_NAME)
 
     def _read_legacy_manifest(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
-        """Decode the legacy-ad identity while retaining format-specific validation."""
+        """Decode the legacy-ad identity while retaining format-specific validation.
+
+        Args:
+            archive (zipfile.ZipFile): Open ZIP object owned and closed by the surrounding inspection context.
+            backup_zip_path (Path): Backup archive path; embedded metadata takes precedence over legacy filename
+                hints.
+            names (list[str]): Archive member-name list already read from the open ZIP.
+
+        Returns:
+            _ArchiveMetadata: Legacy AD association metadata with filename-derived convenience fields.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         if names.count(ASSOCIATED_DIRECTORIES_MANIFEST) != 1:
             raise ValueError("Associated-directories archive contains duplicate legacy manifests.")
         legacy_data = self._read_json_member(archive, ASSOCIATED_DIRECTORIES_MANIFEST, "Associated-directories manifest")
@@ -92,7 +147,21 @@ class BackupArchiveInspector:
         return _ArchiveMetadata(info, tuple(associations), origin_os, ASSOCIATED_DIRECTORIES_MANIFEST)
 
     def _read_snapshot_metadata(self, archive: zipfile.ZipFile, backup_zip_path: Path, names: list[str]) -> _ArchiveMetadata:
-        """Decode the legacy-sd identity while retaining format-specific validation."""
+        """Decode the legacy-sd identity while retaining format-specific validation.
+
+        Args:
+            archive (zipfile.ZipFile): Open ZIP object owned and closed by the surrounding inspection context.
+            backup_zip_path (Path): Backup archive path; embedded metadata takes precedence over legacy filename
+                hints.
+            names (list[str]): Archive member-name list already read from the open ZIP.
+
+        Returns:
+            _ArchiveMetadata: Legacy SD identity/origin read from snapshot JSON, with filename convenience fields
+                retained.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         if names.count(self.settings.json_filename) != 1:
             raise ValueError("Snapshot-directory archive contains duplicate snapshot metadata files.")
         snapshot_data = self._read_json_member(archive, self.settings.json_filename, "Snapshot-directory metadata")

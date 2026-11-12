@@ -24,7 +24,31 @@ def copy_association(
     manifest: IntegrityManifest | None = None,
     expected_manifest: IntegrityManifest | None = None,
 ):
-    """Copy this association using the configured directory-copy strategy."""
+    """Copy this association using the configured directory-copy strategy.
+
+    Args:
+        association (SnapDirAssociation): Directory association providing stable folder_id, original source and
+            stored directory name.
+        catalogue_target_path (Path): Storage parent under which this association's physical directory_name is
+            copied.
+        progress_callback (CopyProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+            including terminal empty-tree progress; return values do not cancel copying.
+        message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+            exceptions propagate according to the calling operation.
+        copy_strategy (DirectoryCopyStrategy | None): Directory-copy strategy; None selects the sequential default
+            where supported.
+        manifest (IntegrityManifest | None): Optional mutable captured-integrity output, replaced only on
+            successful copy. expected_manifest can still require verification when this is None.
+        expected_manifest (IntegrityManifest | None): Previously captured integrity mapping to verify before
+            publishing; None disables this comparison.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        TypeError: An argument or mutable model field has a type rejected by this contract.
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+    """
     source = Path(association.original_path)
     directory_name = association.directory_name
     selected_strategy = copy_strategy or SequentialFileCopyStrategy()

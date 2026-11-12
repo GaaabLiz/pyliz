@@ -244,14 +244,16 @@ class TreeMetadataCopier:
                 self.copy_streams(source_path, destination_path)
             else:
                 self.copy_owner_group(source_path, destination_path)
+
             # Ownership changes can clear set-id or capability bits.
             shutil.copystat(source_path, destination_path, follow_symlinks=False)
+
+            # Apply ACL xattrs after copystat because chmod can adjust ACL masks.
             if os.name != "nt":
-                # Apply ACL xattrs after copystat because chmod can adjust ACL masks.
                 self.copy_attributes(source_path, destination_path)
 
+        # DACLs are applied last because a source ACL can deny the current
+        # process access needed to finish metadata updates on the staging tree.
         if os.name == "nt":
-            # DACLs are applied last because a source ACL can deny the current
-            # process access needed to finish metadata updates on the staging tree.
             for source_path, destination_path in ordered_entries:
                 self.copy_security(source_path, destination_path)

@@ -63,11 +63,36 @@ class DirectoryCopyStrategy(ABC):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Copy a tree, optionally recording or validating its content manifest."""
+        """Copy a tree, optionally recording or validating its content manifest.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+        """
 
 
 def _remove_tree(path: Path) -> None:
-    """Remove only the named entry, never follow a symlink at its root."""
+    """Remove only the named entry, never follow a symlink at its root.
+
+    Args:
+        path (Path): Native filesystem entry operated on by this method.
+
+    Returns:
+        None: No return value.
+    """
     if path.is_symlink():
         path.unlink(missing_ok=True)
     elif path.exists():
@@ -75,7 +100,14 @@ def _remove_tree(path: Path) -> None:
 
 
 def _is_link_or_junction(path: Path) -> bool:
-    """Compatibility helper for the common storage entry check."""
+    """Compatibility helper for the common storage entry check.
+
+    Args:
+        path (Path): Native filesystem entry operated on by this method.
+
+    Returns:
+        bool: Whether the entry is a symbolic link or Windows junction, including a dangling link.
+    """
     return is_link_or_junction(path)
 
 
@@ -84,15 +116,30 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
 
     @staticmethod
     def _total_bytes(source: Path) -> int:
-        """Count source file bytes for progress, propagating walk and stat failures."""
+        """Count source file bytes for progress, propagating walk and stat failures.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+
+        Returns:
+            int: Sum of file byte sizes used as a progress estimate; scanning errors are not ignored.
+        """
 
         def raise_walk_error(error: OSError) -> None:
-            """Propagate a walk failure instead of treating an incomplete scan as success."""
+            """Propagate a walk failure instead of treating an incomplete scan as success.
+
+            Args:
+                error (OSError): Original failure to propagate or preserve as the cause of a rollback failure.
+
+            Returns:
+                None: No return value.
+            """
             raise error
 
         total = 0
+
+        # os.walk does not descend into symlink directories unless asked.
         for current, directories, files in os.walk(source, onerror=raise_walk_error):
-            # os.walk does not descend into symlink directories unless asked.
             directories[:] = [name for name in directories if not (Path(current) / name).is_symlink()]
             for name in files:
                 total += (Path(current) / name).stat().st_size
@@ -110,18 +157,45 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
     ) -> Path:
         """Copy to a new destination, recording/verifying content before success.
 
-        Per-call counters live in a session; failures remove only this destination."""
+        Per-call counters live in a session; failures remove only this destination.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+
+        Raises:
+            NotADirectoryError: A required real directory is missing, is a link, or has another entry type.
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
+
+        # Validate source and destination before creating any owned staging entry.
         source = Path(source)
         destination = Path(destination)
         if not source.is_dir():
             raise NotADirectoryError(f"Copy source '{source}' is not a directory.")
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f"Copy destination '{destination}' already exists.")
+
         # Fail before creating staging if any link, including a dangling one,
         # could be followed by the copy operation.
         assert_no_symlinks(source)
         destination.parent.mkdir(parents=True, exist_ok=True)
 
+        # Hash only when requested; scan byte totals only for an active progress observer.
         capture_integrity = manifest is not None or expected_manifest is not None
         if expected_manifest is not None:
             validate_integrity_manifest(dict(expected_manifest))
@@ -129,6 +203,7 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
         total_bytes = self._total_bytes(source) if progress_callback else 0
         session = _FileCopySession(destination, capture_integrity, observed, total_bytes, progress_callback, message_callback)
 
+        # The destination belongs to this call and is removed if any copy phase fails.
         try:
             destination.mkdir()
             with os.scandir(source) as entries:
@@ -138,14 +213,17 @@ class SequentialFileCopyStrategy(DirectoryCopyStrategy):
                     if stat.S_ISLNK(mode) or _is_link_or_junction(source_item):
                         raise ValueError(f"Directory copy does not accept symbolic links: '{source_item}'.")
                     destination_item = destination / entry.name
+
+                    # Preserve a newly introduced link in staging rather
+                    # than following it; the post-copy tree check rejects it.
                     if stat.S_ISDIR(mode):
-                        # Preserve a newly introduced link in staging rather
-                        # than following it; the post-copy tree check rejects it.
                         shutil.copytree(source_item, destination_item, symlinks=True, copy_function=session.copy_file)
                     elif stat.S_ISREG(mode):
                         session.copy_file(str(source_item), str(destination_item))
                     else:
                         raise ValueError(f"Directory copy does not accept special file '{source_item}'.")
+
+            # Reject links introduced during copying before validating or returning content.
             assert_no_symlinks(destination)
             if capture_integrity:
                 assert observed is not None
@@ -172,40 +250,95 @@ class ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
     strategy additionally restores the copied root directory metadata, owner
     and group where available, extended attributes (including Linux ACL
     attributes), Windows owner/group/DACL and alternate data streams, and
-    hard-link relationships that exist within the copied tree. Unsupported
-    metadata operations fail the copy instead of silently publishing a weaker
-    result. Filesystem-specific metadata outside these APIs cannot be promised.
+    hard-link relationships that exist within the copied tree. Missing runtime/source xattr support is skipped under the existing policy.
+    Failures copying exposed attributes or other required metadata abort instead
+    of silently publishing a weaker result. Filesystem-specific metadata outside these APIs cannot be promised.
+
+    Attributes:
+        delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+            and callback contract.
     """
 
     def __init__(self, delegate: DirectoryCopyStrategy):
-        """Wrap one directory copy strategy without changing its content policy."""
+        """Wrap one directory copy strategy without changing its content policy.
+
+        Args:
+            delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+                and callback contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TypeError: An argument or mutable model field has a type rejected by this contract.
+        """
         if not isinstance(delegate, DirectoryCopyStrategy):
             raise TypeError("delegate must implement DirectoryCopyStrategy.")
         self.delegate = delegate
 
     @staticmethod
     def _copy_extended_attributes(source: Path, destination: Path) -> None:
-        """Copy every extended attribute exposed by the local Python runtime."""
+        """Copy every extended attribute exposed by the local Python runtime.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         copy_extended_attributes(source, destination)
 
     @staticmethod
     def _copy_posix_owner_group(source: Path, destination: Path) -> None:
-        """Copy POSIX ownership when the caller has the required privilege."""
+        """Copy POSIX ownership when the caller has the required privilege.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         copy_posix_owner_group(source, destination)
 
     @staticmethod
     def _copy_windows_security(source: Path, destination: Path) -> None:
-        """Copy the Windows owner, group and discretionary access control list."""
+        """Copy the Windows owner, group and discretionary access control list.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         copy_security(source, destination)
 
     @staticmethod
     def _copy_windows_streams(source: Path, destination: Path) -> None:
-        """Copy NTFS alternate data streams exposed by FindFirstStreamW."""
+        """Copy NTFS alternate data streams exposed by FindFirstStreamW.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         copy_streams(source, destination)
 
     @classmethod
     def _preserve_metadata(cls, source: Path, destination: Path) -> None:
-        """Apply extended metadata to a fully copied, link-free staging tree."""
+        """Apply extended metadata to a fully copied, link-free staging tree.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+
+        Returns:
+            None: No return value.
+        """
         TreeMetadataCopier(
             owner_group=cls._copy_posix_owner_group, attributes=cls._copy_extended_attributes, windows_streams=cls._copy_windows_streams, windows_security=cls._copy_windows_security
         ).preserve(source, destination)
@@ -220,7 +353,33 @@ class ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Stage the delegate copy, enrich metadata, then publish it as a unit."""
+        """Stage the delegate copy, enrich metadata, then publish it as a unit.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+
+        Notes:
+            A delegate advertising MetadataCopyCapability applies metadata inside its own stable-source lifetime.
+            Other delegates retain the existing live-source metadata pass. Unsupported required metadata copying fails
+            rather than silently weakening the result.
+        """
         source = Path(source)
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
@@ -271,10 +430,29 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
     an ABA change or a writer coordinated with the scans can evade detection.
     Use ``ProviderSnapshotCopyStrategy`` for a source frozen by the filesystem,
     server, or application.
+
+    Attributes:
+        max_attempts (int): Positive retry count for source-fingerprint verification; non-integer and sub-one
+            values are rejected.
+        delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+            and callback contract.
     """
 
     def __init__(self, max_attempts: int = 3, delegate: DirectoryCopyStrategy | None = None):
-        """Configure the attempt limit and delegate; keep the default sequential copier."""
+        """Configure the attempt limit and delegate; keep the default sequential copier.
+
+        Args:
+            max_attempts (int): Positive retry count for source-fingerprint verification; non-integer and sub-one
+                values are rejected.
+            delegate (DirectoryCopyStrategy | None): Content-copy strategy retained by reference, preserving its
+                consistency and callback contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
         if type(max_attempts) is not int or max_attempts < 1:
             raise ValueError("max_attempts must be a positive integer.")
         self.max_attempts = max_attempts
@@ -284,7 +462,15 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
     def _manifest(root: Path) -> dict[str, tuple[str, int | str]]:
         """Fingerprint source files and directories, rejecting links and special files.
 
-        This scan representation is distinct from the persisted integrity manifest."""
+        This scan representation is distinct from the persisted integrity manifest.
+
+        Args:
+            root (Path): Root directory for the tree operation; link and existence policy is described above.
+
+        Returns:
+            dict[str, tuple[str, int | str]]: Relative path fingerprint: directories map to (directory, 0), files to
+                (SHA-256 hex digest, byte size).
+        """
         return fingerprint_tree(root)
 
     def copy_directory(
@@ -299,7 +485,29 @@ class VerifiedFileCopyStrategy(DirectoryCopyStrategy):
     ) -> Path:
         """Publish only when source fingerprints agree before and after a copy.
 
-        Retry source changes up to max_attempts; propagate other errors as before."""
+        Retry source changes up to max_attempts; propagate other errors as before.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+            SourceChangedError: Source fingerprints differ through every configured verified-copy attempt.
+        """
         source = Path(source)
         destination = Path(destination)
         if destination.exists() or destination.is_symlink():
@@ -338,7 +546,15 @@ class SourceSnapshotProvider(ABC):
 
     @abstractmethod
     def create_snapshot(self, source: Path) -> ContextManager[Path]:
-        """Yield a stable point-in-time directory for ``source``."""
+        """Yield a stable point-in-time directory for ``source``.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+
+        Returns:
+            ContextManager[Path]: Context manager yielding an immutable or writer-quiesced directory for the whole
+                context. The provider owns its lifetime and consistency guarantee.
+        """
 
 
 class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
@@ -347,10 +563,29 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
     The provider must either hold all writers quiesced for the context or yield
     an immutable filesystem/server snapshot. The strategy cannot enforce the
     provider's consistency guarantee itself.
+
+    Attributes:
+        provider (SourceSnapshotProvider): SourceSnapshotProvider supplying a stable tree for the full duration of
+            its context.
+        delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+            and callback contract.
     """
 
     def __init__(self, provider: SourceSnapshotProvider, delegate: DirectoryCopyStrategy | None = None):
-        """Require the existing provider ABC and keep the supplied or default delegate."""
+        """Require the existing provider ABC and keep the supplied or default delegate.
+
+        Args:
+            provider (SourceSnapshotProvider): SourceSnapshotProvider supplying a stable tree for the full duration of
+                its context.
+            delegate (DirectoryCopyStrategy | None): Content-copy strategy retained by reference, preserving its
+                consistency and callback contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TypeError: An argument or mutable model field has a type rejected by this contract.
+        """
         if not isinstance(provider, SourceSnapshotProvider):
             raise TypeError("provider must implement SourceSnapshotProvider.")
         self.provider = provider
@@ -366,7 +601,30 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Copy from the provider using the standard metadata policy."""
+        """Copy from the provider using the standard metadata policy.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+
+        Notes:
+            The provider context covers copying, any requested metadata work and the link check. Expected-manifest
+            comparison and final destination publication occur afterward. The strategy cannot independently prove the
+            provider's consistency guarantee.
+        """
         return ProviderCopySession(self.provider, self.delegate).copy(source, destination, progress_callback, message_callback, manifest=manifest, expected_manifest=expected_manifest)
 
     def copy_directory_with_metadata(
@@ -380,7 +638,27 @@ class ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
         manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
         expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
     ) -> Path:
-        """Apply the supplied metadata hook while the provider's source stays valid."""
+        """Apply the supplied metadata hook while the provider's source stays valid.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            metadata_copier (MetadataCopier): Optional hook receiving actual stable source and copied staging tree
+                before that source context closes.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after the metadata hook completed while the actual stable source was still
+                available.
+        """
         return ProviderCopySession(self.provider, self.delegate).copy(
             source, destination, progress_callback, message_callback, metadata_copier=metadata_copier, manifest=manifest, expected_manifest=expected_manifest
         )

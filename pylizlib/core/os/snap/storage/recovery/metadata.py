@@ -14,14 +14,15 @@ def prepare_snapshot_metadata(storage, workspace: Path, *, field_name: str | Non
     """Save exact old and proposed JSON bytes inside a transaction workspace.
 
     Args:
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
         field_name (str | None): Single metadata field to patch, or None to serialize the complete live model.
         field_value (object): Value for the requested partial metadata update; ignored for a complete model save.
 
-
     Returns:
-        dict[str, str]: Workspace-relative old/new filenames and the active metadata basename under keys old, new and target.
+        dict: Workspace-relative old/new filenames and the active metadata basename under keys old, new and
+            target.
     """
     workspace = Path(workspace)
     old_path = workspace / "metadata-old.json"
@@ -41,12 +42,16 @@ def _validate_metadata_paths(data: dict, storage, workspace: Path) -> None:
 
     Args:
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
         workspace (Path): Private transaction workspace containing staged metadata and relative edit names.
 
-
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     metadata = data.get("metadata")
     if metadata is None:
@@ -66,11 +71,11 @@ def _publish_new_metadata(journal: SnapshotTransactionJournal, data: dict, stora
     Args:
         journal (SnapshotTransactionJournal): Live journal owning the workspace, durable state and cleanup.
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
     """
     metadata = data.get("metadata")
     if metadata is None:
@@ -85,11 +90,11 @@ def _restore_old_metadata(journal: SnapshotTransactionJournal, data: dict, stora
     Args:
         journal (SnapshotTransactionJournal): Live journal owning the workspace, durable state and cleanup.
         data (dict): Operation-specific payload, validated before destructive recovery actions.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
     """
     metadata = data.get("metadata")
     if metadata is None:
@@ -103,11 +108,11 @@ def _refresh_snapshot_model(storage) -> None:
     """Refresh the existing live model from recovered persisted metadata.
 
     Args:
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
     """
     previous = storage.metadata.from_json(storage.path_snapshot_json)
     association_fields = tuple(field.name for field in fields(SnapDirAssociation) if field.name != "_current_index")

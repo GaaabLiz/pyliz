@@ -16,22 +16,50 @@ from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source
 
 
 class SnapshotLifecycle:
-    """Create, delete and duplicate snapshot roots using existing publication rules."""
+    """Create, delete and duplicate snapshot roots using existing publication rules.
+
+    Attributes:
+        storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+            for this operation.
+    """
 
     def __init__(self, storage: SnapshotStorage):
-        """Bind the live model and its originally captured snapshot destinations."""
+        """Bind the live model and its originally captured snapshot destinations.
+
+        Args:
+            storage (SnapshotStorage): Live snapshot model, settings, captured layout and protected metadata adapter
+                for this operation.
+
+        Returns:
+            None: No return value.
+        """
         self.storage = storage
 
     def create(self, progress_callback=None, message_callback=None, *, replace_existing: bool = False):
-        """
-        Creates the snapshot by preparing its contents and metadata in staging.
+        """Creates the snapshot by preparing its contents and metadata in staging.
 
         Existing IDs are rejected unless replace_existing=True. An explicit
         replacement retains the old directory until publication succeeds and
         restores it if publication fails. Cleanup runs after commit.
 
+        Args:
+            progress_callback (SnapshotPercentCallback | None): Optional observer receiving integer aggregate
+                percentage from 0 through 100; return values do not cancel the operation.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            replace_existing (bool): Allow an existing snapshot ID to be replaced when True; otherwise collisions are
+                rejected.
+
+        Returns:
+            None: No return value.
+
         Raises:
             FileExistsError: If the destination exists and replacement is disabled.
+
+        Notes:
+            Progress is equal-directory-weight integer percentage; an empty snapshot reports 100 once. With no
+            observer, no preliminary byte-total scan is introduced. Captured times use aware UTC; name/date_created
+            defaults remain unchanged.
         """
         self.storage.snapshot.validate()
         validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
@@ -70,16 +98,28 @@ class SnapshotLifecycle:
         logger.info("Created snapshot id=%s", self.storage.snapshot.id)
 
     def delete(self, message_callback=None):
-        """
-        Deletes the snapshot's directory, propagating filesystem failures.
+        """Deletes the snapshot's directory, propagating filesystem failures.
+
+        Args:
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
         """
         recover_storage_transactions(self.storage)
         remove_directory_or_move_to_temp(self.storage.root_path(), message_callback=message_callback)
 
     def duplicate(self, message_callback=None):
-        """
-        Creates a duplicate of the current snapshot with a new ID and name.
+        """Creates a duplicate of the current snapshot with a new ID and name.
         The entire snapshot directory is copied, and a new JSON file is created for the copy.
+
+        Args:
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
 
         Raises:
             FileNotFoundError: If the original snapshot path does not exist.
@@ -94,7 +134,14 @@ class SnapshotLifecycle:
         new_snap.date_created = datetime.now()
 
         def prepare_duplicate(staging_path: Path) -> None:
-            """Write and validate cloned metadata before making the duplicate visible."""
+            """Write and validate cloned metadata before making the duplicate visible.
+
+            Args:
+                staging_path (Path): Private tree receiving a complete copy before any final name is published.
+
+            Returns:
+                None: No return value.
+            """
             json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
             self.storage.metadata.to_json(new_snap, json_path)
             validate_staged_snapshot_tree(
@@ -119,13 +166,32 @@ class SnapshotLifecycle:
 
         Supply a byte-progress adapter only when the caller requested progress,
         so a create without an observer does not perform a preliminary byte scan.
+
+        Args:
+            staging_path (Path): Private tree receiving a complete copy before any final name is published.
+            progress_callback (SnapshotPercentCallback | None): Optional observer receiving integer aggregate
+                percentage from 0 through 100; return values do not cancel the operation.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
         """
+
         # We need to distribute the progress among directories if there are multiple.
         total_dirs = len(self.storage.snapshot.directories)
         for i, snap_dir in enumerate(self.storage.snapshot.directories):
 
             def dir_progress(copied, total):
-                """Adapt copy byte counts to the current directory position."""
+                """Adapt copy byte counts to the current directory position.
+
+                Args:
+                    copied (int): Bytes copied for the current directory, passed to the aggregate percentage adapter.
+                    total (int): Estimated total bytes for the current directory; zero-byte directories still complete.
+
+                Returns:
+                    None: No return value.
+                """
                 report_directory_progress(progress_callback, i, total_dirs, copied, total)
 
             manifest = {}
@@ -138,7 +204,18 @@ class SnapshotLifecycle:
             )
 
     def _stage_snapshot_contents(self, staging_path: Path, progress_callback, message_callback) -> None:
-        """Acquire every source and persist captured metadata before publishing names."""
+        """Acquire every source and persist captured metadata before publishing names.
+
+        Args:
+            staging_path (Path): Private tree receiving a complete copy before any final name is published.
+            progress_callback (SnapshotPercentCallback | None): Optional observer receiving integer aggregate
+                percentage from 0 through 100; return values do not cancel the operation.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            None: No return value.
+        """
         self.storage.snapshot.capture_started_at = datetime.now(timezone.utc)
         self.storage.snapshot.capture_completed_at = None
         staging_path.mkdir()
@@ -153,7 +230,29 @@ class SnapshotLifecycle:
         self.storage.metadata.to_json(self.storage.snapshot, json_path)
 
     def _publish_created_snapshot(self, journal: SnapshotTransactionJournal, staging_path: Path, backup_path: Path, had_original: bool, replace_existing: bool) -> None:
-        """Recheck target identity and publish only after a durable commit decision."""
+        """Recheck target presence and publish only after a durable commit decision.
+
+        Args:
+            journal (SnapshotTransactionJournal): Transaction journal owning staged paths, persisted decisions and
+                cleanup.
+            staging_path (Path): Private tree receiving a complete copy before any final name is published.
+            backup_path (Path): Directory receiving completed backups and same-directory temporary archive files.
+            had_original (bool): Whether the destination existed during planning; publication still checks concurrent
+                changes.
+            replace_existing (bool): Allow an existing snapshot ID to be replaced when True; otherwise collisions are
+                rejected.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            FileExistsError: A destination or generated staging name already exists or changes before publication.
+            FileNotFoundError: A required source, stored association or metadata entry is absent.
+
+        Notes:
+            The presence check compares whether an entry exists, not inode identity of an arbitrary replaced target.
+            Journal and storage checks preserve the existing publication policy.
+        """
         currently_exists = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
         if currently_exists != had_original:
             raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' changed during creation.")

@@ -27,12 +27,18 @@ def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
     so callers never proceed over an ambiguous tree.
 
     Args:
-        scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing resolved-path policy.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        scope_root (Path): Storage scope whose pending journals are scanned; normalization follows the existing
+            resolved-path policy.
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        list[str]: Recovered operation names in workspace order; empty when no journal needed recovery. Recovery may rename/delete entries and refresh the live model.
+        list[str]: Recovered operation names in workspace order; empty when no journal needed recovery. Recovery
+            may rename/delete entries and refresh the live model.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     scope_root = Path(scope_root).resolve(strict=False)
     transactions_path = scope_root / TRANSACTION_DIRECTORY
@@ -41,15 +47,20 @@ def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
     if not transactions_path.exists():
         return []
     recovered = []
+
+    # Visit journals deterministically; an ambiguous workspace blocks new operations.
     for workspace in sorted(transactions_path.iterdir()):
         if is_link_or_junction(workspace) or not workspace.is_dir():
             raise TransactionRecoveryError(f"Unexpected entry in transaction directory: '{workspace}'.")
         journal_path = workspace / JOURNAL_FILENAME
+
+        # The process could stop after creating an empty workspace but before
+        # publishing its journal. No destructive operation starts before it.
         if not journal_path.exists():
-            # The process could stop after creating an empty workspace but before
-            # publishing its journal. No destructive operation starts before it.
             _remove_path(workspace)
             continue
+
+        # Validate the envelope before handing any destructive work to an operation handler.
         try:
             payload = json.loads(SnapshotSerializer.read_text(journal_path))
             JournalCodec.validate(payload, scope_root)
@@ -64,10 +75,13 @@ def recover_pending_transactions(scope_root: Path, storage=None) -> list[str]:
         recovered.append(str(payload["operation"]))
     try:
         transactions_path.rmdir()
+
+    # Another transaction may have started after the scan. Its own journal
+    # remains authoritative; leaving the shared parent is harmless.
     except OSError:
-        # Another transaction may have started after the scan. Its own journal
-        # remains authoritative; leaving the shared parent is harmless.
         pass
+
+    # Refresh the caller-owned model only after all selected recovery work completes.
     if recovered and storage is not None and storage.path_snapshot_json.is_file():
         _refresh_snapshot_model(storage)
     return recovered
@@ -77,8 +91,8 @@ def recover_storage_transactions(storage) -> list[str]:
     """Recover catalogue-root and snapshot-root journals before a new operation.
 
     Args:
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
         list[str]: Operation names recovered first from catalogue scope, then snapshot scope.
@@ -94,11 +108,15 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
 
     Args:
         journal (SnapshotTransactionJournal): Live journal owning the workspace, durable state and cleanup.
-        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations using snapshot metadata.
-
+        storage (SnapshotStorage | None): Snapshot model, layout and metadata adapter; required for operations
+            using snapshot metadata.
 
     Returns:
-        None: After the requested validation, persistence or recovery phase completes; failures propagate unless explicitly handled above.
+        None: No return value; failure handling follows this operation's contract.
+
+    Raises:
+        TransactionRecoveryError: The journal is invalid, ambiguous or cannot be recovered safely; unresolved work
+            is retained.
     """
     operation = journal.payload["operation"]
     state = journal.payload["state"]

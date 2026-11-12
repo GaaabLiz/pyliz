@@ -14,7 +14,17 @@ LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST_FORMAT = "pyliz-associated-directories"
 
 @dataclass(frozen=True)
 class ArchivedAssociation:
-    """Association identity and origin path captured when an archive is made."""
+    """Association identity and origin path captured when an archive is made.
+
+    Attributes:
+        folder_id (str): Non-empty stable association identity; physical storage uses its digest, so it need not
+            be a path component.
+        index (int): Non-negative integer ordering label, independent of the new persistent physical storage name.
+        directory_name (str): Physical directory component recorded in the archive, including accepted legacy
+            names.
+        original_path (str): Rooted source spelling anchored on first initialization; link and parent components
+            are not resolved, and Windows mapped drives use UNC.
+    """
 
     folder_id: str
     index: int
@@ -24,7 +34,21 @@ class ArchivedAssociation:
 
 @dataclass(frozen=True)
 class BackupArchiveManifest:
-    """Validated metadata used to interpret a snapshot backup independently of its filename."""
+    """Validated metadata used to interpret a snapshot backup independently of its filename.
+
+    Attributes:
+        snapshot_id (str): Snapshot ID expected in metadata and used for the destination directory.
+        backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+            (SD).
+        prefix (str): Backup filename prefix recorded unchanged in the archive manifest.
+        is_export (bool): Whether the backup uses the existing export naming convention.
+        created_at (datetime): Backup creation timestamp parsed from metadata/filename, or None when unrecognized;
+            no timezone is added.
+        os_created (str): Originating platform.system() label used to reject incompatible destructive operations.
+        associations (tuple[ArchivedAssociation, ...]): Expected associations in their persisted/archive order.
+        snapshot_name (str): Snapshot display label copied into each public search result.
+        snapshot_description (str): Snapshot description embedded in a unified backup manifest.
+    """
 
     snapshot_id: str
     backup_type: BackupType
@@ -44,7 +68,26 @@ def build_backup_manifest(
     is_export: bool,
     timestamp: str,
 ) -> dict:
-    """Create the JSON-compatible manifest shared by AD and SD backups."""
+    """Create the JSON-compatible manifest shared by AD and SD backups.
+
+    Args:
+        snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+            where documented.
+        backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
+            (SD).
+        prefix (str): Backup filename prefix recorded unchanged in the archive manifest.
+        is_export (bool): Whether the backup uses the existing export naming convention.
+        timestamp (str): Creation timestamp in YYYYMMDD_HHMMSS format using the existing naive/local naming
+            convention.
+
+    Returns:
+        dict: JSON-compatible unified v1 manifest with snapshot identity, origin OS, timestamp and association
+            storage paths.
+
+    Raises:
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        TypeError: An argument or mutable model field has a type rejected by this contract.
+    """
     if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
         type_name = "associated_directories"
     elif backup_type == BackupType.SNAPSHOT_DIRECTORY:
@@ -90,7 +133,19 @@ def build_backup_manifest(
 
 
 def parse_backup_manifest(data: object) -> BackupArchiveManifest:
-    """Validate a parsed JSON manifest and return its typed archive metadata."""
+    """Validate a parsed JSON manifest and return its typed archive metadata.
+
+    Args:
+        data (object): Decoded JSON value or metadata mapping; fields are validated without implicit schema
+            coercion.
+
+    Returns:
+        BackupArchiveManifest: Validated typed unified manifest; original archive order and path spellings are
+            retained.
+
+    Raises:
+        ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+    """
     if not isinstance(data, dict) or data.get("format") != BACKUP_MANIFEST_FORMAT or type(data.get("version")) is not int or data["version"] != BACKUP_MANIFEST_VERSION:
         raise ValueError("Unsupported or invalid snapshot backup manifest format.")
 
