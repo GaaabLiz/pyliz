@@ -48,5 +48,59 @@ class SampleVideoFramesWithCountTestCase(unittest.TestCase):
         capture.release.assert_called_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+
+from pylizlib.media.compute.video_sampling import (
+    sample_video_frames,
+)
+
+
+class VideoSamplingTestCase(unittest.TestCase):
+    def test_build_frame_indices_less_or_equal(self):
+        self.assertEqual(_build_frame_indices(total_frames=3, max_frames=5), [0, 1, 2])
+        self.assertEqual(_build_frame_indices(total_frames=5, max_frames=5), [0, 1, 2, 3, 4])
+
+    def test_build_frame_indices_greater(self):
+        indices = _build_frame_indices(total_frames=100, max_frames=5)
+        self.assertEqual(len(indices), 5)
+        self.assertEqual(indices[0], 0)
+        self.assertEqual(indices[-1], 99)
+
+    @patch("cv2.VideoCapture")
+    def test_sample_video_frames_cannot_open_raises(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = False
+        mock_vc.return_value = cap
+
+        with self.assertRaises(ValueError):
+            sample_video_frames("/fake/path.mp4")
+
+    @patch("cv2.VideoCapture")
+    def test_sample_video_frames_zero_frames(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+        cap.get.return_value = 0
+        mock_vc.return_value = cap
+
+        frames = sample_video_frames("/fake/path.mp4")
+        self.assertEqual(frames, [])
+        cap.release.assert_called_once()
+
+    @patch("cv2.VideoCapture")
+    def test_sample_video_frames_success(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+        cap.get.return_value = 10
+        dummy_bgr = np.zeros((10, 10, 3), dtype=np.uint8)
+        dummy_bgr[0, 0, 0] = 255  # Blue in BGR -> Red in RGB
+        cap.read.return_value = (True, dummy_bgr)
+        mock_vc.return_value = cap
+
+        frames = sample_video_frames("/fake/path.mp4", max_frames=3)
+        self.assertEqual(len(frames), 3)
+        self.assertEqual(frames[0].shape, (10, 10, 3))
+        # Verify BGR to RGB conversion
+        self.assertEqual(frames[0][0, 0, 2], 255)
+        cap.release.assert_called_once()

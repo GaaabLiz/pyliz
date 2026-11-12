@@ -369,5 +369,102 @@ class TestMediaListResult(unittest.TestCase):
         self.assertEqual(res.total_count, 3)
 
 
+class TestLizMediaAiAndSerialization(unittest.TestCase):
+    @patch("pylizlib.media.lizmedia.get_file_c_date", return_value=datetime(2023, 1, 1, 12, 0))
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    def test_apply_and_update_ai_info(self, _, mock_date):
+        with patch("os.path.getsize", return_value=2048):
+            media = LizMedia(Path("/path/to/img.png"))
+            self.assertFalse(media.ai_scanned)
+
+            ai_payload = SimpleNamespace(
+                text=["Detected", "Text"],
+                filename="new_ai_name.png",
+                description="A high-res photo",
+                tags=["modern", "art"],
+                nsfw=False,
+            )
+            media.apply_ai_info(ai_payload)
+
+            self.assertTrue(media.ai_scanned)
+            self.assertEqual(media.ai_ocr_text, ["Detected", "Text"])
+            self.assertTrue(media.ai_has_ocr_text)
+            self.assertEqual(media.ai_file_name, "new_ai_name.png")
+            self.assertEqual(media.ai_description, "A high-res photo")
+            self.assertEqual(media.ai_tags, ["modern", "art"])
+            self.assertFalse(media.ai_nsfw)
+
+            # to_dict_only_ai and to_json_only_ai
+            ai_dict = media.to_dict_only_ai()
+            self.assertEqual(ai_dict["ai_file_name"], "new_ai_name.png")
+            self.assertEqual(ai_dict["ai_tags"], ["modern", "art"])
+            ai_json = media.to_json_only_ai()
+            self.assertIn('"ai_file_name": "new_ai_name.png"', ai_json)
+
+            # apply_ai_scan_result individual fields
+            media.apply_ai_scan_result(
+                file_name="updated_name.png",
+                ocr_text=["Line 1"],
+                has_ocr_text=True,
+                description="Updated desc",
+                tags=["tag1"],
+                nsfw=True,
+            )
+            self.assertEqual(media.ai_file_name, "updated_name.png")
+            self.assertEqual(media.ai_ocr_text, ["Line 1"])
+            self.assertEqual(media.ai_description, "Updated desc")
+            self.assertEqual(media.ai_tags, ["tag1"])
+            self.assertTrue(media.ai_nsfw)
+
+    def test_serialize_json_value_complex(self):
+        # Dataclass serialization
+        from dataclasses import dataclass
+
+        @dataclass
+        class DummyDC:
+            a: int
+            b: str
+
+        dc_serialized = LizMedia._serialize_json_value(DummyDC(a=1, b="val"))
+        self.assertEqual(dc_serialized, {"a": 1, "b": "val"})
+
+        # Object with model_dump or to_dict
+        class DummyModel:
+            def model_dump(self):
+                return {"model_key": 99}
+
+        model_serialized = LizMedia._serialize_json_value(DummyModel())
+        self.assertEqual(model_serialized, {"model_key": 99})
+
+        # List and Dict
+        list_serialized = LizMedia._serialize_json_value([1, "x", DummyDC(2, "y")])
+        self.assertEqual(list_serialized, [1, "x", {"a": 2, "b": "y"}])
+
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    def test_read_xmp_creation_date_regex_and_exceptions(self, _):
+        media = LizMedia(Path("/path/to/img.png"))
+
+        # Test attribute style photoshop:DateCreated="YYYY-MM-DD..."
+        xmp_content = '<xmp photoshop:DateCreated="2022-04-15T10:20:30" />'
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+
+        with patch.object(media, "get_xmp_sidecar", return_value=mock_path):
+            with patch("builtins.open", mock_open(read_data=xmp_content)):
+                dt = media._get_creation_date_from_xmp()
+                self.assertIsNotNone(dt)
+                self.assertEqual(dt, datetime(2022, 4, 15, 10, 20, 30))
+
+            # Tag style photoshop:DateCreated>YYYY-MM-DD...<
+            tag_content = "<photoshop:DateCreated>2023-05-20T12:00:00</photoshop:DateCreated>"
+            with patch("builtins.open", mock_open(read_data=tag_content)):
+                dt2 = media._get_creation_date_from_xmp()
+                self.assertEqual(dt2, datetime(2023, 5, 20, 12, 0, 0))
+
+            # Exception handling
+            with patch("builtins.open", side_effect=Exception("Read fail")):
+                self.assertIsNone(media._get_creation_date_from_xmp())
+
+
 if __name__ == "__main__":
     unittest.main()

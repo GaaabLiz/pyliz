@@ -178,5 +178,106 @@ class AllFrameSelectorTestCase(unittest.TestCase):
         capture.release.assert_called_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
+from pylizlib.media.domain.video import SceneType
+
+
+class FrameSelectorTestCase(unittest.TestCase):
+    @patch("cv2.VideoCapture")
+    def test_validate_video_fails_raises_value_error(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = False
+        mock_vc.return_value = cap
+
+        selector = UniformFrameSelector()
+        with self.assertRaises(ValueError):
+            selector.select_frames("bad_video.mp4", FrameOptions())
+
+    @patch("cv2.VideoCapture")
+    def test_uniform_frame_selector(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+
+        def mock_get(prop):
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 150.0  # 5 seconds
+            if prop == cv2.CAP_PROP_POS_MSEC:
+                return 1000.0
+            return 0.0
+
+        cap.get.side_effect = mock_get
+        dummy_frame = np.full((16, 16, 3), 120, dtype=np.uint8)
+        cap.read.return_value = (True, dummy_frame)
+        mock_vc.return_value = cap
+
+        selector = UniformFrameSelector()
+        opts = FrameOptions(min_frames=3, max_frames=5)
+        frames = selector.select_frames("sample.mp4", opts)
+
+        self.assertTrue(len(frames) >= 3)
+        self.assertEqual(frames[0].scene_type, SceneType.STATIC)
+        cap.release.assert_called_once()
+
+    @patch("cv2.VideoCapture")
+    def test_all_frame_selector(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+
+        def mock_get(prop):
+            if prop == cv2.CAP_PROP_FPS:
+                return 10.0
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 3.0
+            if prop == cv2.CAP_PROP_POS_MSEC:
+                return 200.0
+            return 0.0
+
+        cap.get.side_effect = mock_get
+        dummy_frame = np.zeros((10, 10, 3), dtype=np.uint8)
+        cap.read.side_effect = [(True, dummy_frame), (True, dummy_frame), (True, dummy_frame), (False, None)]
+        mock_vc.return_value = cap
+
+        selector = AllFrameSelector()
+        frames = selector.select_frames("short.mp4", FrameOptions())
+
+        self.assertEqual(len(frames), 3)
+        cap.release.assert_called_once()
+
+    @patch("cv2.VideoCapture")
+    def test_dynamic_frame_selector(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+
+        def mock_get(prop):
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 90.0  # 3 seconds
+            if prop == cv2.CAP_PROP_POS_MSEC:
+                return 500.0
+            return 0.0
+
+        cap.get.side_effect = mock_get
+
+        # Scene detection: frame1 and frame2 with difference > threshold
+        f1 = np.zeros((10, 10, 3), dtype=np.uint8)
+        f2 = np.full((10, 10, 3), 200, dtype=np.uint8)
+
+        # First pass detects scene changes; second pass extracts frames
+        cap.read.side_effect = [
+            (True, f1),
+            (True, f2),
+            (False, None),  # end of detect loop
+            (True, f1),
+            (True, f2),
+            (False, None),  # extraction loop
+        ]
+        mock_vc.return_value = cap
+
+        selector = DynamicFrameSelector()
+        opts = FrameOptions(min_frames=2, max_frames=5)
+        frames = selector.select_frames("dynamic.mp4", opts)
+
+        self.assertTrue(len(frames) >= 1)
+        cap.release.assert_called_once()
