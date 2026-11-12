@@ -255,7 +255,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
         mock_win32api = MagicMock()
         mock_win32api.GetFileVersionInfo.side_effect = [
             [(1033, 1200)],  # translation
-            "1.2.3.4",        # product version
+            "1.2.3.4",  # product version
         ]
         with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"win32api": mock_win32api}):

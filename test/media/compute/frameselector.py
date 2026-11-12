@@ -120,7 +120,7 @@ class DynamicFrameSelectorTestCase(unittest.TestCase):
         f1 = np.zeros((10, 10, 3), dtype=np.uint8)
         f2 = np.ones((10, 10, 3), dtype=np.uint8) * 200  # large diff -> scene change
         f3 = np.ones((10, 10, 3), dtype=np.uint8) * 200
-        f4 = np.zeros((10, 10, 3), dtype=np.uint8)        # large diff -> scene change
+        f4 = np.zeros((10, 10, 3), dtype=np.uint8)  # large diff -> scene change
 
         capture.read.side_effect = [
             (True, f1),
@@ -128,8 +128,8 @@ class DynamicFrameSelectorTestCase(unittest.TestCase):
             (True, f3),
             (True, f4),
             (False, None),  # end of scene detection
-            (True, f1),     # extract frame 1
-            (True, f2),     # extract frame 2
+            (True, f1),  # extract frame 1
+            (True, f2),  # extract frame 2
         ]
         mock_cap_cls.return_value = capture
 

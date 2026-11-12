@@ -104,19 +104,14 @@ class OperationRunnerTestCase(unittest.TestCase):
         statistics = RunnerStatistics(runner._all_operations)
         self.assertEqual(statistics.cancelled_operations, 2)
         self.assertEqual(
-            statistics.completed_operations
-            + statistics.failed_operations
-            + statistics.cancelled_operations
-            + statistics.pending_operations,
+            statistics.completed_operations + statistics.failed_operations + statistics.cancelled_operations + statistics.pending_operations,
             statistics.total_operations,
         )
 
     def test_runner_finished_callback_runs_on_runner_thread(self):
         callback_threads = []
         finished = threading.Event()
-        runner = OperationRunner(
-            on_runner_finished=lambda: (callback_threads.append(threading.get_ident()), finished.set())
-        )
+        runner = OperationRunner(on_runner_finished=lambda: (callback_threads.append(threading.get_ident()), finished.set()))
         operation = Operation(
             [GenericTask("quick", lambda: None)],
             OperationInfo("quick", "quick"),
@@ -194,9 +189,7 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertTrue(other_entered.wait(2))
         fail_now.set()
 
-        self.assertTrue(
-            self.wait_until(lambda: failing.is_failed() and runner.active_operations == 1)
-        )
+        self.assertTrue(self.wait_until(lambda: failing.is_failed() and runner.active_operations == 1))
         self.assertFalse(finished.is_set())
         self.assertTrue(other.is_cancelled())
 

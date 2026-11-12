@@ -270,11 +270,7 @@ class Operation(QRunnable):
         return self.status == OperationStatus.Failed
 
     def is_cancelled(self):
-        return (
-            self.status == OperationStatus.Cancelled
-            or self._is_cancelled
-            or any(task.is_cancelled for task in self.tasks)
-        )
+        return self.status == OperationStatus.Cancelled or self._is_cancelled or any(task.is_cancelled for task in self.tasks)
 
     def is_in_progress(self):
         return self.status == OperationStatus.InProgress

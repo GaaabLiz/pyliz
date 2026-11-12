@@ -20,12 +20,7 @@ class JoyTagProviderSecurityTestCase(unittest.TestCase):
             (model_path / "top_tags.txt").write_text("tag\n", encoding="utf-8")
             code_path = model_dir / "Models.py"
             code_path.write_text(
-                "class Model:\n"
-                "    def eval(self): return self\n"
-                "    def to(self, device): return self\n"
-                "class VisionModel:\n"
-                "    @staticmethod\n"
-                "    def load_model(path): return Model()\n",
+                "class Model:\n    def eval(self): return self\n    def to(self, device): return self\nclass VisionModel:\n    @staticmethod\n    def load_model(path): return Model()\n",
                 encoding="utf-8",
             )
 

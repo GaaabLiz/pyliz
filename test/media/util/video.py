@@ -89,7 +89,7 @@ class VideoUtilsTestCase(unittest.TestCase):
                 (True, frame1),  # initial frame
                 (True, frame2),  # loop 1
                 (True, frame3),  # loop 2
-                (False, None),   # loop 3 exit
+                (False, None),  # loop 3 exit
             ]
             mock_cap_cls.return_value = mock_cap
 
@@ -101,11 +101,7 @@ class VideoUtilsTestCase(unittest.TestCase):
     @patch("pylizlib.media.util.video.ffmpeg.probe")
     def test_get_video_creation_date(self, mock_probe):
         # 1. ISO format date
-        mock_probe.return_value = {
-            "format": {
-                "tags": {"creation_time": "2024-06-15T10:00:00Z"}
-            }
-        }
+        mock_probe.return_value = {"format": {"tags": {"creation_time": "2024-06-15T10:00:00Z"}}}
         ts = VideoUtils.get_video_creation_date("vid.mp4")
         self.assertIsNotNone(ts)
 

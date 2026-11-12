@@ -73,6 +73,7 @@ def create_action_group(
         action_obj = create_action(action, parent, theme, use_text_for_group=use_text_for_group)
         action_group.addAction(action_obj)
     if signal or callback:
+
         def dispatch_action(action: QAction):
             value = action.objectName() if signal_type == ActionSignalType.ACTION_ID else action
             if signal:

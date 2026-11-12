@@ -252,6 +252,7 @@ class ScanDirectoryTestCase(unittest.TestCase):
             self.assertCountEqual(found_folders, expected_folders)
             self.assertEqual(len(found_files), len(expected_files))
 
+
 class DirContainsTestCase(unittest.TestCase):
     def test_contains_all(self):
         with tempfile.TemporaryDirectory() as td:
@@ -565,6 +566,7 @@ class PathMatcherTestCase(unittest.TestCase):
                 pm.log_all()
                 mock_debug.assert_called_once()
                 self.assertGreater(mock_print.call_count, 0)
+
     def test_load_and_match(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)

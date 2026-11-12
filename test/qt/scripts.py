@@ -24,7 +24,7 @@ class GenerateQrcTestCase(unittest.TestCase):
             resource = ET.parse(qrc_path).getroot().find("qresource")
             self.assertEqual(resource.get("prefix"), asset_dir.name)
             generated_path = resource.findtext("file")
-            self.assertEqual(generated_path, "assets/icons & \"symbols\"/logo & café.svg")
+            self.assertEqual(generated_path, 'assets/icons & "symbols"/logo & café.svg')
             self.assertTrue((qrc_path.parent / generated_path).is_file())
 
     def test_invalid_xml_character_does_not_replace_existing_qrc(self):
@@ -75,11 +75,7 @@ class GenerateQrcTestCase(unittest.TestCase):
             (assets / "physical-root.svg").write_text("<svg />", encoding="utf-8")
             qrc_path = root / "resources.qrc"
             qrc_path.write_text(
-                '<RCC><qresource prefix="/icons">'
-                '<file alias="logo.svg">assets/physical-logo.svg</file>'
-                "</qresource><qresource>"
-                '<file alias="root.svg">assets/physical-root.svg</file>'
-                "</qresource></RCC>",
+                '<RCC><qresource prefix="/icons"><file alias="logo.svg">assets/physical-logo.svg</file></qresource><qresource><file alias="root.svg">assets/physical-root.svg</file></qresource></RCC>',
                 encoding="utf-8",
             )
             output_path = root / "resource_ids.py"
