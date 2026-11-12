@@ -35,11 +35,11 @@ def make_source(root: Path, name: str, *, text: str = "captured version") -> Pat
 def make_snapshot(snapshot_id: str, source: Path, folder_id: str = "folder-main") -> Snapshot:
     return Snapshot(
         id=snapshot_id,
-        name=f"E2E {snapshot_id}",
-        desc="Snapshot E2E scenario",
-        author="pylizlib E2E",
+        name=f"Integration {snapshot_id}",
+        desc="Snapshot integration scenario",
+        author="pylizlib integration tests",
         directories=[SnapDirAssociation(index=1, original_path=str(source), folder_id=folder_id)],
-        tags=["e2e"],
+        tags=["integration"],
     )
 
 
@@ -52,7 +52,7 @@ def association_copy(catalogue: SnapshotCatalogue, snapshot: Snapshot, associati
 def test_create_search_sync_and_install(snapshot_workspace: Path) -> None:
     source = make_source(snapshot_workspace, "lifecycle")
     catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
-    snapshot = make_snapshot("e2e_lifecycle", source)
+    snapshot = make_snapshot("integration_lifecycle", source)
     creation_progress: list[int] = []
     messages: list[str] = []
 
@@ -131,7 +131,7 @@ def test_association_edits_and_duplicate_are_independent(snapshot_workspace: Pat
     source_a = make_source(snapshot_workspace, "association-a", text="first association")
     source_b = make_source(snapshot_workspace, "association-b", text="second association")
     catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
-    snapshot = make_snapshot("e2e_edits", source_a, "assoc-a")
+    snapshot = make_snapshot("integration_edits", source_a, "assoc-a")
     catalogue.add(snapshot)
 
     old = catalogue.get_by_id(snapshot.id)
@@ -182,7 +182,7 @@ def test_archive_export_import_and_standalone_restore(snapshot_workspace: Path) 
     catalogue_path = snapshot_workspace / "catalogue"
     settings = SnapshotSettings(backup_path=snapshot_workspace / "automatic-backups")
     catalogue = SnapshotCatalogue(catalogue_path, settings)
-    snapshot = make_snapshot("e2e_archives", source)
+    snapshot = make_snapshot("integration_archives", source)
     catalogue.add(snapshot)
     loaded = catalogue.get_by_id(snapshot.id)
     assert loaded is not None
@@ -248,7 +248,7 @@ def test_corruption_and_missing_source_are_reported_before_destructive_work(snap
     source = make_source(snapshot_workspace, "integrity", text="known good data")
     catalogue_path = snapshot_workspace / "catalogue"
     catalogue = SnapshotCatalogue(catalogue_path)
-    snapshot = make_snapshot("e2e_integrity", source)
+    snapshot = make_snapshot("integration_integrity", source)
     catalogue.add(snapshot)
     loaded = catalogue.get_by_id(snapshot.id)
     assert loaded is not None
