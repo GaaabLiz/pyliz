@@ -36,6 +36,16 @@ class AiMediaScannerTestCase(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_ai_scan_result_keeps_legacy_positional_field_order(self):
+        result = AiScanResult(["cat"], False, ["HELLO"], True)
+
+        self.assertEqual(result.tags, ["cat"])
+        self.assertFalse(result.nsfw)
+        self.assertEqual(result.ocr_text, ["HELLO"])
+        self.assertTrue(result.ocr_detected)
+        self.assertIsNone(result.nsfw_frames_analyzed)
+        self.assertIsNone(result.nsfw_analysis_complete)
+
     def test_scan_from_path_applies_requested_results(self):
         tags_provider = _StaticProvider(AiScanTool.TAGS, AiScanResult(tags=["cat", "indoor"]))
         nsfw_provider = _StaticProvider(AiScanTool.NSFW, AiScanResult(nsfw=False))

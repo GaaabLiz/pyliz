@@ -99,9 +99,9 @@ class LizMedia:
     ai_tags: Optional[List[str]] = None
     ai_scanned: bool = False
     ai_nsfw: Optional[bool] = None
+    ai_has_ocr_text: Optional[bool] = None
     ai_nsfw_frames_analyzed: Optional[int] = None
     ai_nsfw_analysis_complete: Optional[bool] = None
-    ai_has_ocr_text: Optional[bool] = None
 
     def __post_init__(self):
         """

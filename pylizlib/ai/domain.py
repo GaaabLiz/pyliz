@@ -69,10 +69,10 @@ class AiScanResult:
 
     tags: list[str] | None = None
     nsfw: bool | None = None
-    nsfw_frames_analyzed: int | None = None
-    nsfw_analysis_complete: bool | None = None
     ocr_text: list[str] | None = None
     ocr_detected: bool | None = None
+    nsfw_frames_analyzed: int | None = None
+    nsfw_analysis_complete: bool | None = None
 
     def merge(self, other: "AiScanResult") -> "AiScanResult":
         """Merges another scan result into this one, overwriting non-None values."""

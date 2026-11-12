@@ -20,6 +20,27 @@ class TestLizMedia(unittest.TestCase):
         media = LizMedia(self.mock_path)
         self.assertEqual(media.path, self.mock_path)
 
+    @patch("pylizlib.media.lizmedia.is_media_file", return_value=True)
+    def test_new_ai_fields_preserve_legacy_positional_field_order(self, _):
+        media = LizMedia(
+            self.mock_path,
+            None,
+            None,
+            [],
+            None,
+            None,
+            None,
+            None,
+            None,
+            False,
+            False,
+            True,
+        )
+
+        self.assertTrue(media.ai_has_ocr_text)
+        self.assertIsNone(media.ai_nsfw_frames_analyzed)
+        self.assertIsNone(media.ai_nsfw_analysis_complete)
+
     @patch("pylizlib.media.lizmedia.is_media_file")
     def test_initialization_invalid(self, mock_is_media):
         mock_is_media.return_value = False
