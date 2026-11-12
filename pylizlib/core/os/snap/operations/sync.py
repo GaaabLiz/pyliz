@@ -9,6 +9,7 @@ from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import IntegrityManifest
+from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, prepare_snapshot_metadata, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
@@ -42,47 +43,25 @@ class SnapshotSynchronizer:
         self.storage.root_path()
         recover_storage_transactions(self.storage)
         self._validate_sources()
+        logger.info("Synchronizing snapshot id=%s associations=%s", self.storage.snapshot.id, len(self.storage.snapshot.directories))
 
-        rollbacks = []
         updated_manifests = {}
-        original_metadata = {assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size) for assoc in self.storage.snapshot.directories}
+        previous_state = CapturedContentState.capture(self.storage.snapshot)
         original_date_last_modified = self.storage.snapshot.date_last_modified
-        original_capture_times = (self.storage.snapshot.capture_started_at, self.storage.snapshot.capture_completed_at)
-        rollbacks = self._plan_replacements()
-        journal = SnapshotTransactionJournal.begin(
-            self.storage.path_snapshot,
-            "sync",
-            {
-                "entries": [
-                    {
-                        "folder_id": rb.dir_assoc.folder_id,
-                        "stage": rb.staging_dir.as_posix(),
-                        "destination": rb.snapshot_copy_path.as_posix(),
-                        "backup": rb.backup_dir.as_posix(),
-                        "had_original": rb.had_original,
-                    }
-                    for rb in rollbacks
-                ],
-                "staging_roots": [rb.staging_dir.as_posix() for rb in rollbacks],
-            },
-        )
+        replacements = self._plan_replacements()
+        journal = self._begin_sync_journal(replacements)
         try:
             self.storage.snapshot.capture_started_at = datetime.now(timezone.utc)
             self.storage.snapshot.capture_completed_at = None
-            self._stage_system_copies(rollbacks, updated_manifests, message_callback)
-            self._update_model_metadata(rollbacks, updated_manifests)
+            self._stage_system_copies(replacements, updated_manifests, message_callback)
+            self._update_model_metadata(replacements, updated_manifests)
             metadata = prepare_snapshot_metadata(self.storage, journal.workspace)
             journal.update_payload(metadata=metadata)
-            self._replace_stored_copies(rollbacks)
+            self._replace_stored_copies(replacements)
             journal.set_state("commit_decided")
         except Exception as error:
             logger.error(f"Update from system failed during transaction. Rolling back. Reason: {error}")
-            try:
-                journal.decide_rollback(self.storage)
-                self._restore_model_metadata(original_metadata, original_date_last_modified, original_capture_times)
-            except Exception as rollback_error:
-                logger.error(f"Sync rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
-                raise RuntimeError(f"Sync rollback is incomplete; journal retained at '{journal.path}'.") from error
+            self._rollback_failed_sync(journal, previous_state, original_date_last_modified, error)
             raise
 
         try:
@@ -91,16 +70,12 @@ class SnapshotSynchronizer:
         except Exception as error:
             if getattr(error, "published", False) is True:
                 raise
-            try:
-                journal.decide_rollback(self.storage)
-                self._restore_model_metadata(original_metadata, original_date_last_modified, original_capture_times)
-            except Exception as rollback_error:
-                logger.error(f"Sync rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
-                raise RuntimeError(f"Sync rollback is incomplete; journal retained at '{journal.path}'.") from error
+            self._rollback_failed_sync(journal, previous_state, original_date_last_modified, error)
             raise
 
         journal.set_state("committed")
-        journal.finalize([rb.backup_dir for rb in rollbacks] + [rb.staging_dir for rb in rollbacks], "Update from system")
+        journal.finalize([rb.backup_dir for rb in replacements] + [rb.staging_dir for rb in replacements], "Update from system")
+        logger.info("Synchronized snapshot id=%s", self.storage.snapshot.id)
 
     def _validate_sources(self) -> None:
         """Validate every source before preparing or replacing any stored copy."""
@@ -125,9 +100,9 @@ class SnapshotSynchronizer:
             replacements.append(SyncReplacement(snapshot_copy_path, staging_dir, backup_dir, dir_assoc, Path(dir_assoc.original_path), True))
         return replacements
 
-    def _stage_system_copies(self, rollbacks: list[SyncReplacement], updated_manifests: dict[str, IntegrityManifest], message_callback) -> None:
+    def _stage_system_copies(self, replacements: list[SyncReplacement], updated_manifests: dict[str, IntegrityManifest], message_callback) -> None:
         """Copy every source to staging and retain each newly captured manifest."""
-        for rb in rollbacks:
+        for rb in replacements:
             dir_assoc = rb.dir_assoc
             system_path = rb.system_path
             staging_dir = rb.staging_dir
@@ -147,11 +122,10 @@ class SnapshotSynchronizer:
                     shutil.rmtree(staging_dir)
                 raise RuntimeError(f"Failed to copy system path '{system_path}' to staging '{staging_dir}': {e}") from e
 
-
-    def _replace_stored_copies(self, rollbacks: list[SyncReplacement]) -> None:
+    def _replace_stored_copies(self, replacements: list[SyncReplacement]) -> None:
         """Move originals aside and publish the prepared directories in order."""
         # Replace internal copy only at the end
-        for rb in rollbacks:
+        for rb in replacements:
             snap_path = rb.snapshot_copy_path
             staging_dir = rb.staging_dir
             backup_dir = rb.backup_dir
@@ -161,9 +135,9 @@ class SnapshotSynchronizer:
 
             rename_and_sync(staging_dir, snap_path)
 
-    def _update_model_metadata(self, rollbacks: list[SyncReplacement], updated_manifests: dict[str, IntegrityManifest]) -> None:
+    def _update_model_metadata(self, replacements: list[SyncReplacement], updated_manifests: dict[str, IntegrityManifest]) -> None:
         """Update in-memory manifests and sizes before staging the new JSON."""
-        for rb in rollbacks:
+        for rb in replacements:
             dir_assoc = rb.dir_assoc
             dir_assoc.record_captured_content(updated_manifests[dir_assoc.folder_id])
 
@@ -181,3 +155,32 @@ class SnapshotSynchronizer:
             assoc.integrity_manifest, assoc.mb_size = original_metadata[assoc.folder_id]
         self.storage.snapshot.date_last_modified = original_date_last_modified
         self.storage.snapshot.capture_started_at, self.storage.snapshot.capture_completed_at = original_capture_times
+
+    def _rollback_failed_sync(self, journal: SnapshotTransactionJournal, previous_state: CapturedContentState, previous_modified: datetime | None, error: Exception) -> None:
+        """Rollback data and only the acquisition fields changed by synchronization."""
+        try:
+            journal.decide_rollback(self.storage)
+            self._restore_model_metadata(previous_state.association_metadata, previous_modified, previous_state.capture_times)
+        except Exception as rollback_error:
+            logger.error(f"Sync rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+            raise RuntimeError(f"Sync rollback is incomplete; journal retained at '{journal.path}'.") from error
+
+    def _begin_sync_journal(self, replacements: list[SyncReplacement]) -> SnapshotTransactionJournal:
+        """Persist the complete ordered swap plan before source capture begins."""
+        return SnapshotTransactionJournal.begin(
+            self.storage.path_snapshot,
+            "sync",
+            {
+                "entries": [
+                    {
+                        "folder_id": rb.dir_assoc.folder_id,
+                        "stage": rb.staging_dir.as_posix(),
+                        "destination": rb.snapshot_copy_path.as_posix(),
+                        "backup": rb.backup_dir.as_posix(),
+                        "had_original": rb.had_original,
+                    }
+                    for rb in replacements
+                ],
+                "staging_roots": [rb.staging_dir.as_posix() for rb in replacements],
+            },
+        )
