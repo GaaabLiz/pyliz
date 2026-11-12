@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.os.path import random_subfolder
+from pylizlib.core.os.filesystem.directories import random_subfolder
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
 
 

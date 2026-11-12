@@ -1,313 +1,36 @@
-import getpass
-import os
-import platform
-import shutil
-import subprocess
-import sys
-from pathlib import Path
+"""Compatibility exports for legacy cross-platform OS helpers.
 
-import psutil
+New code should import from the focused ``paths``, ``filesystem``, ``commands``,
+``system`` and ``windows`` modules. This module preserves the historical import paths.
+"""
 
-PATH_DEFAULT_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
+from pylizlib.core.os.commands import is_command_available, is_command_available_with_run, is_software_installed
+from pylizlib.core.os.filesystem.capacity import (
+    check_move_dirs_free_space,
+    get_directory_size,
+    get_folder_size_mb,
+    get_free_space_mb,
+    has_disk_free_space,
+)
+from pylizlib.core.os.paths.safety import is_critical_system_path
+from pylizlib.core.os.system import get_system_username, is_os_unix, is_os_windows, open_system_folder
+from pylizlib.core.os.windows.commands import PATH_DEFAULT_GIT_BASH
+from pylizlib.core.os.windows.processes import WindowsOsUtils
 
-
-def is_critical_system_path(path: str | Path) -> bool:
-    """
-    Check whether a path is critical, failing closed when it cannot be resolved.
-    """
-    try:
-        p = Path(path).resolve(strict=False)
-    except Exception:
-        return True
-
-    # Block root directories (e.g., /, C:\)
-    if p == p.parent:
-        return True
-
-    # Block the home directory itself
-    try:
-        home = Path.home().resolve(strict=False)
-    except Exception:
-        return True
-    if p == home:
-        return True
-
-    # Block critical system paths and everything inside them
-    critical_bases = [
-        Path("/usr"),
-        Path("/bin"),
-        Path("/sbin"),
-        Path("/etc"),
-        Path("/var"),
-        Path("/System"),
-    ]
-
-    if sys.platform == "win32":
-        critical_bases.extend(
-            [Path(os.environ.get("windir", "C:\\Windows")), Path(os.environ.get("ProgramFiles", "C:\\Program Files")), Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))]
-        )
-
-    for cp in critical_bases:
-        try:
-            resolved_base = cp.resolve(strict=False)
-            if p == resolved_base or p.is_relative_to(resolved_base):
-                return True
-        except Exception:
-            return True
-
-    return False
-
-
-def get_folder_size_mb(path) -> float:
-    """
-    Get the size of a folder in megabytes
-    :param path: path to the folder
-    :return: size of the folder in megabytes
-    """
-    # Inizializza la dimensione totale a 0
-    total_size = 0
-    # Scansione delle cartelle e dei file all'interno del percorso dato
-    for root, dirs, files in os.walk(path):
-        # Aggiungi le dimensioni dei file alla dimensione totale
-        for file in files:
-            file_path = os.path.join(root, file)
-            total_size += os.path.getsize(file_path)
-    # Converti la dimensione totale in megabyte (MB)
-    total_size_mb = total_size / (1024 * 1024)
-    return total_size_mb
-
-
-def open_system_folder(path):
-    """
-    Open a system folder (or file) in the default file explorer/application.
-    :param path: path to the folder or file
-    :return:
-    """
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Path {path} does not exist!")
-
-    if sys.platform == "win32":
-        if hasattr(os, "startfile"):
-            os.startfile(path)
-        else:
-            subprocess.Popen(["explorer", path])
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", path])
-    else:
-        subprocess.Popen(["xdg-open", path])
-
-
-def has_disk_free_space(path_of_disk, mb_free):
-    """
-    Check if a disk has enough free space in megabytes
-    :param path_of_disk: The path of the disk to check
-    :param mb_free: The minimum amount of free space in megabytes
-    :return: True if the disk has enough free space, False otherwise
-    """
-    stat = shutil.disk_usage(path_of_disk)
-    spazio_disponibile_mb = stat.free / (1024 * 1024)
-    if spazio_disponibile_mb > mb_free:
-        return True
-    else:
-        return False
-
-
-def get_free_space_mb(directory) -> float:
-    """
-    Get the free space in megabytes of a directory
-    :param directory: path to the directory
-    :return: free space in megabytes
-    """
-    return shutil.disk_usage(directory).free / (1024 * 1024)
-
-
-def get_directory_size(path) -> float:
-    """
-    Get the size of a directory in megabytes
-    :param path: path to the directory
-    :return: size of the directory in megabytes
-    """
-    total_size = 0
-    for dirpath, dirnames, filenames in os.walk(path):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            total_size += os.path.getsize(fp)
-    return total_size / (1024 * 1024)
-
-
-def check_move_dirs_free_space(src_path, dst_path) -> bool:
-    """
-    Check if there is enough free space in the destination directory to move the source directory
-    :param src_path: The path of the source directory
-    :param dst_path: The path of the destination directory
-    :return: True if there is enough free space, False otherwise
-    """
-    # Calculate the size of the source directory
-    src_size_mb = get_directory_size(src_path)
-    # Get the free space of the destination directory
-    free_space_mb = get_free_space_mb(dst_path)
-    # Check if there is enough space
-    return free_space_mb >= src_size_mb
-
-
-def is_command_available_with_run(command: str) -> bool:
-    """
-    Check if a command is available without executing it.
-    :param command: The command to check
-    :return: True if the command is available, False otherwise
-    """
-    return shutil.which(command) is not None
-
-
-def is_command_available(command: str) -> bool:
-    return shutil.which(command) is not None
-
-
-def is_os_unix() -> bool:
-    """
-    Check if the operating system is Unix-based (Linux, MacOS)
-    :return: True if the operating system is Unix-based, False otherwise
-    """
-    current_os = platform.system()
-    return current_os in ["Linux", "Darwin"]
-
-
-def is_os_windows() -> bool:
-    """
-    Check if the operating system is Windows
-    :return: True if the operating system is Windows, False otherwise
-    """
-    current_os = platform.system()
-    return current_os == "Windows"
-
-
-def is_software_installed(exe_path: Path) -> bool:
-    """
-    Check if a software is installed by checking if the executable file exists
-    :param exe_path: The path of the executable file
-    :return: True if the software is installed, False otherwise
-    """
-    return os.path.isfile(exe_path.__str__()) and os.access(exe_path.__str__(), os.X_OK)
-
-
-def get_system_username() -> str:
-    """
-    Get the current system username
-    :return: The current system username
-    """
-    return getpass.getuser()
-
-
-class WindowsOsUtils:
-    @staticmethod
-    def is_exe_running(exe_path: Path) -> bool:
-        """
-        Check if an executable is running
-        :param exe_path: The path of the executable file
-        :return: True if the executable is running, False otherwise
-        """
-        exe_path_str = os.path.abspath(exe_path.__str__())  # normalize
-        for proc in psutil.process_iter(["exe", "name"]):
-            try:
-                if proc.info["exe"] and os.path.abspath(proc.info["exe"]) == exe_path_str:
-                    return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        return False
-
-    @staticmethod
-    def get_windows_exe_version(exe_path: Path) -> str:
-        """
-        Get the version of a Windows executable
-        if the version information is not available, returns "N/A"
-        if the OS is not Windows, returns N/A
-        :param exe_path: the path of the executable file
-        :return:  The version of the executable or "N/A" if not available
-        """
-        if not is_os_windows():
-            return "N/A"
-        import win32api
-
-        try:
-            # GetFileVersionInfo call removed as it was unused
-            # Le chiavi di versione sono memorizzate come tuple
-            # Prima otteniamo la lingua e il codice di pagina
-            lang, codepage = win32api.GetFileVersionInfo(exe_path.__str__(), "\\VarFileInfo\\Translation")[0]
-            str_info_path = f"\\StringFileInfo\\{lang:04X}{codepage:04X}\\ProductVersion"
-            version = win32api.GetFileVersionInfo(exe_path.__str__(), str_info_path)
-            return version
-        except Exception:
-            return "N/A"
-
-    def get_service_executable_path(service_name: str) -> str | None:
-        """
-        Get the executable path of a Windows service
-        If the os is not Windows, returns None
-        :param service_name: The name of the service
-        :return: The executable path of the service or None if not found
-        """
-        if not is_os_windows():
-            return None
-        import winreg
-
-        try:
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                rf"SYSTEM\CurrentControlSet\Services\{service_name}",
-            )
-            image_path, _ = winreg.QueryValueEx(key, "ImagePath")
-            winreg.CloseKey(key)
-            # Rimuove eventuali argomenti e prende solo il percorso
-            image_path = image_path.strip()
-            if image_path.startswith('"'):
-                # Prende il contenuto tra le virgolette
-                image_path = image_path.split('"')[1]
-            else:
-                # Prende la prima parte fino al primo spazio (se non ci sono virgolette)
-                parts = image_path.split(" ")
-                # Ricostruisce il percorso se contiene spazi e termina con .exe
-                exe_parts = []
-                for part in parts:
-                    exe_parts.append(part)
-                    if part.lower().endswith(".exe"):
-                        break
-                image_path = " ".join(exe_parts)
-            return image_path
-        except Exception:
-            return None
-
-    def is_service_running(service_name: str) -> bool:
-        """
-        Check if a Windows service is running
-        :param service_name: The name of the service
-        :return: True if the service is running, False otherwise
-        """
-        import win32service
-        import win32serviceutil
-
-        try:
-            status = win32serviceutil.QueryServiceStatus(service_name)[1]
-            return status == win32service.SERVICE_RUNNING
-        except Exception:
-            return False
-
-    def get_service_version(service_name: str) -> str | None:
-        """
-        Get the version of a Windows service by checking the version of its executable
-        :param service_name: The name of the service
-        :return: The version of the service or None if not found
-        """
-        import win32api
-
-        path = WindowsOsUtils.get_service_executable_path(service_name)
-        if path is None:
-            return None
-        try:
-            # Funzione per ottenere versione dal file binario
-            info = win32api.GetFileVersionInfo(path, "\\")
-            ms = info["FileVersionMS"]
-            ls = info["FileVersionLS"]
-            version = f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
-            return version
-        except Exception:
-            return "N/A"
+__all__ = [
+    "PATH_DEFAULT_GIT_BASH",
+    "WindowsOsUtils",
+    "check_move_dirs_free_space",
+    "get_directory_size",
+    "get_folder_size_mb",
+    "get_free_space_mb",
+    "get_system_username",
+    "has_disk_free_space",
+    "is_command_available",
+    "is_command_available_with_run",
+    "is_critical_system_path",
+    "is_os_unix",
+    "is_os_windows",
+    "is_software_installed",
+    "open_system_folder",
+]

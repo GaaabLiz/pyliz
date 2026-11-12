@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pylizlib.core.os.path import (
+from pylizlib.core.os.filesystem.directories import (
     PathMatcher,
     check_path,
     check_path_dir,
@@ -19,19 +19,16 @@ from pylizlib.core.os.path import (
     dir_contains_image,
     dir_contains_video,
     duplicate_directory,
-    get_app_home_dir,
-    get_filename,
-    get_filename_no_ext,
     get_files_from,
     get_folders_from,
-    get_home_dir,
     get_path_items,
-    get_second_to_last_directory,
     random_subfolder,
     remove_directory_or_move_to_temp,
     scan_directory,
     scan_directory_match_bool,
 )
+from pylizlib.core.os.paths.lexical import get_filename, get_filename_no_ext, get_second_to_last_directory
+from pylizlib.core.os.paths.locations import get_app_home_dir, get_home_dir
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +93,7 @@ class CheckPathTestCase(unittest.TestCase):
 
     def test_check_path_not_readable(self):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.path.os.access", return_value=False):
+            with patch("pylizlib.core.os.filesystem.directories.os.access", return_value=False):
                 self.assertFalse(check_path(td))
 
     def test_non_existing_dir(self):
@@ -117,13 +114,13 @@ class CheckPathDirTestCase(unittest.TestCase):
 
     def test_not_readable_raises_permission_error(self):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.path.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
                 with self.assertRaises(PermissionError):
                     check_path_dir(td)
 
     def test_not_writable_raises_permission_error(self):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.path.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
                 with self.assertRaises(PermissionError):
                     check_path_dir(td)
 
@@ -150,7 +147,7 @@ class CheckPathFileTestCase(unittest.TestCase):
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp_name = tmp.name
         try:
-            with patch("pylizlib.core.os.path.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
                 with self.assertRaises(PermissionError):
                     check_path_file(tmp_name)
         finally:
@@ -160,7 +157,7 @@ class CheckPathFileTestCase(unittest.TestCase):
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp_name = tmp.name
         try:
-            with patch("pylizlib.core.os.path.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
                 with self.assertRaises(PermissionError):
                     check_path_file(tmp_name)
         finally:
@@ -368,7 +365,7 @@ class GetPathItemsTestCase(unittest.TestCase):
         mock_entry = MagicMock()
         mock_entry.path = "/mock/forbidden"
         type(mock_entry).is_dir = MagicMock(side_effect=PermissionError("access denied"))
-        with patch("pylizlib.core.os.path.os.scandir") as mock_scandir:
+        with patch("pylizlib.core.os.filesystem.directories.os.scandir") as mock_scandir:
             mock_scandir.return_value.__enter__.return_value = [mock_entry]
             items = get_path_items(Path("/mock"), recursive=True)
             self.assertEqual(len(items), 1)
@@ -391,7 +388,7 @@ class ClearFolderContentsTestCase(unittest.TestCase):
             file_path = Path(td) / "file.txt"
             file_path.write_text("hello")
             with patch.object(Path, "unlink", side_effect=OSError("unlink error")):
-                with patch("pylizlib.core.os.path.logger.error") as mock_log:
+                with patch("pylizlib.core.os.filesystem.directories.logger.error") as mock_log:
                     clear_folder_contents(Path(td))
                     mock_log.assert_called_once()
 
@@ -492,7 +489,7 @@ class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
                 important.write_text("must remain visible")
                 messages = []
 
-                with patch("pylizlib.core.os.path.shutil.rmtree", side_effect=PermissionError("directory is locked")):
+                with patch("pylizlib.core.os.filesystem.directories.shutil.rmtree", side_effect=PermissionError("directory is locked")):
                     with self.assertRaisesRegex(PermissionError, "directory is locked"):
                         remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
 
@@ -586,7 +583,7 @@ class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "to_move"
             target.mkdir()
-            with patch("pylizlib.core.os.path.logger.error") as mock_log:
+            with patch("pylizlib.core.os.filesystem.directories.logger.error") as mock_log:
                 remove_directory_or_move_to_temp(target, temp_path=None, move_to_temp=True)
                 mock_log.assert_called_once_with("Temp path cannot be None")
                 self.assertTrue(target.exists())
@@ -627,7 +624,7 @@ class PathMatcherTestCase(unittest.TestCase):
             _build_tree(td)
             pm = PathMatcher()
             pm.load_path(Path(td), recursive=False)
-            with patch("builtins.print") as mock_print, patch("pylizlib.core.os.path.logger.debug") as mock_debug:
+            with patch("builtins.print") as mock_print, patch("pylizlib.core.os.filesystem.directories.logger.debug") as mock_debug:
                 pm.log_all()
                 mock_debug.assert_called_once()
                 self.assertGreater(mock_print.call_count, 0)

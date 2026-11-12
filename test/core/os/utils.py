@@ -10,22 +10,17 @@ from unittest.mock import MagicMock, patch
 
 import psutil
 
-from pylizlib.core.os.utils import (
-    WindowsOsUtils,
+from pylizlib.core.os.commands import is_command_available, is_command_available_with_run, is_software_installed
+from pylizlib.core.os.filesystem.capacity import (
     check_move_dirs_free_space,
     get_directory_size,
     get_folder_size_mb,
     get_free_space_mb,
-    get_system_username,
     has_disk_free_space,
-    is_command_available,
-    is_command_available_with_run,
-    is_critical_system_path,
-    is_os_unix,
-    is_os_windows,
-    is_software_installed,
-    open_system_folder,
 )
+from pylizlib.core.os.paths.safety import is_critical_system_path
+from pylizlib.core.os.system import get_system_username, is_os_unix, is_os_windows, open_system_folder
+from pylizlib.core.os.windows.processes import WindowsOsUtils
 
 
 class IsCriticalSystemPathTestCase(unittest.TestCase):
@@ -49,7 +44,7 @@ class IsCriticalSystemPathTestCase(unittest.TestCase):
 
     def test_windows_critical_paths(self):
         critical_dir = Path("/mock/windows")
-        with patch("pylizlib.core.os.utils.sys.platform", "win32"):
+        with patch("pylizlib.core.os.paths.safety.sys.platform", "win32"):
             with patch.dict(os.environ, {"windir": str(critical_dir), "ProgramFiles": "/mock/programs"}):
                 self.assertTrue(is_critical_system_path(critical_dir / "System32"))
                 self.assertTrue(is_critical_system_path("/mock/programs/App"))
@@ -105,7 +100,7 @@ class GetFreeSpaceMbTestCase(unittest.TestCase):
         free = get_free_space_mb(tempfile.gettempdir())
         self.assertGreater(free, 0)
 
-    @patch("pylizlib.core.os.utils.shutil.disk_usage")
+    @patch("pylizlib.core.os.filesystem.capacity.shutil.disk_usage")
     def test_uses_cross_platform_disk_usage_in_megabytes(self, mock_disk_usage):
         mock_disk_usage.return_value.free = 5 * 1024 * 1024
 
@@ -114,7 +109,7 @@ class GetFreeSpaceMbTestCase(unittest.TestCase):
         self.assertEqual(free, 5.0)
         mock_disk_usage.assert_called_once_with("C:/")
 
-    @patch("pylizlib.core.os.utils.shutil.disk_usage", side_effect=PermissionError("volume denied"))
+    @patch("pylizlib.core.os.filesystem.capacity.shutil.disk_usage", side_effect=PermissionError("volume denied"))
     def test_preserves_volume_access_errors(self, _mock_disk_usage):
         with self.assertRaisesRegex(PermissionError, "volume denied"):
             get_free_space_mb("C:/")
@@ -208,34 +203,34 @@ class IsCommandAvailableWithRunTestCase(unittest.TestCase):
 
 
 class OpenSystemFolderTestCase(unittest.TestCase):
-    @patch("pylizlib.core.os.utils.subprocess.Popen")
+    @patch("pylizlib.core.os.system.subprocess.Popen")
     def test_opens_existing_folder_darwin(self, mock_popen):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.utils.sys.platform", "darwin"):
+            with patch("pylizlib.core.os.system.sys.platform", "darwin"):
                 open_system_folder(td)
                 mock_popen.assert_called_once_with(["open", td])
 
-    @patch("pylizlib.core.os.utils.subprocess.Popen")
+    @patch("pylizlib.core.os.system.subprocess.Popen")
     def test_opens_existing_folder_linux(self, mock_popen):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.utils.sys.platform", "linux"):
+            with patch("pylizlib.core.os.system.sys.platform", "linux"):
                 open_system_folder(td)
                 mock_popen.assert_called_once_with(["xdg-open", td])
 
     def test_opens_existing_folder_windows_startfile(self):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.utils.sys.platform", "win32"):
+            with patch("pylizlib.core.os.system.sys.platform", "win32"):
                 with patch.object(os, "startfile", create=True) as mock_startfile:
                     open_system_folder(td)
                     mock_startfile.assert_called_once_with(td)
 
-    @patch("pylizlib.core.os.utils.subprocess.Popen")
+    @patch("pylizlib.core.os.system.subprocess.Popen")
     def test_opens_existing_folder_windows_explorer(self, mock_popen):
         with tempfile.TemporaryDirectory() as td:
-            with patch("pylizlib.core.os.utils.sys.platform", "win32"):
+            with patch("pylizlib.core.os.system.sys.platform", "win32"):
                 with patch.object(os, "startfile", None, create=True):
                     # Remove startfile attribute so hasattr returns False
-                    with patch("pylizlib.core.os.utils.os", spec=[s for s in dir(os) if s != "startfile"]):
+                    with patch("pylizlib.core.os.system.os", spec=[s for s in dir(os) if s != "startfile"]):
                         open_system_folder(td)
                         mock_popen.assert_called_once_with(["explorer", td])
 
@@ -245,7 +240,7 @@ class OpenSystemFolderTestCase(unittest.TestCase):
 
 
 class WindowsOsUtilsTestCase(unittest.TestCase):
-    @patch("pylizlib.core.os.utils.psutil.process_iter")
+    @patch("pylizlib.core.os.windows.processes.psutil.process_iter")
     def test_is_exe_running_found(self, mock_process_iter):
         target_path = Path("/app/bin/test.exe")
         mock_proc1 = MagicMock()
@@ -256,7 +251,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
 
         self.assertTrue(WindowsOsUtils.is_exe_running(target_path))
 
-    @patch("pylizlib.core.os.utils.psutil.process_iter")
+    @patch("pylizlib.core.os.windows.processes.psutil.process_iter")
     def test_is_exe_running_not_found_and_exceptions(self, mock_process_iter):
         target_path = Path("/app/bin/test.exe")
         mock_proc_denied = MagicMock()
@@ -270,7 +265,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
         self.assertFalse(WindowsOsUtils.is_exe_running(target_path))
 
     def test_get_windows_exe_version_non_windows(self):
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=False):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=False):
             self.assertEqual(WindowsOsUtils.get_windows_exe_version(Path("test.exe")), "N/A")
 
     def test_get_windows_exe_version_windows_success(self):
@@ -279,7 +274,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
             [(1033, 1200)],  # translation
             "1.2.3.4",  # product version
         ]
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"win32api": mock_win32api}):
                 version = WindowsOsUtils.get_windows_exe_version(Path("test.exe"))
                 self.assertEqual(version, "1.2.3.4")
@@ -287,19 +282,19 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
     def test_get_windows_exe_version_windows_exception(self):
         mock_win32api = MagicMock()
         mock_win32api.GetFileVersionInfo.side_effect = RuntimeError("win32api error")
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"win32api": mock_win32api}):
                 self.assertEqual(WindowsOsUtils.get_windows_exe_version(Path("test.exe")), "N/A")
 
     def test_get_service_executable_path_non_windows(self):
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=False):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=False):
             self.assertIsNone(WindowsOsUtils.get_service_executable_path("AnyService"))
 
     def test_get_service_executable_path_quoted(self):
         mock_winreg = MagicMock()
         mock_winreg.OpenKey.return_value = MagicMock()
         mock_winreg.QueryValueEx.return_value = ('"C:\\Program Files\\App\\service.exe" /run', 1)
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"winreg": mock_winreg}):
                 path = WindowsOsUtils.get_service_executable_path("TestService")
                 self.assertEqual(path, "C:\\Program Files\\App\\service.exe")
@@ -308,7 +303,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
         mock_winreg = MagicMock()
         mock_winreg.OpenKey.return_value = MagicMock()
         mock_winreg.QueryValueEx.return_value = ("C:\\Program Files\\App\\service.exe -k run", 1)
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"winreg": mock_winreg}):
                 path = WindowsOsUtils.get_service_executable_path("TestService")
                 self.assertEqual(path, "C:\\Program Files\\App\\service.exe")
@@ -316,7 +311,7 @@ class WindowsOsUtilsTestCase(unittest.TestCase):
     def test_get_service_executable_path_exception(self):
         mock_winreg = MagicMock()
         mock_winreg.OpenKey.side_effect = OSError("service not found")
-        with patch("pylizlib.core.os.utils.is_os_windows", return_value=True):
+        with patch("pylizlib.core.os.windows.processes.is_os_windows", return_value=True):
             with patch.dict(sys.modules, {"winreg": mock_winreg}):
                 self.assertIsNone(WindowsOsUtils.get_service_executable_path("BadService"))
 

@@ -5,8 +5,8 @@ import platform
 from collections.abc import Iterable
 from pathlib import Path
 
+from pylizlib.core.os.paths.safety import is_critical_system_path
 from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
-from pylizlib.core.os.utils import is_critical_system_path
 
 
 def validate_destructive_destinations(

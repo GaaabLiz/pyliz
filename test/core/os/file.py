@@ -6,13 +6,11 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from pylizlib.core.domain.os import FileType
-from pylizlib.core.os.file import (
-    download_file,
-    get_file_c_date,
+from pylizlib.core.network.download import download_file
+from pylizlib.core.os.filesystem.file_types import (
     get_file_type,
     is_audio_extension,
     is_audio_file,
-    is_file_dup_in_dir,
     is_image_extension,
     is_image_file,
     is_image_or_video_file,
@@ -22,8 +20,9 @@ from pylizlib.core.os.file import (
     is_text_file,
     is_video_extension,
     is_video_file,
-    write_json_to_file,
 )
+from pylizlib.core.os.filesystem.files import get_file_c_date, is_file_dup_in_dir
+from pylizlib.core.os.filesystem.json import write_json_to_file
 
 
 class IsExtensionTestCase(unittest.TestCase):
@@ -197,24 +196,24 @@ class GetFileCDateTestCase(unittest.TestCase):
 
     def test_returns_datetime_windows(self):
         with tempfile.NamedTemporaryFile() as tmp:
-            with patch("pylizlib.core.os.file.platform.system", return_value="Windows"):
-                with patch("pylizlib.core.os.file.os.path.getctime", return_value=1700000000.0) as mock_ctime:
+            with patch("pylizlib.core.os.filesystem.files.platform.system", return_value="Windows"):
+                with patch("pylizlib.core.os.filesystem.files.os.path.getctime", return_value=1700000000.0) as mock_ctime:
                     result = get_file_c_date(tmp.name)
                     self.assertIsInstance(result, datetime)
                     mock_ctime.assert_called_once_with(tmp.name)
 
     def test_returns_datetime_linux_without_birthtime(self):
         with tempfile.NamedTemporaryFile() as tmp:
-            with patch("pylizlib.core.os.file.platform.system", return_value="Linux"):
+            with patch("pylizlib.core.os.filesystem.files.platform.system", return_value="Linux"):
                 mock_stat = MagicMock(spec=["st_mtime"])
                 mock_stat.st_mtime = 1700000000.0
-                with patch("pylizlib.core.os.file.os.stat", return_value=mock_stat):
+                with patch("pylizlib.core.os.filesystem.files.os.stat", return_value=mock_stat):
                     result = get_file_c_date(tmp.name)
                     self.assertIsInstance(result, datetime)
 
 
 class DownloadFileTestCase(unittest.TestCase):
-    @patch("pylizlib.core.os.file.requests.get")
+    @patch("pylizlib.core.network.download.requests.get")
     def test_download_file_success_uses_real_logger(self, mock_get):
         mock_response = MagicMock()
         mock_response.headers = {"content-length": "3"}
@@ -231,7 +230,7 @@ class DownloadFileTestCase(unittest.TestCase):
             with open(dest, "rb") as f:
                 self.assertEqual(f.read(), b"abc")
 
-    @patch("pylizlib.core.os.file.requests.get", side_effect=Exception("network error"))
+    @patch("pylizlib.core.network.download.requests.get", side_effect=Exception("network error"))
     def test_download_file_failure(self, mock_get):
         with tempfile.TemporaryDirectory() as td:
             dest = os.path.join(td, "file.bin")
@@ -239,8 +238,8 @@ class DownloadFileTestCase(unittest.TestCase):
             self.assertFalse(result.status)
             self.assertIn("network error", result.error)
 
-    @patch("pylizlib.core.os.file.logger")
-    @patch("pylizlib.core.os.file.requests.get")
+    @patch("pylizlib.core.network.download.logger")
+    @patch("pylizlib.core.network.download.requests.get")
     def test_download_without_content_length_succeeds_and_replaces_atomically(self, mock_get, _mock_logger):
         response = MagicMock()
         response.headers = {}
@@ -262,8 +261,8 @@ class DownloadFileTestCase(unittest.TestCase):
             mock_get.assert_called_once_with("https://example.com/file", stream=True, timeout=30)
             response.close.assert_called_once()
 
-    @patch("pylizlib.core.os.file.logger")
-    @patch("pylizlib.core.os.file.requests.get")
+    @patch("pylizlib.core.network.download.logger")
+    @patch("pylizlib.core.network.download.requests.get")
     def test_interrupted_download_preserves_existing_file(self, mock_get, _mock_logger):
         response = MagicMock()
         response.headers = {"content-length": "100"}
@@ -319,7 +318,7 @@ class WriteJsonToFileTestCase(unittest.TestCase):
             with open(file_path, encoding="utf-8") as file:
                 self.assertEqual(file.read(), '{"keep": true}')
 
-    @patch("pylizlib.core.os.file.os.fsync", side_effect=OSError("disk write failed"))
+    @patch("pylizlib.core.os.filesystem.json.os.fsync", side_effect=OSError("disk write failed"))
     def test_write_error_preserves_existing_file(self, _mock_fsync):
         with tempfile.TemporaryDirectory() as td:
             file_path = os.path.join(td, "data.json")
