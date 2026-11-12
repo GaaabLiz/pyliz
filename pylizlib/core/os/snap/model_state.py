@@ -2,9 +2,67 @@
 
 from collections.abc import Iterable
 from copy import deepcopy
-from dataclasses import fields
+from dataclasses import dataclass, fields
+from datetime import datetime
 
 from pylizlib.core.os.snap.domain import Snapshot
+from pylizlib.core.os.snap.integrity import IntegrityManifest
+
+
+@dataclass(frozen=True)
+class CapturedContentState:
+    """Retain the exact manifest/size references and interval of a prior acquisition.
+
+    Attributes:
+        association_metadata (dict[str, tuple[IntegrityManifest | None, float | None]]):
+            Original manifest references and MiB sizes by stable association ID.
+        capture_times (tuple[datetime | None, datetime | None]): Previous start and
+            completion instants. No timezone conversion or cloning is performed.
+    """
+
+    association_metadata: dict[str, tuple[IntegrityManifest | None, float | None]]
+    capture_times: tuple[datetime | None, datetime | None]
+
+    @classmethod
+    def capture(cls, snapshot: Snapshot) -> "CapturedContentState":
+        """Remember fields affected by content acquisition without scanning sources.
+
+        Args:
+            snapshot (Snapshot): Live model whose acquisition is about to begin.
+
+        Returns:
+            CapturedContentState: Original references and values; in-place mutations
+            of an original manifest remain visible, matching the previous rollback.
+        """
+        metadata = {association.folder_id: (association.integrity_manifest, association.mb_size) for association in snapshot.directories}
+        times = (snapshot.capture_started_at, snapshot.capture_completed_at)
+        return cls(metadata, times)
+
+    def restore_associations(self, snapshot: Snapshot) -> None:
+        """Restore only manifests and sizes, keeping association object identity.
+
+        Args:
+            snapshot (Snapshot): Model with the same association IDs as at capture.
+
+        Returns:
+            None: Original manifest references and size values are reassigned.
+
+        Raises:
+            KeyError: If the association set changed during the operation.
+        """
+        for association in snapshot.directories:
+            association.integrity_manifest, association.mb_size = self.association_metadata[association.folder_id]
+
+    def restore_capture_interval(self, snapshot: Snapshot) -> None:
+        """Restore only the acquisition interval, without touching modification dates.
+
+        Args:
+            snapshot (Snapshot): Live model whose prior interval should be restored.
+
+        Returns:
+            None: Start and completion are reassigned in their original order.
+        """
+        snapshot.capture_started_at, snapshot.capture_completed_at = self.capture_times
 
 
 def restore_snapshot_model(

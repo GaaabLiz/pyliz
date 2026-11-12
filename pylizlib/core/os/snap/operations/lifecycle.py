@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.path import remove_directory_or_move_to_temp
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
+from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
@@ -50,45 +52,14 @@ class SnapshotLifecycle:
         transaction_path = journal.workspace
         staging_path = transaction_path / "snapshot"
         backup_path = transaction_path / "original"
-        previous_association_metadata = {
-            assoc.folder_id: (assoc.integrity_manifest, assoc.mb_size)
-            for assoc in self.storage.snapshot.directories
-        }
-        previous_capture_times = (
-            self.storage.snapshot.capture_started_at,
-            self.storage.snapshot.capture_completed_at,
-        )
+        previous_state = CapturedContentState.capture(self.storage.snapshot)
+        logger.info("Creating snapshot id=%s associations=%s", self.storage.snapshot.id, len(self.storage.snapshot.directories))
         try:
-            self.storage.snapshot.capture_started_at = datetime.now(timezone.utc)
-            self.storage.snapshot.capture_completed_at = None
-            staging_path.mkdir()
-
-            self._stage_associations(staging_path, progress_callback, message_callback)
-            self.storage.snapshot.capture_completed_at = datetime.now(timezone.utc)
-            if progress_callback and not self.storage.snapshot.directories:
-                progress_callback(100)
-
-            # Write json to staging BEFORE making it the final destination
-            json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
-            self.storage.metadata.to_json(self.storage.snapshot, json_path)
-
-            currently_exists = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
-            if currently_exists != had_original:
-                raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' changed during creation.")
-            if currently_exists:
-                if not replace_existing:
-                    raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
-            journal.set_state("commit_decided")
-            if currently_exists:
-                rename_and_sync(self.storage.path_snapshot, backup_path)
-            rename_and_sync(staging_path, self.storage.path_snapshot)
-            if not self.storage.path_snapshot.is_dir():
-                raise FileNotFoundError(f"Published snapshot '{self.storage.path_snapshot}' is not visible after its rename.")
-            journal.set_state("committed")
+            self._stage_snapshot_contents(staging_path, progress_callback, message_callback)
+            self._publish_created_snapshot(journal, staging_path, backup_path, had_original, replace_existing)
         except Exception as error:
-            for assoc in self.storage.snapshot.directories:
-                assoc.integrity_manifest, assoc.mb_size = previous_association_metadata[assoc.folder_id]
-            self.storage.snapshot.capture_started_at, self.storage.snapshot.capture_completed_at = previous_capture_times
+            previous_state.restore_associations(self.storage.snapshot)
+            previous_state.restore_capture_interval(self.storage.snapshot)
             try:
                 journal.decide_rollback()
             except Exception as rollback_error:
@@ -96,6 +67,7 @@ class SnapshotLifecycle:
             raise
 
         journal.finalize([backup_path], "Snapshot creation")
+        logger.info("Created snapshot id=%s", self.storage.snapshot.id)
 
     def delete(self, message_callback=None):
         """
@@ -164,3 +136,34 @@ class SnapshotLifecycle:
                 copy_strategy=self.storage.settings.copy_strategy,
                 manifest=manifest,
             )
+
+    def _stage_snapshot_contents(self, staging_path: Path, progress_callback, message_callback) -> None:
+        """Acquire every source and persist captured metadata before publishing names."""
+        self.storage.snapshot.capture_started_at = datetime.now(timezone.utc)
+        self.storage.snapshot.capture_completed_at = None
+        staging_path.mkdir()
+
+        self._stage_associations(staging_path, progress_callback, message_callback)
+        self.storage.snapshot.capture_completed_at = datetime.now(timezone.utc)
+        if progress_callback and not self.storage.snapshot.directories:
+            progress_callback(100)
+
+        # Write json to staging BEFORE making it the final destination
+        json_path = staging_path / validate_directory_component(self.storage.settings.json_filename, "Snapshot JSON filename")
+        self.storage.metadata.to_json(self.storage.snapshot, json_path)
+
+    def _publish_created_snapshot(self, journal: SnapshotTransactionJournal, staging_path: Path, backup_path: Path, had_original: bool, replace_existing: bool) -> None:
+        """Recheck target identity and publish only after a durable commit decision."""
+        currently_exists = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
+        if currently_exists != had_original:
+            raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' changed during creation.")
+        if currently_exists:
+            if not replace_existing:
+                raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
+        journal.set_state("commit_decided")
+        if currently_exists:
+            rename_and_sync(self.storage.path_snapshot, backup_path)
+        rename_and_sync(staging_path, self.storage.path_snapshot)
+        if not self.storage.path_snapshot.is_dir():
+            raise FileNotFoundError(f"Published snapshot '{self.storage.path_snapshot}' is not visible after its rename.")
+        journal.set_state("committed")

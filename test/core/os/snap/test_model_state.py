@@ -1,7 +1,7 @@
 """Rollback restores values without invalidating live model references."""
 
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot
-from pylizlib.core.os.snap.model_state import restore_snapshot_model
+from pylizlib.core.os.snap.model_state import CapturedContentState, restore_snapshot_model
 
 
 def test_restore_reuses_live_associations_and_copies_mutable_state(tmp_path):
@@ -36,3 +36,30 @@ def test_field_iterator_is_reused_for_every_matching_association(tmp_path):
     previous = Snapshot("id", "old", "", directories=[SnapDirAssociation(3, str(tmp_path), "a"), SnapDirAssociation(4, str(tmp_path), "b")])
     restore_snapshot_model(live, previous, association_fields=iter(["index"]))
     assert [association.index for association in live.directories] == [3, 4]
+
+
+def test_acquisition_state_restores_original_references_and_only_capture_fields(tmp_path):
+    """Partial capture rollback must not turn into complete model restoration."""
+    association = SnapDirAssociation(1, str(tmp_path), "association", integrity_manifest={".": {"type": "directory", "size": 0, "sha256": None}})
+    snapshot = Snapshot("id", "before", "", directories=[association])
+    original_manifest = association.integrity_manifest
+    state = CapturedContentState.capture(snapshot)
+    snapshot.name = "after"
+    association.integrity_manifest = None
+    association.mb_size = 10
+    state.restore_associations(snapshot)
+    state.restore_capture_interval(snapshot)
+    assert snapshot.name == "after"
+    assert association.integrity_manifest is original_manifest
+    assert association.mb_size == 0
+
+
+def test_create_logs_the_committed_snapshot(tmp_path, caplog):
+    """Create reports success only after staging and publication complete."""
+    from pylizlib.core.os.snap.manager import SnapshotManager
+
+    manager = SnapshotManager(Snapshot("logged", "name", ""), tmp_path / "catalogue")
+    with caplog.at_level("INFO", logger="PylizLib"):
+        manager.create()
+    assert "Creating snapshot id=logged associations=0" in caplog.text
+    assert "Created snapshot id=logged" in caplog.text
