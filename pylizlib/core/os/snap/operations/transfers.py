@@ -159,8 +159,9 @@ class CatalogueTransferService:
             ValueError: If the provided path is not a valid .zip file or contains operational transaction storage.
             IOError: If the zip file fails to extract.
         """
+
+        # Reject imported recovery instructions before publishing any catalogue entry.
         with self._extract_archive(zip_path) as temp_dir_path:
-            # Reject imported recovery instructions before publishing any catalogue entry.
             assert_no_operational_storage(temp_dir_path)
             for entry in temp_dir_path.iterdir():
                 if entry.is_dir():
@@ -186,8 +187,9 @@ class CatalogueTransferService:
                 contains operational transaction storage, or if a snapshot with the same ID already exists.
             IOError: If the zip file fails to extract.
         """
+
+        # Validate the content and get snapshot.
         with self._extract_archive(zip_path) as temp_dir_path:
-            # Validate the content and get snapshot
             snapshot_to_import = self._read_imported_snapshot(temp_dir_path)
 
             # Check for ID conflict

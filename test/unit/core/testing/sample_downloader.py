@@ -132,9 +132,8 @@ class SampleImageDownloaderTestCase(unittest.TestCase):
         downloader = SampleImageDownloader()
         with tempfile.TemporaryDirectory() as td:
             downloaded = downloader.download_images_to_folder(Path(td) / "images", count=3)
-
-        self.assertEqual(len(downloaded), 2)
-        self.assertEqual([path.read_bytes() for path in downloaded], [b"image-data", b"image-data"])
+            self.assertEqual(len(downloaded), 2)
+            self.assertEqual([path.read_bytes() for path in downloaded], [b"image-data", b"image-data"])
 
     @patch.object(SampleImageDownloader, "download_image")
     def test_download_images_to_folder_handles_error(self, mock_download):

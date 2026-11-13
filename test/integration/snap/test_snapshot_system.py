@@ -49,9 +49,7 @@ from test.support.snapshot import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-INTEGRATION_ROOT = Path(
-    os.environ.get("PYLIZ_SNAPSHOT_INTEGRATION_RUN_ROOT", REPOSITORY_ROOT / "test_local" / "snapshot_integration")
-).expanduser().resolve()
+INTEGRATION_ROOT = Path(os.environ.get("PYLIZ_SNAPSHOT_INTEGRATION_RUN_ROOT", REPOSITORY_ROOT / "test_local" / "snapshot_integration")).expanduser().resolve()
 TEST_LOCAL_ROOT: Path
 CATALOGUE_PATH: Path
 SOURCE_DATA_PATH: Path
