@@ -16,6 +16,7 @@ from pylizlib.core.os.snap.operations.backup.planning import AssociationRestoreT
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
+from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
 from pylizlib.core.os.snap.storage.recovery.models import ReplacementEntry
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
@@ -56,6 +57,7 @@ class SnapshotTreeRestorer:
         Raises:
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
         """
+        assert_no_transaction_storage(temp_dir_path)
         json_path = temp_dir_path / self.settings.json_filename
         if not json_path.is_file():
             raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")

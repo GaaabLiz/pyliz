@@ -11,7 +11,7 @@ from pylizlib.core.os.snap.operations.backup.associations import association_ide
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
-from pylizlib.core.os.snap.storage.paths import get_snapshot_path
+from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.tree import iter_tree_entries_strict
 
@@ -117,7 +117,7 @@ class CatalogueTransferService:
             None: No return value.
 
         Raises:
-            ValueError: If the provided path is not a valid .zip file.
+            ValueError: If the provided path is not a valid .zip file or contains operational transaction storage.
             IOError: If the zip file fails to extract.
         """
         if not zip_path.is_file() or zip_path.suffix != ".zip":
@@ -137,6 +137,12 @@ class CatalogueTransferService:
                 additional_space_paths=[self.path_catalogue],
             )
 
+            # Reject imported recovery instructions before publishing any catalogue entry.
+            assert_no_transaction_storage(temp_dir_path)
+            for entry in temp_dir_path.iterdir():
+                if entry.is_dir():
+                    assert_no_transaction_storage(entry)
+
             # Iterate through extracted folders and import them
             for potential_snap_dir in temp_dir_path.iterdir():
                 self._import_entry(potential_snap_dir)
@@ -152,7 +158,7 @@ class CatalogueTransferService:
 
         Raises:
             ValueError: If the path is not a valid zip file, if the zip is corrupted, if the snapshot.json is missing,
-                or if a snapshot with the same ID already exists.
+                contains operational transaction storage, or if a snapshot with the same ID already exists.
             IOError: If the zip file fails to extract.
         """
         if not zip_path.is_file() or zip_path.suffix != ".zip":
@@ -259,10 +265,11 @@ class CatalogueTransferService:
                 does not enter stored snapshot content.
 
         Raises:
-            ValueError: If JSON is missing/invalid or the optional export manifest disagrees with its type, ID or
-                association set.
+            ValueError: If operational transaction storage is present, JSON is missing/invalid or the optional export
+                manifest disagrees with its type, ID or association set.
             OSError: If reading or removing a manifest fails outside the mapped errors.
         """
+        assert_no_transaction_storage(temp_dir_path)
         json_path = temp_dir_path / self.settings.json_filename
         if not json_path.is_file():
             raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")

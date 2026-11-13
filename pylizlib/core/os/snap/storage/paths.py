@@ -3,7 +3,40 @@
 from pathlib import Path
 
 from pylizlib.core.os.snap.domain import validate_directory_component
+from pylizlib.core.os.snap.storage.recovery.models import TRANSACTION_DIRECTORY
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
+
+
+def is_transaction_storage_name(name: str) -> bool:
+    """Recognize reserved journal names, including portable Windows aliases.
+
+    Args:
+        name (str): One filesystem component to compare with the transaction namespace.
+
+    Returns:
+        bool: True for the reserved name, ignoring case and trailing spaces/dots. This conservative policy is
+            applied on every host so a stored tree remains safe when transferred to Windows.
+    """
+    return name.rstrip(" .").casefold() == TRANSACTION_DIRECTORY.casefold()
+
+
+def assert_no_transaction_storage(root: Path) -> None:
+    """Reject operational journal storage in an incoming snapshot root.
+
+    Args:
+        root (Path): Snapshot or extracted catalogue root whose direct children are inspected.
+
+    Returns:
+        None: When no direct child occupies the reserved transaction namespace. Nested user data inside an
+            association is not interpreted as snapshot operational storage.
+
+    Raises:
+        ValueError: A direct child has a reserved transaction name, regardless of its entry type.
+        OSError: The root cannot be enumerated.
+    """
+    for entry in root.iterdir():
+        if is_transaction_storage_name(entry.name):
+            raise ValueError(f"Incoming snapshot data cannot contain transaction storage: '{entry}'.")
 
 
 def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
@@ -23,6 +56,8 @@ def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
     validate_directory_component(folder_name, "Snapshot ID")
     if not folder_name.strip():
         raise ValueError("Snapshot ID cannot be empty.")
+    if is_transaction_storage_name(folder_name):
+        raise ValueError("Snapshot ID cannot use the reserved transaction directory name.")
 
     try:
         catalogue_resolved = catalogue_path.resolve(strict=False)
