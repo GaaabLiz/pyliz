@@ -1,19 +1,58 @@
-"""Protected descriptor access and same-directory atomic file publication.
+"""Protected file reads and same-directory atomic publication helpers.
 
-The previous version is retained in a hidden sidecar. Directory flushing is
-best effort on unsupported platforms; a remote server acknowledging fsync does
-not prove that the data reached physical media.
+``AtomicFile`` retains the previous version in a hidden sidecar. Directory
+flushing is best effort on unsupported platforms; a remote server acknowledging
+fsync does not prove that the data reached physical media.
 """
 
 import errno
 import os
 import secrets
 import stat
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.filesystem.tree import is_link_or_junction
+
+
+def _write_text_atomically(path: str | os.PathLike[str], contents: str, *, temporary_prefix: str) -> None:
+    """Publish complete UTF-8 text through a same-directory temporary file.
+
+    Args:
+        path (str | os.PathLike[str]): Destination whose parent directory already exists.
+        contents (str): Complete text to write before replacing the destination.
+        temporary_prefix (str): Prefix used for the temporary sibling filename.
+
+    Returns:
+        None: The destination is replaced after the staged file has been flushed.
+
+    Raises:
+        OSError: Staging, flushing, replacement, or owned-temporary cleanup fails.
+    """
+    destination = Path(path)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=temporary_prefix,
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(contents)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 class FileDurabilityError(OSError):

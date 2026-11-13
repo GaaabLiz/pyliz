@@ -2,14 +2,15 @@
 
 import configparser
 import os
-import tempfile
 import threading
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 
 import rich
 
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.filesystem.atomic import _write_text_atomically
 
 _ini_write_lock = threading.RLock()
 
@@ -47,28 +48,9 @@ class IniManager:
     def _write_atomic(self, config: configparser.ConfigParser) -> None:
         """Write a complete INI beside the destination and replace atomically."""
         self._ensure_parent_dir()
-        parent = os.path.dirname(os.path.abspath(self.path))
-        temporary_path = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=parent,
-                prefix=".ini-",
-                delete=False,
-            ) as configfile:
-                temporary_path = configfile.name
-                config.write(configfile)
-                configfile.flush()
-                os.fsync(configfile.fileno())
-            os.replace(temporary_path, self.path)
-            temporary_path = None
-        finally:
-            if temporary_path is not None:
-                try:
-                    os.unlink(temporary_path)
-                except FileNotFoundError:
-                    pass
+        contents = StringIO()
+        config.write(contents)
+        _write_text_atomically(self.path, contents.getvalue(), temporary_prefix=".ini-")
 
     def exists(self) -> bool:
         """Return ``True`` when the INI file exists on disk."""
