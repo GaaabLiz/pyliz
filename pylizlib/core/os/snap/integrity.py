@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TypeAlias
+
+from pylizlib.core.os.filesystem.fingerprints import fingerprint_tree
 
 ManifestEntry: TypeAlias = dict[str, str | int | None]
 IntegrityManifest: TypeAlias = dict[str, ManifestEntry]
@@ -13,6 +15,26 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 class SnapshotIntegrityError(RuntimeError):
     """Raised when copied snapshot contents do not match their manifest."""
+
+
+def build_integrity_manifest(root: Path) -> IntegrityManifest:
+    """Measure a completed stored tree using the shared strict SHA-256 scanner.
+
+    Args:
+        root (Path): Real association directory whose files and empty directories must be described.
+
+    Returns:
+        IntegrityManifest: Relative path/type/byte-size/hash records, including the dot-root directory. This
+            describes observed bytes; it does not freeze the tree against external writers.
+
+    Raises:
+        ValueError: A symlink, junction or special entry is encountered.
+        OSError: The tree or a file cannot be read completely.
+    """
+    return {
+        relative: {"type": "directory" if digest == "directory" else "file", "size": size, "sha256": None if digest == "directory" else digest}
+        for relative, (digest, size) in fingerprint_tree(root).items()
+    }
 
 
 def validate_integrity_manifest(manifest: IntegrityManifest | None) -> None:

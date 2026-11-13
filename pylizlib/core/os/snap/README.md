@@ -166,6 +166,14 @@ I journal vengono creati localmente dalle operazioni; gli archivi trasportano
 dati, senza introdurre istruzioni da eseguire al lookup successivo. Una cartella
 con quel nome dentro i dati di un'associazione resta un normale contenuto.
 
+Prima della sostituzione di uno snapshot tramite restore SD viene verificata la
+copia effettiva nello staging: tutte le associazioni devono esistere e i manifest
+disponibili devono corrispondere a percorsi, tipi, dimensioni e SHA-256 dei file.
+Un archivio incompleto o incoerente lascia intatto lo snapshot precedente. La
+stessa verifica protegge import singolo e duplicazione. I metadati legacy senza
+manifest restano esplicitamente non verificati; `allow_unverified_legacy_snapshots`
+continua a regolare la loro installazione e non inventa garanzie di integrità.
+
 La scrittura degli ZIP accetta anche timestamp sorgente precedenti al 1980 e li
 limita all'intervallo rappresentabile dal formato. Import e restore controllano
 prima dell'estrazione il numero di voci, il totale dei byte non compressi e lo

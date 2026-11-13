@@ -7,6 +7,7 @@ from pathlib import Path
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import Snapshot, validate_directory_component
+from pylizlib.core.os.snap.integrity import assert_manifest_matches, build_integrity_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage, get_snapshot_path, validate_snapshot_root
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
@@ -41,7 +42,7 @@ def validate_staged_snapshot_tree(
     json_filename: str,
     metadata_reader: Callable[[Path], Snapshot] | None = None,
 ) -> Snapshot:
-    """Validate staged metadata identity and ensure every associated copy exists.
+    """Validate staged identity, completeness and all available content manifests.
 
     Args:
         staged_path (Path): Completed private snapshot tree to inspect before publication.
@@ -51,13 +52,16 @@ def validate_staged_snapshot_tree(
             SnapshotSerializer.from_json.
 
     Returns:
-        Snapshot: Decoded snapshot after ID equality and presence of every associated directory have been checked.
+        Snapshot: Decoded snapshot after checking ID, real association directories and available content manifests.
+            Legacy associations without manifests retain unknown integrity and remain subject to install policy.
 
     Raises:
         FileNotFoundError: A required source, stored association or metadata entry is absent.
         ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        SnapshotIntegrityError: An observed association differs in paths, types, sizes or hashes from its manifest.
     """
     staged_path = Path(staged_path)
+    assert_no_symlinks(staged_path)
     assert_no_transaction_storage(staged_path)
     json_path = staged_path / validate_directory_component(json_filename, "Snapshot JSON filename")
     if not json_path.is_file():
@@ -69,6 +73,8 @@ def validate_staged_snapshot_tree(
         association_path = staged_path / association.directory_name
         if not association_path.is_dir():
             raise FileNotFoundError(f"Staged association directory '{association_path}' is missing.")
+        if association.integrity_manifest is not None:
+            assert_manifest_matches(association.integrity_manifest, build_integrity_manifest(association_path))
     return snapshot
 
 
