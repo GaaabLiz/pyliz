@@ -37,7 +37,8 @@ def test_competing_process_is_rejected_then_can_reuse_the_same_sidecar(tmp_path)
     with FileLock(path):
         child = _child(path)
         assert child.returncode == 23, child.stderr
-        assert path.read_bytes() == b"existing sidecar"
+    # Windows denies reads that overlap the byte range held by msvcrt.locking.
+    assert path.read_bytes() == b"existing sidecar"
     assert path.stat().st_ino == identity
     child = _child(path)
     assert child.returncode == 0, child.stderr
