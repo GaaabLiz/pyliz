@@ -7,7 +7,8 @@ from pathlib import Path
 from pylizlib.core.os.filesystem.durability import rename_and_sync
 from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.snap.domain import validate_directory_component
-from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _restore_old_metadata, _validate_metadata_paths
+from pylizlib.core.os.snap.storage.recovery.edit_rollback import EDIT_ROLLBACK_PHASES, EditRollback
+from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _validate_metadata_paths
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 
 
@@ -31,38 +32,15 @@ def _recover_edit(journal: SnapshotTransactionJournal, state: str, data: dict, s
     root = storage.path_snapshot.resolve(strict=False)
     _validate_edit(data, storage, journal.workspace)
 
-    # Rollback parks every published target before restoring potentially overlapping old names.
-    # First move published directories back to unique staging slots. Target names
-    # can overlap old source names, so restoring one source at a time could
-    # mistake another association for the copy being rolled back.
+    # Rollback owns separate durable phases so an interrupted rollback can itself be resumed.
     if state in {"prepared", "rollback_decided"}:
-        if data.get("phase") == "publishing":
-            for addition in reversed(data.get("additions", [])):
-                target = root / addition["target"]
-                staged = journal.workspace / addition["staged"]
-                if _lexists(target) and not _lexists(staged):
-                    rename_and_sync(target, staged)
-        for index in reversed(range(len(data.get("moves", [])))):
-            move = data["moves"][index]
-            staged = journal.workspace / move["staged"]
-            target_name = move.get("target")
-            target = root / target_name if target_name else None
-            if data.get("phase") == "publishing" and target is not None and _lexists(target) and not _lexists(staged):
-                rename_and_sync(target, staged)
-
-        for index in reversed(range(len(data.get("moves", [])))):
-            move = data["moves"][index]
-            source = root / move["source"]
-            staged = journal.workspace / move["staged"]
-            if _lexists(staged) and not _lexists(source):
-                rename_and_sync(staged, source)
-        if state == "rollback_decided":
-            _restore_old_metadata(journal, data, storage)
-        journal.cleanup()
+        EditRollback(journal, storage).run()
         return
 
     # A durable commit decision completes publications instead of restoring old names.
     if state in {"commit_decided", "committed"}:
+        if data.get("rollback_phase") not in {None, "not_started"}:
+            raise TransactionRecoveryError("Edit commit decision conflicts with recorded rollback progress.")
         if state == "commit_decided":
             _complete_edit_directories(journal, data, root)
             _publish_new_metadata(journal, data, storage)
@@ -97,6 +75,9 @@ def _validate_edit(data: dict, storage, workspace: Path) -> None:
         raise TransactionRecoveryError("Edit journal moves and additions must be lists.")
     if data.get("phase") not in {"staging", "publishing"}:
         raise TransactionRecoveryError("Edit journal has an invalid phase.")
+    progress = data.get("rollback_phase")
+    if progress is not None and (not isinstance(progress, str) or progress not in EDIT_ROLLBACK_PHASES):
+        raise TransactionRecoveryError("Edit journal has an invalid rollback phase.")
     validator = EditRecordValidator(workspace)
 
     for move in moves:

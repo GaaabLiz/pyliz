@@ -1,4 +1,4 @@
-"""Describe journal JSON without coercing or changing the accepted v1 format."""
+"""Describe legacy v1 journals and v2 edits with durable rollback progress."""
 
 import json
 from pathlib import Path
@@ -62,10 +62,10 @@ class EditEntry(TypedDict):
 
 
 class JournalEnvelope(TypedDict):
-    """Describe the persisted v1 envelope without discarding unknown fields.
+    """Describe persisted journal envelopes without discarding unknown fields.
 
     Attributes:
-        version (int): Format version, currently 1.
+        version (int): Format version: 1 for legacy/general operations, 2 for durable edit rollback progress.
         scope_root (str): Resolved scope path serialized with forward slashes.
         operation (str): Operation discriminator used by the recovery coordinator.
         state (JournalState): Durable decision; allowed names do not impose an FSM.
@@ -80,7 +80,7 @@ class JournalEnvelope(TypedDict):
 
 
 class JournalCodec:
-    """Encode and validate the existing envelope without normalizing its values."""
+    """Encode and validate versioned envelopes without normalizing their values."""
 
     @staticmethod
     def encode(payload: dict) -> str:
@@ -99,7 +99,7 @@ class JournalCodec:
 
     @staticmethod
     def validate(payload: dict, scope_root: Path) -> None:
-        """Reject invalid envelopes in the same order as the original implementation.
+        """Validate legacy envelopes and the v2 envelope reserved for resumable edits.
 
         Args:
             payload (dict): Decoded journal, checked without copying or coercion.
@@ -110,11 +110,14 @@ class JournalCodec:
 
         Raises:
             TransactionRecoveryError: If version, scope, operation, state or payload shape is invalid. Existing
-                equality semantics for version are retained.
+                equality semantics for v1 are retained; v2 requires an integer version and an edit operation.
         """
         from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError
 
-        if not isinstance(payload, dict) or payload.get("version") != 1:
+        if not isinstance(payload, dict):
+            raise TransactionRecoveryError("Unsupported snapshot transaction journal version.")
+        version = payload.get("version")
+        if version != 1 and not (type(version) is int and version == 2 and payload.get("operation") == "edit"):
             raise TransactionRecoveryError("Unsupported snapshot transaction journal version.")
         if payload.get("scope_root") != scope_root.as_posix():
             raise TransactionRecoveryError("Transaction journal belongs to another storage scope.")

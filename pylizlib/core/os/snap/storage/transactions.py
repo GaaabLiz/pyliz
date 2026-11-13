@@ -67,7 +67,8 @@ class SnapshotTransactionJournal:
 
         Notes:
             A non-empty payload dictionary is retained by reference; None or an empty dictionary uses a new empty
-            mapping, matching the existing truthiness rule. The v1 JSON schema and known state names are unchanged.
+            mapping, matching the existing truthiness rule. General operations retain the v1 envelope. Edits use
+            v2 and initialize ``rollback_phase`` so old readers reject progress they cannot safely replay.
         """
         scope_root = Path(scope_root).resolve(strict=False)
         if not scope_root.is_dir() or is_link_or_junction(scope_root):
@@ -81,12 +82,14 @@ class SnapshotTransactionJournal:
         workspace = transactions_path / uuid.uuid4().hex
         workspace.mkdir()
         data = {
-            "version": 1,
+            "version": 2 if operation == "edit" else 1,
             "scope_root": scope_root.as_posix(),
             "operation": operation,
             "state": "prepared",
             "payload": payload or {},
         }
+        if operation == "edit":
+            data["payload"].setdefault("rollback_phase", "not_started")
         journal = cls(workspace, data)
         try:
             if not _sync_directory(transactions_path):
