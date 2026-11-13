@@ -14,6 +14,7 @@ from pylizlib.core.os.snap.operations.backup.associations import association_ide
 from pylizlib.core.os.snap.operations.backup.inspection import BackupArchiveInspector
 from pylizlib.core.os.snap.operations.backup.planning import AssociationRestoreTask, RestorePlanner
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage
@@ -174,6 +175,12 @@ class AssociationRestorer:
 
             # Complete every copy before making the first target visible.
             self._stage_copies(tasks)
+            validate_destructive_destinations(
+                [(task.folder_id, task.destination) for task in tasks],
+                catalogue_path=self.path_catalogue,
+                origin_os=None,
+                operation="publish restored associations",
+            )
             self._publish_copies(tasks)
 
             # Preserve the two existing durable decisions before cleanup.

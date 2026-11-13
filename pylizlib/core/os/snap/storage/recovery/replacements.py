@@ -2,16 +2,72 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from pylizlib.core.os.filesystem.durability import rename_and_sync
 from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
+from pylizlib.core.os.paths.safety import assert_no_link_components
 from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _restore_old_metadata, _validate_metadata_paths
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
+
+
+def _assert_recovery_parents(*paths: Path) -> None:
+    """Refuse recovery through parent links while retaining every recoverable entry.
+
+    Args:
+        *paths (Path): Journal entries whose lexical parents must remain real paths. Leaf links are not followed
+            by entry removal or rename and may represent a recoverable old entry.
+
+    Returns:
+        None: When all parent paths can be inspected without a link component.
+
+    Raises:
+        TransactionRecoveryError: A parent is linked or cannot be inspected safely; the journal remains intact.
+    """
+    try:
+        for path in paths:
+            assert_no_link_components(path.parent)
+    except (ValueError, OSError) as error:
+        raise TransactionRecoveryError(f"Transaction paths have unsafe parent components: {error}") from error
+
+
+def _same_recovery_parent(first: Path, second: Path) -> bool:
+    """Compare real parents without resolving either leaf entry.
+
+    Args:
+        first (Path): Recorded journal entry with a parent to compare.
+        second (Path): Expected association entry with a parent to compare.
+
+    Returns:
+        bool: Whether both checked lexical parents resolve to the same directory spelling.
+
+    Raises:
+        TransactionRecoveryError: A parent contains links or cannot be inspected safely.
+        OSError: Resolving a checked parent fails.
+    """
+    _assert_recovery_parents(first, second)
+    return first.parent.resolve(strict=False) == second.parent.resolve(strict=False)
+
+
+def _same_recovery_entry(first: Path, second: Path) -> bool:
+    """Compare safe parents while leaving the leaf entry itself unresolved.
+
+    Args:
+        first (Path): Recorded journal path or its parent.
+        second (Path): Expected current association path or its parent.
+
+    Returns:
+        bool: Whether both names identify the same lexical entry below real resolved parents. This also accepts
+            older journals that collapsed harmless parent components without following a leaf symlink.
+
+    Raises:
+        TransactionRecoveryError: A parent path contains links or cannot be inspected safely.
+        OSError: Resolving a checked parent fails.
+    """
+    return Path(first.name) == Path(second.name) and _same_recovery_parent(first, second)
 
 
 def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
@@ -61,6 +117,7 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
         # Standalone restore requires absolute staging, destination and backup siblings.
         if not stage.is_absolute() or not destination.is_absolute() or not backup.is_absolute():
             raise TransactionRecoveryError("Manifest restore journal paths must be absolute.")
+        _assert_recovery_parents(stage, destination, backup)
         if stage.parent.resolve(strict=False) != destination.parent.resolve(strict=False):
             raise TransactionRecoveryError("Manifest restore staging path must be beside its destination.")
         if is_link_or_junction(stage) or not stage.name.startswith(f"{destination.name}_staging_"):
@@ -283,11 +340,12 @@ class ReplacementValidator:
                 is retained.
         """
         stage, destination, backup = paths.stage, paths.destination, paths.backup
-        live = Path(os.path.abspath(association.original_path))
+        live = Path(association.original_path).absolute()
+        _assert_recovery_parents(live, stage, destination, backup)
         if self.operation == "install" and entry.get("merge_child"):
-            if destination.parent != live or stage.parent != Path(entry.get("stage_root", stage.parent)):
+            if not _same_recovery_entry(destination.parent, live) or stage.parent != Path(entry.get("stage_root", stage.parent)):
                 raise TransactionRecoveryError("Install merge journal escaped its associated directory.")
-        elif destination != live:
+        elif not _same_recovery_entry(destination, live):
             raise TransactionRecoveryError("Transaction destination does not match its association.")
         if backup.parent != destination.parent or not backup.name.startswith(f"{destination.name}_bck_"):
             raise TransactionRecoveryError("External backup path is not a generated sibling of its destination.")
@@ -343,12 +401,13 @@ class ReplacementValidator:
             if not isinstance(raw_path, str) or not raw_path:
                 raise TransactionRecoveryError("Replacement journal staging root must be a nonempty string.")
             path = Path(raw_path)
+            _assert_recovery_parents(path)
             if self.operation == "sync":
                 allowed = path.parent == self.root and any(path.name.startswith(f"{association.directory_name}_staging_") for association in self.associations.values())
             elif self.operation == "install":
                 allowed = any(
-                    path.parent == live.parent and path.name.startswith(f"{live.name}_staging_")
-                    for live in (Path(os.path.abspath(association.original_path)) for association in self.associations.values())
+                    _same_recovery_parent(path, live) and path.name.startswith(f"{live.name}_staging_")
+                    for live in (Path(association.original_path).absolute() for association in self.associations.values())
                 )
             else:
                 allowed = False

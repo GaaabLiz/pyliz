@@ -73,3 +73,36 @@ def test_edit_duplicate_sets_are_local_to_one_plan(tmp_path):
     data["moves"].append({"source": "a", "target": "d", "staged": "original_1"})
     with pytest.raises(TransactionRecoveryError, match="duplicate source names"):
         _validate_edit(data, storage, tmp_path)
+
+
+def test_standalone_restore_recovery_refuses_a_changed_linked_parent(tmp_path):
+    """A moved parent cannot redirect rollback into another user's directory."""
+    from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
+
+    catalogue = tmp_path / "catalogue"
+    catalogue.mkdir()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    backup = parent / "target_bck_test"
+    backup.mkdir()
+    (backup / "old").write_bytes(b"recoverable original")
+    destination = parent / "target"
+    journal = SnapshotTransactionJournal.begin(
+        catalogue,
+        "restore_associations_manifest",
+        {"entries": [{"folder_id": "folder", "stage": str(parent / "target_staging_test"), "destination": str(destination), "backup": str(backup), "had_original": True}]},
+    )
+    moved = tmp_path / "moved"
+    parent.rename(moved)
+    foreign = tmp_path / "foreign"
+    (foreign / "target").mkdir(parents=True)
+    (foreign / "target/important").write_bytes(b"foreign data")
+    try:
+        parent.symlink_to(foreign, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"directory symlinks are unavailable: {error}")
+    with pytest.raises(TransactionRecoveryError, match="unsafe parent"):
+        journal.recover()
+    assert journal.path.is_file()
+    assert (moved / "target_bck_test/old").read_bytes() == b"recoverable original"
+    assert (foreign / "target/important").read_bytes() == b"foreign data"

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from pylizlib.core.os.filesystem.tree import assert_no_symlinks
+from pylizlib.core.os.paths.safety import assert_no_link_components
 from pylizlib.core.os.windows.drives import get_drive_type, get_mapped_drive_unc_root
 from pylizlib.core.os.windows.security import copy_security
 from pylizlib.core.os.windows.streams import copy_streams
@@ -107,6 +108,8 @@ def test_native_junction_is_rejected_without_visiting_its_target(tmp_path):
         assert junction.is_junction()
         with pytest.raises(ValueError, match="symbolic link|junction"):
             assert_no_symlinks(source)
+        with pytest.raises(ValueError, match="junction"):
+            assert_no_link_components(junction / ".." / "target")
         assert (target / "keep").read_bytes() == b"unchanged"
     finally:
         junction.rmdir()

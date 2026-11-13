@@ -1,11 +1,10 @@
 """Shared validation for filesystem destinations that an operation can replace or remove."""
 
-import os
 import platform
 from collections.abc import Iterable
 from pathlib import Path
 
-from pylizlib.core.os.paths.safety import is_critical_system_path
+from pylizlib.core.os.paths.safety import assert_no_link_components, is_critical_system_path
 from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 
 
@@ -16,9 +15,9 @@ def validate_destructive_destinations(
     origin_os: str | None,
     operation: str,
 ) -> list[Path]:
-    """Validate origin OS, critical paths, catalogue overlap and pairwise overlap.
+    """Validate origin OS, critical paths, overlap and linked path components.
 
-    Returns normalized absolute paths in input order. Resolved paths are used
+    Returns lexical absolute paths in input order. Resolved paths are used
     for safety comparisons, while the returned lexical paths preserve the
     filesystem entry that the caller intends to replace or remove.
 
@@ -32,7 +31,7 @@ def validate_destructive_destinations(
 
     Returns:
         list[Path]: Absolute lexical destination paths in input order, after OS, critical-path, catalogue and
-            pairwise-overlap checks.
+            pairwise-overlap and link-component checks. Parent components are retained for subsequent I/O.
 
     Raises:
         RuntimeError: The requested operation cannot complete; a wrapped failure retains its original cause where
@@ -45,7 +44,7 @@ def validate_destructive_destinations(
     destination_paths = []
     resolved_destinations = []
     for identity, raw_path in destinations:
-        path = Path(os.path.abspath(raw_path))
+        path = Path(raw_path).absolute()
         try:
             resolved = path.resolve(strict=False)
         except Exception as error:
@@ -68,5 +67,9 @@ def validate_destructive_destinations(
         for other_identity, other_destination in resolved_destinations[index + 1 :]:
             if same_filesystem_entry(destination, other_destination) or destination in other_destination.parents or other_destination in destination.parents:
                 raise ValueError(f"{operation.capitalize()} destinations cannot be coincident or nested: '{identity}' at '{destination}' and '{other_identity}' at '{other_destination}'.")
+
+    # Keep lexical semantics for I/O and reject links before they can redirect any component.
+    for path in destination_paths:
+        assert_no_link_components(path)
 
     return destination_paths
