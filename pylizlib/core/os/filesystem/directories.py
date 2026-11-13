@@ -101,7 +101,16 @@ def check_path_file(path: str):
 
 
 def _count_pathsub_entries(path: str | Path, *, include_files: bool = False, include_dirs: bool = False) -> int:
-    """Count selected files and directories beneath a root path."""
+    """Count selected files and directories beneath a root path.
+
+    Args:
+        path (str | Path): Root path to scan recursively.
+        include_files (bool): Include file entries in the count.
+        include_dirs (bool): Include directory entries in the count.
+
+    Returns:
+        int: Number of selected entries found beneath the root path.
+    """
     return sum((len(files) if include_files else 0) + (len(dirs) if include_dirs else 0) for _, dirs, files in os.walk(path))
 
 
