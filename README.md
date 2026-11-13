@@ -16,8 +16,8 @@ Both commands render the typed Google-style docstrings with pdoc.
 Run the snapshot and shared-primitive checks from the repository root:
 
 ```sh
-uv run pytest test/core/test_documentation_contracts.py test/core/os/snap \
-    test/core/os/filesystem test/core/os/paths test/core/data/text -q
+uv run pytest test/unit/core/test_documentation_contracts.py test/unit/core/os/snap \
+    test/unit/core/os/filesystem test/unit/core/os/paths test/unit/core/data/text -q
 ```
 
 Optional features outside this scope have separate extras in `pyproject.toml`.

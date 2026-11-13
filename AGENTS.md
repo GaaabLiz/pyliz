@@ -7,7 +7,7 @@ Read [AI_CONTEXT.md](AI_CONTEXT.md) before making changes. For a subsystem with 
 - This is a Python library. `pyproject.toml` requires Python 3.12 or later; use `uv` for the project environment and commands.
 - Inspect the implementation, its callers, and nearby tests before changing behavior. Keep changes scoped to the requested task.
 - Treat public imports, function signatures, serialized JSON, archive formats, and documented failure behavior as compatibility contracts. Check compatibility adapters and legacy tests before removing or changing them.
-- Add or update tests for behavior changes. Put module-level tests under the corresponding `test/core` path; put multi-module workflows using public APIs under `test/integration`.
+- Add or update tests for behavior changes. Put unit tests under `test/unit/` using the same relative package path as the source module (for example, `pylizlib/core/network/req.py` maps to `test/unit/core/network/req.py`). Group multi-module workflows by feature under `test/integration/` (for example, `test/integration/snap/`).
 - Use generated local fixtures for deterministic tests. Avoid network access unless the task explicitly requires it; optional AI and media tests may need extras, models, or network access.
 - Follow Ruff settings in `ruff.toml` (line length 200; lint selections E, F, I). Public APIs use typed Google-style docstrings; preserve that style when editing documented code.
 
@@ -30,14 +30,14 @@ uv sync --group dev
 Run snapshot unit and integration tests:
 
 ```sh
-uv run pytest test/core/os/snap test/integration/snap -q
+uv run pytest test/unit/core/os/snap test/integration/snap -q
 ```
 
 Run the broader shared filesystem and text contracts:
 
 ```sh
-uv run pytest test/core/test_documentation_contracts.py test/core/os/snap \
-    test/core/os/filesystem test/core/os/paths test/core/data/text -q
+uv run pytest test/unit/core/test_documentation_contracts.py test/unit/core/os/snap \
+    test/unit/core/os/filesystem test/unit/core/os/paths test/unit/core/data/text -q
 ```
 
 Run repository quality checks with `make lint` and `make format-check`. `make test` runs the configured full suite and enables the media extra. The integration suite can also be pointed at a mounted filesystem with `./test/integration/snap/run.py --root /path/to/mount`.

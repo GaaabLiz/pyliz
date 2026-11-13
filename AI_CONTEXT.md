@@ -23,8 +23,9 @@ The project is both an importable library and a source for optional application 
 | `pylizlib/media/` | Media models and processing utilities |
 | `pylizlib/ai/` | Optional AI media scanning providers and orchestration |
 | `pylizlib/qt/`, `pylizlib/qtfw/` | Optional Qt and Qt widget support |
-| `test/` | Tests organized mostly alongside the package modules |
-| `test/integration/snap/` | Public snapshot workflows against isolated real filesystem trees |
+| `test/unit/` | Unit tests mirroring the relative package and module paths under `pylizlib/` |
+| `test/integration/<feature>/` | Public workflows grouped by feature, such as snapshots, Qt operations, or AI media scanning |
+| `test/support/` | Shared test helpers and fixtures used across unit and integration suites |
 
 ## Snapshot design
 
@@ -38,12 +39,12 @@ The detailed snapshot guide is [pylizlib/core/os/snap/README.md](pylizlib/core/o
 
 ## Testing and quality
 
-The existing `test/core/` tree follows package responsibilities and includes both unit-level and integration coverage. New public workflows that combine catalogue, manager, storage, ZIP, or real filesystem behavior belong under `test/integration/`.
+Unit tests live under `test/unit/` and mirror source paths: for example, `pylizlib/core/network/req.py` is tested from `test/unit/core/network/req.py`. Multi-module public workflows belong under `test/integration/<feature>/`; snapshot, Qt, qtfw, and AI workflows are grouped by feature there.
 
 For snapshot changes, start with:
 
 ```sh
-uv run pytest test/core/os/snap test/integration/snap -q
+uv run pytest test/unit/core/os/snap test/integration/snap -q
 ```
 
 The integration fixture creates a unique workspace under `test_local/snapshot_integration`, because snapshot destructive-path validation can classify OS-managed temporary directories as critical. A passing test removes only its own workspace; a failed test retains it for diagnosis. The executable runner accepts `--root` to run the same workflows on another local directory or a mounted share.
