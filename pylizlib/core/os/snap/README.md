@@ -360,9 +360,9 @@ propri test: non va inserita in uno spostamento di codice.
 Dalla root del repository:
 
 ```sh
-.venv/bin/python -m pytest test/core/test_documentation_contracts.py \
-    test/core/os/snap test/core/os/filesystem test/core/os/paths \
-    test/core/data/text -q --disable-warnings
+.venv/bin/python -m pytest test/unit/core/test_documentation_contracts.py \
+    test/unit/core/os/snap test/unit/core/os/filesystem test/unit/core/os/paths \
+    test/unit/core/data/text -q --disable-warnings
 .venv/bin/ruff check pylizlib/core/os/snap pylizlib/core/os/filesystem \
     pylizlib/core/os/paths pylizlib/core/os/windows pylizlib/core/os/archives \
     pylizlib/core/data/text
@@ -373,7 +373,7 @@ I test di caratterizzazione sono in `test_refactor_contracts.py`; quelli dei
 moduli estratti e delle strategie sono in `test_refactor_modules.py`.
 `test_public_api.py` e `test_second_refactor_contracts.py` confrontano firme,
 default, identità e campi pubblici con le fixture precedenti ai due refactor.
-`test/core/test_documentation_contracts.py` richiede sezioni Google tipizzate
+`test/unit/core/test_documentation_contracts.py` richiede sezioni Google tipizzate
 per parametri, ritorni/yield e campi dichiarati, oltre alla riga vuota prima
 dei blocchi di commento. Questi controlli strutturali affiancano la review del
 significato e i test comportamentali; non provano da soli la correttezza del testo.
