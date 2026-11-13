@@ -258,8 +258,9 @@ class TestSnapshotManagerCreate(SnapshotManagerTestHelper):
         damaged_backups = []
 
         def fail_cleanup(path, *args, **kwargs):
+            """Interrupt only deletion of the old committed snapshot backup."""
             backup = Path(path)
-            if backup.is_dir():
+            if backup.name == "original" and backup.parent.parent == mgr.path_catalogue / ".pyliz_transactions" and backup.is_dir():
                 next(p for p in backup.rglob("*") if p.is_file()).unlink()
                 damaged_backups.append(backup)
                 raise PermissionError("cleanup interrupted")
