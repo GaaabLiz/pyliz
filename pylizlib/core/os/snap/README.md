@@ -274,6 +274,16 @@ recovery si ferma e conserva journal e copie disponibili invece di proseguire
 sopra dati ambigui. Le copie precedenti vengono eliminate soltanto dopo che il
 journal registra il commit.
 
+I journal delle modifiche (`edit`) usano il formato v2: il rollback registra
+separatamente il parcheggio dei nuovi nomi, il ripristino degli originali e il
+completamento prima della pulizia. Un secondo arresto riprende la fase registrata
+senza scambiare gli originali già ripristinati per nuove directory da rimuovere.
+Gli altri journal restano v1. I journal edit v1 vengono recuperati quando lo stato
+è determinabile; se nomi vecchi e nuovi si sovrappongono e una copia originale
+non è più nello staging, il recupero si ferma conservando ogni copia disponibile.
+Non usare una versione precedente della libreria con journal v2 ancora pendenti:
+il lettore precedente li rifiuta perché non conosce le nuove fasi di rollback.
+
 | Flusso | Ordine e limite da conservare |
 |---|---|
 | Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. La recovery completa la pubblicazione se il commit era già deciso. |

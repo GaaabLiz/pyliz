@@ -5,7 +5,7 @@ import json
 import pytest
 
 from pylizlib.core.os.snap.storage.recovery.models import JournalCodec
-from pylizlib.core.os.snap.storage.transactions import TransactionRecoveryError
+from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 
 
 def test_codec_preserves_unknown_fields_and_legacy_version_equality(tmp_path):
@@ -19,7 +19,7 @@ def test_codec_preserves_unknown_fields_and_legacy_version_equality(tmp_path):
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
-        ({"version": 2, "state": "unknown"}, "Unsupported snapshot transaction journal version"),
+        ({"version": 3, "state": "unknown"}, "Unsupported snapshot transaction journal version"),
         ({"scope_root": "other", "operation": 1}, "belongs to another storage scope"),
         ({"operation": 1}, "operation must be a string"),
         ({"state": "unknown"}, "invalid state"),
@@ -32,3 +32,15 @@ def test_codec_retains_validation_order(tmp_path, changes, message):
     payload.update(changes)
     with pytest.raises(TransactionRecoveryError, match=message):
         JournalCodec.validate(payload, tmp_path)
+
+
+def test_v2_is_reserved_for_edit_rollback_progress(tmp_path):
+    """Old readers must reject resumable edit journals rather than ignore their new progress fields."""
+    journal = SnapshotTransactionJournal.begin(tmp_path, "edit")
+    assert journal.payload["version"] == 2
+    assert journal.payload["payload"]["rollback_phase"] == "not_started"
+    JournalCodec.validate(journal.payload, tmp_path)
+    for operation in ["install", "sync", "replace_snapshot"]:
+        journal.payload["operation"] = operation
+        with pytest.raises(TransactionRecoveryError, match="Unsupported"):
+            JournalCodec.validate(journal.payload, tmp_path)
