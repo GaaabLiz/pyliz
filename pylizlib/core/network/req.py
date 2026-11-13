@@ -1,8 +1,9 @@
 """HTTP/network request helpers and response wrappers."""
 
 import socket
+from collections.abc import Callable
 from enum import Enum
-from typing import Mapping
+from typing import Any, Mapping
 
 import requests
 from requests.models import Response
@@ -149,16 +150,31 @@ def is_internet_available() -> bool:
         return False
 
 
-def exec_get(
+def _execute_request(
+    method: str,
+    request: Callable[..., Response],
     url: str,
-    headers: Mapping[str, str | bytes | None] | None = None,
-    sec_timeout: int | None = 10,
+    *,
+    headers: Mapping[str, str | bytes | None] | None,
+    timeout: int | None,
+    **request_options: Any,
 ) -> NetResponse:
-    """Execute an HTTP GET request and return a standardized ``NetResponse``."""
+    """Execute one requests operation and normalize its response or error.
 
+    Args:
+        method (str): HTTP method used in the diagnostic log.
+        request (Callable[..., Response]): Requests function, passed directly to preserve its public behavior.
+        url (str): Request destination.
+        headers (Mapping[str, str | bytes | None] | None): Optional request headers.
+        timeout (int | None): Request timeout in seconds.
+        request_options (dict[str, Any]): Method-specific keyword arguments forwarded to requests.
+
+    Returns:
+        NetResponse: Classified response or normalized request error.
+    """
     try:
-        getattr(logger, "trace", logger.debug)("Executing GET request on URL: " + url)
-        response = requests.get(url, allow_redirects=True, headers=headers, timeout=sec_timeout)
+        getattr(logger, "trace", logger.debug)(f"Executing {method} request on URL: {url}")
+        response = request(url, allow_redirects=True, headers=headers, timeout=timeout, **request_options)
         return NetResponse(response, _classify_http_status(response.status_code))
     except requests.ConnectionError as e:
         return NetResponse(None, NetResponseType.CONNECTION_ERROR, e)
@@ -166,6 +182,15 @@ def exec_get(
         return NetResponse(None, NetResponseType.TIMEOUT, e)
     except requests.RequestException as e:
         return NetResponse(None, NetResponseType.REQUEST_ERROR, e)
+
+
+def exec_get(
+    url: str,
+    headers: Mapping[str, str | bytes | None] | None = None,
+    sec_timeout: int | None = 10,
+) -> NetResponse:
+    """Execute an HTTP GET request and return a standardized ``NetResponse``."""
+    return _execute_request("GET", requests.get, url, headers=headers, timeout=sec_timeout)
 
 
 def exec_post(
@@ -176,24 +201,15 @@ def exec_post(
     sec_timeout: int | None = 10,
 ) -> NetResponse:
     """Execute an HTTP POST request and return a standardized ``NetResponse``."""
-
-    try:
-        getattr(logger, "trace", logger.debug)("Executing POST request on URL: " + url)
-        response = requests.post(
-            url,
-            json=payload,
-            verify=verify_bool,
-            allow_redirects=True,
-            headers=headers,
-            timeout=sec_timeout,
-        )
-        return NetResponse(response, _classify_http_status(response.status_code))
-    except requests.ConnectionError as e:
-        return NetResponse(None, NetResponseType.CONNECTION_ERROR, e)
-    except requests.Timeout as e:
-        return NetResponse(None, NetResponseType.TIMEOUT, e)
-    except requests.RequestException as e:
-        return NetResponse(None, NetResponseType.REQUEST_ERROR, e)
+    return _execute_request(
+        "POST",
+        requests.post,
+        url,
+        headers=headers,
+        timeout=sec_timeout,
+        json=payload,
+        verify=verify_bool,
+    )
 
 
 def get_file_size_byte(url: str, exception_on_fail: bool = False) -> int:
