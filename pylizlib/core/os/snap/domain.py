@@ -66,6 +66,17 @@ class SnapDirAssociation(_AssociationModel):
         """
         return super().validate()
 
+    def record_captured_content(self, manifest: IntegrityManifest) -> None:
+        """Record the captured manifest and derive this association's content size.
+
+        Args:
+            manifest (IntegrityManifest): Validated content manifest produced by a completed copy.
+
+        Returns:
+            None: The manifest and its derived size are stored on this association.
+        """
+        return super().record_captured_content(manifest)
+
     @classmethod
     def next_index(cls):
         """Increments and returns the class-level index for new directory associations.

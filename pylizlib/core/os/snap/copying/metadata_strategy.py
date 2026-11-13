@@ -173,7 +173,7 @@ class _ExtendedMetadataCopyStrategy(DirectoryCopyStrategy):
                     message_callback,
                     manifest=staged_manifest,
                     expected_manifest=expected_manifest,
-                    metadata_copier=_ExtendedMetadataCopyStrategy._preserve_metadata,
+                    metadata_copier=self._preserve_metadata,
                 )
             else:
                 self.delegate.copy_directory(
