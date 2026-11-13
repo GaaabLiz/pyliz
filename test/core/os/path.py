@@ -251,6 +251,14 @@ class ScanDirectoryTestCase(unittest.TestCase):
 
 
 class DirContainsTestCase(unittest.TestCase):
+    def _assert_dir_contains_media(self, predicate):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertTrue(predicate(td))
+            empty_dir = os.path.join(td, "empty_dir")
+            os.mkdir(empty_dir)
+            self.assertFalse(predicate(empty_dir))
+
     def test_contains_all(self):
         with tempfile.TemporaryDirectory() as td:
             _build_tree(td)
@@ -272,20 +280,10 @@ class DirContainsTestCase(unittest.TestCase):
             self.assertFalse(dir_contains(td, ["x", "y"], at_least_one=True))
 
     def test_dir_contains_image(self):
-        with tempfile.TemporaryDirectory() as td:
-            _build_tree(td)
-            self.assertTrue(dir_contains_image(td))
-            empty_dir = os.path.join(td, "empty_dir")
-            os.mkdir(empty_dir)
-            self.assertFalse(dir_contains_image(empty_dir))
+        self._assert_dir_contains_media(dir_contains_image)
 
     def test_dir_contains_video(self):
-        with tempfile.TemporaryDirectory() as td:
-            _build_tree(td)
-            self.assertTrue(dir_contains_video(td))
-            empty_dir = os.path.join(td, "empty_dir")
-            os.mkdir(empty_dir)
-            self.assertFalse(dir_contains_video(empty_dir))
+        self._assert_dir_contains_media(dir_contains_video)
 
 
 class GetFoldersFromTestCase(unittest.TestCase):

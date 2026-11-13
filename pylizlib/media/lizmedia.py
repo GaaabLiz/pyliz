@@ -73,7 +73,6 @@ class MediaListResult:
         return len(self.accepted) + len(self.rejected) + len(self.errored)
 
 
-# noinspection DuplicatedCode
 @dataclass
 class LizMedia:
     """

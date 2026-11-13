@@ -1,29 +1,13 @@
-import os
-import tempfile
 import unittest
-from unittest.mock import patch
 
 from pylizlib.core.app.pylizapp import PylizApp
 from pylizlib.core.app.pylizini import PylizIniHandler, PylizIniItem
+from test.core.app._support import isolate_pylizapp_home
 
 
 class PylizIniHandlerTestCase(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp_dir.cleanup)
-
-        def fake_home_dir(app_name, create_if_not=True):
-            target = os.path.join(self.temp_dir.name, app_name)
-            if create_if_not:
-                os.makedirs(target, exist_ok=True)
-            return target
-
-        self.path_patcher = patch(
-            "pylizlib.core.app.pylizapp.pathutils.get_app_home_dir",
-            side_effect=fake_home_dir,
-        )
-        self.path_patcher.start()
-        self.addCleanup(self.path_patcher.stop)
+        self.temp_dir = isolate_pylizapp_home(self)
 
         self.app = PylizApp("ConfigApp")
         self.app.create_ini("settings.ini")

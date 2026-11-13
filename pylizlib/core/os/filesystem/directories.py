@@ -100,6 +100,11 @@ def check_path_file(path: str):
         raise NotADirectoryError(f"Path {path} is not a file!")
 
 
+def _count_pathsub_entries(path: str | Path, *, include_files: bool = False, include_dirs: bool = False) -> int:
+    """Count selected files and directories beneath a root path."""
+    return sum((len(files) if include_files else 0) + (len(dirs) if include_dirs else 0) for _, dirs, files in os.walk(path))
+
+
 def count_pathsub_files(path):
     """Count files beneath a path, including files in subdirectories.
 
@@ -109,10 +114,7 @@ def count_pathsub_files(path):
     Returns:
         int: Number of files found by the recursive walk.
     """
-    count = 0
-    for root, dirs, files in os.walk(path):
-        count += len(files)
-    return count
+    return _count_pathsub_entries(path, include_files=True)
 
 
 def count_pathsub_dirs(path):
@@ -124,10 +126,7 @@ def count_pathsub_dirs(path):
     Returns:
         int: Number of subdirectories found by the recursive walk.
     """
-    count = 0
-    for root, dirs, files in os.walk(path):
-        count += len(dirs)
-    return count
+    return _count_pathsub_entries(path, include_dirs=True)
 
 
 def count_pathsub_elements(path):
@@ -139,10 +138,7 @@ def count_pathsub_elements(path):
     Returns:
         int: Combined number of files and subdirectories found recursively.
     """
-    count = 0
-    for root, dirs, files in os.walk(path):
-        count += len(files) + len(dirs)
-    return count
+    return _count_pathsub_entries(path, include_files=True, include_dirs=True)
 
 
 def scan_directory(path: str, on_file, on_folder):
