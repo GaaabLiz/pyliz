@@ -2,7 +2,9 @@
 
 import json
 import os
-import tempfile
+from pathlib import Path
+
+from pylizlib.core.os.filesystem.atomic import _write_text_atomically
 
 
 def write_json_to_file(path, filename, content):
@@ -20,30 +22,10 @@ def write_json_to_file(path, filename, content):
         TypeError: The value cannot be serialized as JSON.
         OSError: Staging or replacing the output file fails.
     """
+    directory = Path(path)
     if not os.path.exists(path):
         os.makedirs(path)
 
     # Serialize first so invalid values cannot truncate an existing file.
     serialized = json.dumps(content, indent=4)
-    file_path = os.path.join(path, filename)
-    temporary_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path,
-            prefix=".json-",
-            delete=False,
-        ) as json_file:
-            temporary_path = json_file.name
-            json_file.write(serialized)
-            json_file.flush()
-            os.fsync(json_file.fileno())
-        os.replace(temporary_path, file_path)
-        temporary_path = None
-    finally:
-        if temporary_path is not None:
-            try:
-                os.unlink(temporary_path)
-            except FileNotFoundError:
-                pass
+    _write_text_atomically(directory / filename, serialized, temporary_prefix=".json-")
