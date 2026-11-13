@@ -157,6 +157,15 @@ legacy. Per cambiare destinazione,
 accetta una mappa dagli ID persistenti delle associazioni ai nuovi percorsi; le
 associazioni non indicate mantengono il percorso salvato nell'archivio.
 
+Import e restore SD rifiutano alberi che contengono lo storage operativo
+`.pyliz_transactions` alla radice dello snapshot. L'import del catalogo verifica
+tutti gli ingressi prima di pubblicare la prima voce. La riserva comprende le
+varianti di maiuscole e i suffissi di punti/spazi che possono diventare alias
+su Windows. Anche gli ID snapshot non possono occupare questo namespace.
+I journal vengono creati localmente dalle operazioni; gli archivi trasportano
+dati, senza introdurre istruzioni da eseguire al lookup successivo. Una cartella
+con quel nome dentro i dati di un'associazione resta un normale contenuto.
+
 La scrittura degli ZIP accetta anche timestamp sorgente precedenti al 1980 e li
 limita all'intervallo rappresentabile dal formato. Import e restore controllano
 prima dell'estrazione il numero di voci, il totale dei byte non compressi e lo

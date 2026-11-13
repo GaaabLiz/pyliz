@@ -8,7 +8,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SequentialFileCopyStrategy
 from pylizlib.core.os.snap.domain import Snapshot, validate_directory_component
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.storage.paths import get_snapshot_path, validate_snapshot_root
+from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage, get_snapshot_path, validate_snapshot_root
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks
 
@@ -58,6 +58,7 @@ def validate_staged_snapshot_tree(
         ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
     """
     staged_path = Path(staged_path)
+    assert_no_transaction_storage(staged_path)
     json_path = staged_path / validate_directory_component(json_filename, "Snapshot JSON filename")
     if not json_path.is_file():
         raise FileNotFoundError(f"Staged snapshot metadata '{json_path}' is missing.")
@@ -107,6 +108,9 @@ def publish_snapshot_tree(
         FileNotFoundError: A required source, stored association or metadata entry is absent.
     """
 
+    # Incoming trees cannot introduce instructions into locally trusted recovery storage.
+    assert_no_transaction_storage(Path(source))
+
     # Validate containment and recover older work before allocating a new journal.
     catalogue_root = Path(catalogue_path).resolve(strict=False)
     assert_destination_outside_source(source, catalogue_root)
@@ -133,6 +137,7 @@ def publish_snapshot_tree(
         if prepare_staging is not None:
             prepare_staging(staged_path)
         assert_no_symlinks(staged_path)
+        assert_no_transaction_storage(staged_path)
 
         # Recheck the target after staging; concurrent presence changes abort publication.
         destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
