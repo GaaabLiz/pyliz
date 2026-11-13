@@ -13,6 +13,7 @@ from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.transactions import (
     SnapshotTransactionJournal,
     prepare_snapshot_metadata,
@@ -102,6 +103,7 @@ class SnapshotInstaller:
         """
         self.storage = storage
 
+    @coordinated("storage.path_catalogue")
     def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """Installs the snapshot's contents to their original locations on the filesystem.
         Copies are prepared and verified in staging before live destinations are replaced or merged.
@@ -121,6 +123,7 @@ class SnapshotInstaller:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             SnapshotInstallMetadataError: If the directory installation committed but updating ``date_last_used``
                 failed. Temporary old copies are retained for recovery when replacement mode staged them, and
                 ``metadata_published`` describes the JSON outcome when the metadata adapter can report it.
@@ -185,6 +188,7 @@ class SnapshotInstaller:
         journal.finalize(cleanup_paths, "Installation")
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
 
+    @coordinated("storage.path_catalogue")
     def remove_installed_copies(self, message_callback=None):
         """Removes all directories on the system that this snapshot is managing.
         This is effectively an 'uninstall' operation for the snapshot's associated directories.
@@ -199,6 +203,7 @@ class SnapshotInstaller:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ExceptionGroup: If any target could not be removed. Other targets are still attempted, and metadata is
                 left unchanged.
             NotADirectoryError: A required real directory is missing, is a link, or has another entry type.

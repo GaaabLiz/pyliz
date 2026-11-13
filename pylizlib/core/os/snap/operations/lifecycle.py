@@ -10,6 +10,7 @@ from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import catalogue_access, coordinated, observer_callback
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source
@@ -54,6 +55,7 @@ class SnapshotLifecycle:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             FileExistsError: If the destination exists and replacement is disabled.
 
         Notes:
@@ -66,37 +68,41 @@ class SnapshotLifecycle:
         self.storage.root_path()
         for association in self.storage.snapshot.directories:
             assert_destination_outside_source(association.original_path, self.storage.path_catalogue)
-        self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
-        recover_storage_transactions(self.storage)
-        if not replace_existing and (self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()):
-            raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
+        with catalogue_access(self.storage.path_catalogue):
+            progress_callback = observer_callback(progress_callback)
+            message_callback = observer_callback(message_callback)
+            self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
+            recover_storage_transactions(self.storage)
+            if not replace_existing and (self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()):
+                raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
 
-        had_original = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
-        journal = SnapshotTransactionJournal.begin(
-            self.storage.path_catalogue,
-            "snapshot_tree",
-            {"snapshot_id": self.storage.snapshot.id, "had_original": had_original},
-        )
-        transaction_path = journal.workspace
-        staging_path = transaction_path / "snapshot"
-        backup_path = transaction_path / "original"
-        previous_state = CapturedContentState.capture(self.storage.snapshot)
-        logger.info("Creating snapshot id=%s associations=%s", self.storage.snapshot.id, len(self.storage.snapshot.directories))
-        try:
-            self._stage_snapshot_contents(staging_path, progress_callback, message_callback)
-            self._publish_created_snapshot(journal, staging_path, backup_path, had_original, replace_existing)
-        except Exception as error:
-            previous_state.restore_associations(self.storage.snapshot)
-            previous_state.restore_capture_interval(self.storage.snapshot)
+            had_original = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
+            journal = SnapshotTransactionJournal.begin(
+                self.storage.path_catalogue,
+                "snapshot_tree",
+                {"snapshot_id": self.storage.snapshot.id, "had_original": had_original},
+            )
+            transaction_path = journal.workspace
+            staging_path = transaction_path / "snapshot"
+            backup_path = transaction_path / "original"
+            previous_state = CapturedContentState.capture(self.storage.snapshot)
+            logger.info("Creating snapshot id=%s associations=%s", self.storage.snapshot.id, len(self.storage.snapshot.directories))
             try:
-                journal.decide_rollback()
-            except Exception as rollback_error:
-                error.add_note(f"Persistent recovery journal retained at '{journal.path}': {rollback_error}")
-            raise
+                self._stage_snapshot_contents(staging_path, progress_callback, message_callback)
+                self._publish_created_snapshot(journal, staging_path, backup_path, had_original, replace_existing)
+            except Exception as error:
+                previous_state.restore_associations(self.storage.snapshot)
+                previous_state.restore_capture_interval(self.storage.snapshot)
+                try:
+                    journal.decide_rollback()
+                except Exception as rollback_error:
+                    error.add_note(f"Persistent recovery journal retained at '{journal.path}': {rollback_error}")
+                raise
 
-        journal.finalize([backup_path], "Snapshot creation")
-        logger.info("Created snapshot id=%s", self.storage.snapshot.id)
+            journal.finalize([backup_path], "Snapshot creation")
+            logger.info("Created snapshot id=%s", self.storage.snapshot.id)
 
+    @coordinated("storage.path_catalogue")
     def delete(self, message_callback=None):
         """Deletes the snapshot's directory, propagating filesystem failures.
 
@@ -106,10 +112,14 @@ class SnapshotLifecycle:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
         recover_storage_transactions(self.storage)
         remove_directory_or_move_to_temp(self.storage.root_path(), message_callback=message_callback)
 
+    @coordinated("storage.path_catalogue")
     def duplicate(self, message_callback=None):
         """Creates a duplicate of the current snapshot with a new ID and name.
         The entire snapshot directory is copied, and a new JSON file is created for the copy.
@@ -122,6 +132,7 @@ class SnapshotLifecycle:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             FileNotFoundError: If the original snapshot path does not exist.
         """
         recover_storage_transactions(self.storage)

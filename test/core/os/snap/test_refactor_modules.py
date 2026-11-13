@@ -324,7 +324,7 @@ def test_failed_publication_preparation_preserves_existing_tree(tmp_path):
     with pytest.raises(RuntimeError, match="prepare failed"):
         publish_snapshot_tree(source, "id", catalogue, replace_existing=True, prepare_staging=fail)
     assert (destination / "old").read_text() == "old"
-    assert list(catalogue.iterdir()) == [destination]
+    assert set(catalogue.iterdir()) == {destination, catalogue / ".pyliz_snapshot.lock"}
 
 
 def test_extracted_paths_reject_non_component_and_contain_child(tmp_path):

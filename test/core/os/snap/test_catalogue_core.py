@@ -106,7 +106,7 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
             self.cat.add(replacement)
 
         self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, before)
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {dest, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_get_all_skips_corrupted_entries(self):
         # Create a valid snapshot

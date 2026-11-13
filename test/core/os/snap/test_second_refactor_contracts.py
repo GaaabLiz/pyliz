@@ -26,7 +26,7 @@ def _ast_dump(node):
 def test_current_public_declarations_remain_compatible():
     """Protect APIs added after the first refactor, including class identities."""
     fixture = json.loads((Path(__file__).parent / "fixtures" / "public_api_v2.json").read_text())
-    assert snap.__all__ == fixture["exports"]
+    assert snap.__all__ == [*fixture["exports"], "SnapshotBusyError"]
     for name, expected in fixture["classes"].items():
         cls = getattr(snap, name)
         assert cls.__module__ == expected["module"]

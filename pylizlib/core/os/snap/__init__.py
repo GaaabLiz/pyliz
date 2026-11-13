@@ -41,6 +41,7 @@ from pylizlib.core.os.snap.searcher import (
     SnapshotSearchResult,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.coordination import SnapshotBusyError
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
 __all__ = [
@@ -82,4 +83,5 @@ __all__ = [
     "SnapshotIncompleteError",
     "CopyMetadataMode",
     "ExtendedMetadataCopyStrategy",
+    "SnapshotBusyError",
 ]

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from pylizlib.core.os.snap.domain import validate_directory_component
+from pylizlib.core.os.snap.storage.coordination import CATALOGUE_LOCK_FILENAME
 from pylizlib.core.os.snap.storage.recovery.models import TRANSACTION_DIRECTORY
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
@@ -39,6 +40,36 @@ def assert_no_transaction_storage(root: Path) -> None:
             raise ValueError(f"Incoming snapshot data cannot contain transaction storage: '{entry}'.")
 
 
+def is_operational_storage_name(name: str) -> bool:
+    """Recognize journal and catalogue-lock names that incoming data must never replace.
+
+    Args:
+        name (str): Direct storage component, checked with portable Windows alias rules on every platform.
+
+    Returns:
+        bool: True for reserved transaction or coordination names, including case and trailing-dot/space aliases.
+    """
+    return is_transaction_storage_name(name) or name.rstrip(" .").casefold() == CATALOGUE_LOCK_FILENAME.casefold()
+
+
+def assert_no_operational_storage(root: Path) -> None:
+    """Reject local recovery and lock sidecars at the root of incoming archive data.
+
+    Args:
+        root (Path): Extracted catalogue or snapshot root; association descendants remain ordinary user content.
+
+    Returns:
+        None: No direct child occupies a reserved operational namespace.
+
+    Raises:
+        ValueError: Incoming data contains reserved transaction storage or a coordination sidecar.
+        OSError: The root cannot be enumerated.
+    """
+    for entry in root.iterdir():
+        if is_operational_storage_name(entry.name):
+            raise ValueError(f"Incoming snapshot data cannot contain transaction storage or a catalogue lock: '{entry}'.")
+
+
 def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
     """Constructs the full path to a snapshot's directory within the catalogue.
     Validates the folder name to prevent path traversal.
@@ -56,8 +87,8 @@ def get_snapshot_path(folder_name: str, catalogue_path: Path) -> Path:
     validate_directory_component(folder_name, "Snapshot ID")
     if not folder_name.strip():
         raise ValueError("Snapshot ID cannot be empty.")
-    if is_transaction_storage_name(folder_name):
-        raise ValueError("Snapshot ID cannot use the reserved transaction directory name.")
+    if is_operational_storage_name(folder_name):
+        raise ValueError("Snapshot ID cannot use a reserved transaction directory or catalogue lock name.")
 
     try:
         catalogue_resolved = catalogue_path.resolve(strict=False)

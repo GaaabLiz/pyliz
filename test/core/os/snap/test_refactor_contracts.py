@@ -234,7 +234,7 @@ def test_callback_failure_during_create_does_not_publish(tmp_path):
         manager.create(progress_callback=fail)
     assert not manager.path_snapshot.exists()
     assert snapshot.directories[0].integrity_manifest is None
-    assert list(manager.path_catalogue.iterdir()) == []
+    assert list(manager.path_catalogue.iterdir()) == [manager.path_catalogue / ".pyliz_snapshot.lock"]
 
 
 def test_search_cancellation_is_per_snapshot_and_precedes_current_file(tmp_path):
@@ -534,7 +534,7 @@ def test_lifecycle_metadata_failure_preserves_old_root_and_manifest_identity(tmp
             SnapshotLifecycle(manager._storage()).create(replace_existing=True)
     assert {p.relative_to(manager.path_snapshot): p.read_bytes() for p in manager.path_snapshot.rglob("*") if p.is_file()} == before
     assert snapshot.directories[0].integrity_manifest is manifest
-    assert list(manager.path_catalogue.iterdir()) == [manager.path_snapshot]
+    assert set(manager.path_catalogue.iterdir()) == {manager.path_snapshot, manager.path_catalogue / ".pyliz_snapshot.lock"}
 
 
 def test_snapshot_tree_journal_finishes_publication_after_process_stops(tmp_path):

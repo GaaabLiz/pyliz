@@ -11,6 +11,7 @@ from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import IntegrityManifest
 from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, prepare_snapshot_metadata, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
 
@@ -58,6 +59,7 @@ class SnapshotSynchronizer:
         """
         self.storage = storage
 
+    @coordinated("storage.path_catalogue")
     def update_associated_dirs_from_system(self, message_callback=None):
         """Updates the snapshot's internal copy of each associated directory
         with the current version from the original system path.
@@ -68,6 +70,9 @@ class SnapshotSynchronizer:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
 
         Notes:
             Rollback before publication restores captured manifests, sizes, capture interval and date_last_modified

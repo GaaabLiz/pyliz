@@ -9,6 +9,7 @@ from pylizlib.core.os.filesystem.durability import rename_and_sync as rename_and
 from pylizlib.core.os.filesystem.durability import sync_directory as _sync_directory
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.coordination import register_active_journal
 from pylizlib.core.os.snap.storage.recovery.models import JOURNAL_FILENAME, TRANSACTION_DIRECTORY, VALID_STATES, JournalCodec
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
 
@@ -81,6 +82,7 @@ class SnapshotTransactionJournal:
             logger.warning(f"Directory-entry durability is unavailable for transaction scope '{scope_root}'.")
         workspace = transactions_path / uuid.uuid4().hex
         workspace.mkdir()
+        register_active_journal(workspace)
         data = {
             "version": 2 if operation == "edit" else 1,
             "scope_root": scope_root.as_posix(),

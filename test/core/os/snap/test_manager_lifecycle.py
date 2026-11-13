@@ -170,7 +170,7 @@ class TestSnapshotManagerCreate(SnapshotManagerTestHelper):
         self.assertFalse(leftover.exists())
         self.assertEqual((mgr.path_snapshot / snap.directories[0].directory_name / "new.txt").read_text(), "new version")
         self.assertEqual(SnapshotSerializer.from_json(mgr.path_snapshot_json).name, "Explicit replacement")
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {mgr.path_snapshot, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_create_rejects_existing_snapshot_by_default(self):
         snap = make_snapshot("CreateConflict", self._src, n=1)
@@ -183,7 +183,7 @@ class TestSnapshotManagerCreate(SnapshotManagerTestHelper):
             mgr.create()
 
         self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {mgr.path_snapshot, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_create_preserves_existing_snapshot_when_publication_fails(self):
         snap = make_snapshot("RecreatePublishFail", self._src, n=1)
@@ -209,7 +209,7 @@ class TestSnapshotManagerCreate(SnapshotManagerTestHelper):
         self.assertTrue(failed)
         self.assertTrue(mgr.path_snapshot.is_dir())
         self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {mgr.path_snapshot, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_create_preserves_existing_snapshot_when_backup_rename_fails(self):
         snap = make_snapshot("RecreateBackupFail", self._src, n=1)
@@ -222,7 +222,7 @@ class TestSnapshotManagerCreate(SnapshotManagerTestHelper):
                 mgr.create(replace_existing=True)
 
         self.assertEqual({p.relative_to(mgr.path_snapshot): p.read_bytes() for p in mgr.path_snapshot.rglob("*") if p.is_file()}, before)
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [mgr.path_snapshot])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {mgr.path_snapshot, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_create_preserves_recovery_copies_when_rollback_also_fails(self):
         snap = make_snapshot("RecreateRollbackFail", self._src, n=1)

@@ -30,7 +30,7 @@ def test_public_snapshot_docs_render_new_contracts(tmp_path):
     assert result.returncode == 0, result.stderr
     assert not result.stderr, result.stderr
     html = (tmp_path / "pylizlib/core/os/snap.html").read_text()
-    for public_symbol in ("ExtendedMetadataCopyStrategy", "SnapshotInstallMetadataError", "SnapshotSearchParams", "SnapshotSettings"):
+    for public_symbol in ("ExtendedMetadataCopyStrategy", "SnapshotInstallMetadataError", "SnapshotSearchParams", "SnapshotSettings", "SnapshotBusyError"):
         assert f'id="{public_symbol}"' in html
     for documented_term in ("max_context_chars", "metadata_published", "capture_started_at", "Arguments:", "Returns:"):
         assert documented_term in html
