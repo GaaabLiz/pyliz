@@ -6,7 +6,21 @@ from pathlib import Path
 
 import pytest
 
-from pylizlib.core.os.snap import BackupType, SnapDirAssociation, Snapshot, SnapshotCatalogue, SnapshotManager, SnapshotSerializer, SnapshotSettings
+from pylizlib.core.os.snap import BackupType, SequentialFileCopyStrategy, SnapDirAssociation, Snapshot, SnapshotCatalogue, SnapshotIntegrityError, SnapshotManager, SnapshotSerializer, SnapshotSettings
+
+
+def _captured_snapshot(workspace: Path):
+    """Create an isolated, fully manifested snapshot and its SD backup."""
+    source = workspace / "source"
+    (source / "empty").mkdir(parents=True)
+    (source / "payload").write_bytes(b"capture")
+    settings = SnapshotSettings()
+    catalogue = SnapshotCatalogue(workspace / "catalogue", settings)
+    snapshot = Snapshot("captured", "captured snapshot", "", directories=[SnapDirAssociation(0, str(source), "folder")])
+    catalogue.add(snapshot)
+    manager = SnapshotManager(snapshot, catalogue.path_catalogue, settings)
+    archive = manager.create_backup(workspace / "exports", "original", BackupType.SNAPSHOT_DIRECTORY)
+    return catalogue, snapshot, manager, archive
 
 
 @pytest.mark.parametrize("entry_point", ["import_snapshot", "import_catalogue", "restore_backup"])
@@ -95,3 +109,85 @@ def test_nested_user_journal_names_remain_ordinary_snapshot_content(snapshot_wor
     assert loaded is not None
     captured = imported.path_catalogue / loaded.id / loaded.directories[0].directory_name / ".pyliz_transactions" / "journal.json"
     assert captured.read_bytes() == user_data.read_bytes()
+
+
+@pytest.mark.parametrize("target_exists", [False, True])
+@pytest.mark.parametrize("damage", ["association", "file", "changed-file", "extra-file", "file-is-directory", "empty-directory"])
+def test_sd_restore_validates_content_before_replacing_any_snapshot(snapshot_workspace: Path, target_exists: bool, damage: str) -> None:
+    """CRC-valid archives with missing or mismatched contents never replace good data."""
+    catalogue, snapshot, manager, original = _captured_snapshot(snapshot_workspace)
+    association_name = snapshot.directories[0].directory_name
+    broken = snapshot_workspace / "broken.zip"
+    with zipfile.ZipFile(original) as source, zipfile.ZipFile(broken, "w") as output:
+        for member in source.infolist():
+            if damage == "association" and (member.filename.rstrip("/") == association_name or member.filename.startswith(association_name + "/")):
+                continue
+            if damage in {"file", "file-is-directory"} and member.filename == f"{association_name}/payload":
+                continue
+            if damage == "empty-directory" and member.filename == f"{association_name}/empty/":
+                continue
+            content = b"changed" if damage == "changed-file" and member.filename == f"{association_name}/payload" else source.read(member)
+            output.writestr(member, content)
+        if damage == "extra-file":
+            output.writestr(f"{association_name}/extra", b"unexpected")
+        if damage == "file-is-directory":
+            output.writestr(f"{association_name}/payload/", b"")
+    if not target_exists:
+        catalogue.delete(snapshot)
+    else:
+        (manager.path_snapshot / "preserve-previous").write_bytes(b"unique previous data")
+    before = {path.relative_to(manager.path_snapshot): path.read_bytes() for path in manager.path_snapshot.rglob("*") if path.is_file()}
+    with zipfile.ZipFile(broken) as archive:
+        assert archive.testzip() is None
+
+    with pytest.raises(OSError) as error:
+        catalogue.restore_backup(broken)
+    assert isinstance(error.value.__cause__, FileNotFoundError if damage == "association" else SnapshotIntegrityError)
+    assert {path.relative_to(manager.path_snapshot): path.read_bytes() for path in manager.path_snapshot.rglob("*") if path.is_file()} == before
+    assert manager.path_snapshot.exists() is target_exists
+    assert not list(catalogue.path_catalogue.rglob("journal.json"))
+
+
+@pytest.mark.parametrize("allow_unverified", [False, True])
+def test_sd_restore_retains_explicit_legacy_integrity_policy(snapshot_workspace: Path, allow_unverified: bool) -> None:
+    """Restoring legacy data retains unknown integrity; install still applies its own opt-in."""
+    catalogue, snapshot, manager, original = _captured_snapshot(snapshot_workspace)
+    catalogue.settings.allow_unverified_legacy_snapshots = allow_unverified
+    legacy = snapshot_workspace / "legacy.zip"
+    with zipfile.ZipFile(original) as source, zipfile.ZipFile(legacy, "w") as output:
+        for member in source.infolist():
+            content = source.read(member)
+            if member.filename == catalogue.settings.json_filename:
+                data = json.loads(content)
+                for association in data["directories"]:
+                    association.pop("integrity_manifest", None)
+                content = json.dumps(data).encode()
+            output.writestr(member, content)
+    catalogue.restore_backup(legacy)
+    loaded = catalogue.get_by_id(snapshot.id)
+    assert loaded is not None
+    assert loaded.directories[0].integrity_manifest is None
+    assert (manager.path_snapshot / loaded.directories[0].directory_name / "payload").read_bytes() == b"capture"
+
+
+def test_sd_restore_verifies_the_copied_tree_instead_of_only_the_archive(snapshot_workspace: Path) -> None:
+    """A copy fault after valid extraction cannot replace the existing good snapshot."""
+    catalogue, snapshot, manager, archive = _captured_snapshot(snapshot_workspace)
+    association_name = snapshot.directories[0].directory_name
+    before_json = manager.path_snapshot_json.read_bytes()
+
+    class CorruptingStrategy(SequentialFileCopyStrategy):
+        """Simulate a copy backend returning changed bytes despite success."""
+
+        def copy_directory(self, source, destination, *args, **kwargs):
+            """Change a completed staging file, retaining a valid copied JSON manifest."""
+            copied = super().copy_directory(source, destination, *args, **kwargs)
+            (copied / association_name / "payload").write_bytes(b"changed")
+            return copied
+
+    catalogue.settings.copy_strategy = CorruptingStrategy()
+    with pytest.raises(OSError) as error:
+        catalogue.restore_backup(archive)
+    assert isinstance(error.value.__cause__, SnapshotIntegrityError)
+    assert manager.path_snapshot_json.read_bytes() == before_json
+    assert (manager.path_snapshot / association_name / "payload").read_bytes() == b"capture"

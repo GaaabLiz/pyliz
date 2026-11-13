@@ -17,7 +17,7 @@ from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage
-from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree
+from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.recovery.models import ReplacementEntry
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks
@@ -56,6 +56,8 @@ class SnapshotTreeRestorer:
 
         Raises:
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+            OSError: Staging validation or publication fails; the cause identifies missing data, integrity mismatch
+                or the underlying filesystem failure. The previous snapshot is retained before commit.
         """
         assert_no_transaction_storage(temp_dir_path)
         json_path = temp_dir_path / self.settings.json_filename
@@ -72,12 +74,32 @@ class SnapshotTreeRestorer:
                 raise ValueError("Snapshot-directory associations do not match the archive metadata.")
         if metadata.manifest_name is not None:
             (temp_dir_path / metadata.manifest_name).unlink(missing_ok=True)
+
+        def validate_restore(staged_path: Path) -> None:
+            """Verify the actual staged copy before moving the previous snapshot.
+
+            Args:
+                staged_path (Path): Complete private snapshot copy selected for publication.
+
+            Returns:
+                None: When identity, association completeness and recorded integrity all agree.
+
+            Raises:
+                ValueError: The staged associations differ from the validated archive metadata.
+                FileNotFoundError: A declared association is missing.
+                SnapshotIntegrityError: Staged association content differs from its recorded manifest.
+            """
+            actual = validate_staged_snapshot_tree(staged_path, restored_snapshot.id, self.settings.json_filename)
+            if association_identities(actual.directories) != association_identities(restored_snapshot.directories):
+                raise ValueError("Staged snapshot associations changed while copying the backup.")
+
         try:
             publish_snapshot_tree(
                 temp_dir_path,
                 restored_snapshot.id,
                 self.path_catalogue,
                 replace_existing=True,
+                prepare_staging=validate_restore,
                 copy_strategy=self.settings.copy_strategy,
                 operation="Snapshot-directory restore",
             )
