@@ -233,6 +233,12 @@ I record `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement` e
 dizionari. I modelli contenuti restano mutabili: un record frozen non congela
 lo snapshot e non ne introduce una copia.
 
+`SnapDirAssociation.copy_install_to()` copia prima in uno staging privato e
+pubblica soltanto il risultato completo. Una destinazione già presente, anche
+comparsa durante la copia, causa un errore e non viene eliminata dal cleanup.
+La pulizia gestisce esclusivamente lo staging posseduto dalla chiamata; manifest
+in uscita e metadati dell'associazione vengono aggiornati dopo la pubblicazione.
+
 ## Journal e recupero dopo un arresto
 
 Le sostituzioni di snapshot, le modifiche delle associazioni, la sincronizzazione,
