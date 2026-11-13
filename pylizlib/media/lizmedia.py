@@ -265,11 +265,10 @@ class LizMedia:
         if not self.is_image:
             return None
         try:
-            if self.is_image:
-                parser_manager = ParserManager()
-                prompt_info: PromptInfo | None = parser_manager.parse(self.path)
-                if prompt_info is not None:
-                    return prompt_info
+            parser_manager = ParserManager()
+            prompt_info: PromptInfo | None = parser_manager.parse(self.path)
+            if prompt_info is not None:
+                return prompt_info
         except Exception as e:
             logger.error(f"Error checking for AI metadata with sdParser: {str(e)}")
 
@@ -425,11 +424,7 @@ class LizMedia:
             return value.isoformat()
         if isinstance(value, Enum):
             return value.value
-        if isinstance(value, list):
-            return [LizMedia._serialize_json_value(item) for item in value]
-        if isinstance(value, tuple):
-            return [LizMedia._serialize_json_value(item) for item in value]
-        if isinstance(value, set):
+        if isinstance(value, (list, tuple, set)):
             return [LizMedia._serialize_json_value(item) for item in value]
         if isinstance(value, dict):
             return {str(key): LizMedia._serialize_json_value(item) for key, item in value.items()}
@@ -724,6 +719,20 @@ class LizMedia:
         """
         self.attached_sidecar_files.clear()
 
+    def _find_sidecar(self, suffix: str) -> Path | None:
+        """Find the first attached sidecar with a case-insensitive extension.
+
+        Args:
+            suffix (str): Extension to match, with or without an initial dot.
+
+        Returns:
+            Path | None: First matching attached sidecar, or None when absent.
+        """
+        suffix = suffix.lower()
+        if not suffix.startswith("."):
+            suffix = f".{suffix}"
+        return next((sidecar for sidecar in self.attached_sidecar_files if sidecar.suffix.lower() == suffix), None)
+
     def has_xmp_sidecar(self) -> bool:
         """
         Checks if an Adobe XMP sidecar file is attached.
@@ -731,10 +740,7 @@ class LizMedia:
         Returns:
             True if at least one .xmp sidecar is found.
         """
-        for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == ".xmp":
-                return True
-        return False
+        return self._find_sidecar(".xmp") is not None
 
     def has_aae_sidecar(self) -> bool:
         """
@@ -743,10 +749,7 @@ class LizMedia:
         Returns:
             True if at least one .aae sidecar is found.
         """
-        for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == ".aae":
-                return True
-        return False
+        return self._find_sidecar(".aae") is not None
 
     def get_xmp_sidecar(self) -> Optional[Path]:
         """
@@ -755,7 +758,4 @@ class LizMedia:
         Returns:
             Path to the XMP sidecar, or None if none are found.
         """
-        for sidecar in self.attached_sidecar_files:
-            if sidecar.suffix.lower() == ".xmp":
-                return sidecar
-        return None
+        return self._find_sidecar(".xmp")
