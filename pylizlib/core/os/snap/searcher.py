@@ -23,9 +23,7 @@ from typing import Optional, Protocol
 
 import regex as regex_engine
 
-from pylizlib.core.data.text.encoding import EncodingDetector
 from pylizlib.core.data.text.models import TimedPattern
-from pylizlib.core.data.text.preview import line_preview, needs_complete_line_preview
 from pylizlib.core.data.text.results import ResultPage as _ResultPage
 from pylizlib.core.data.text.search import TextFileSearcher
 from pylizlib.core.log.pylizLogger import logger
@@ -198,6 +196,7 @@ class SnapshotSearcher:
             None: No return value.
         """
         self.catalogue: SnapshotPathLookup = catalogue
+        self._text_searcher = TextFileSearcher(self._DETECTION_SAMPLE_BYTES)
 
     def search(
         self,
@@ -432,92 +431,7 @@ class SnapshotSearcher:
         from pylizlib.core.os.snap.searching import SnapshotMatchPage, SnapshotTextOptions
 
         on_chunk = None if on_progress is None else (lambda: on_progress(file_path.name, total_files, processed_files) if on_progress else None)
-        return TextFileSearcher(self._DETECTION_SAMPLE_BYTES).search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
-
-    def _detect_encoding(self, file_path: Path, preferred_encoding: str | None) -> tuple[str, bool, bool]:
-        """Detect BOM, UTF-16 layout, UTF-8, or CP1252 and identify obvious binary data.
-
-        Args:
-            file_path (Path): Native candidate file path to filter, inspect or search.
-            preferred_encoding (str | None): Explicit codec bypassing automatic classification, or None for
-                BOM/UTF/Windows-1252 detection.
-
-        Returns:
-            tuple[str, bool, bool]: Codec name, binary classification and whether Windows-1252 fallback was selected,
-                in that order.
-        """
-        decision = EncodingDetector(self._DETECTION_SAMPLE_BYTES).detect(file_path, preferred_encoding)
-        return decision.encoding, decision.binary, decision.used_fallback
-
-    @staticmethod
-    def _detect_bomless_utf16(sample: bytes) -> str | None:
-        """Recognize ASCII-heavy UTF-16 data from its alternating NUL bytes.
-
-        Args:
-            sample (bytes): Bounded raw byte sample used for encoding or binary detection.
-
-        Returns:
-            str | None: utf-16-le or utf-16-be for the existing alternating-NUL heuristic, otherwise None.
-        """
-        return EncodingDetector.detect_bomless_utf16(sample)
-
-    @staticmethod
-    def _looks_binary(sample: bytes, decoded: str, allow_nul: bool = False) -> bool:
-        """Use conservative NUL/control-character checks for obvious binary files.
-
-        Args:
-            sample (bytes): Bounded raw byte sample used for encoding or binary detection.
-            decoded (str): Sample text already decoded, with replacement characters where the detector permits them.
-            allow_nul (bool): Allow raw NUL bytes for recognized UTF-16/32 samples when True.
-
-        Returns:
-            bool: Whether the sample contains a forbidden NUL or has a printable-character ratio below 0.65.
-        """
-        return EncodingDetector.looks_binary(sample, decoded, allow_nul)
-
-    @staticmethod
-    def _needs_complete_line_preview(
-        buffer: str,
-        match_start: int,
-        max_chars: int,
-        buffer_starts_mid_line: bool,
-        final: bool,
-    ) -> bool:
-        """Wait for EOF or a newline before returning an untruncated short line.
-
-        Args:
-            buffer (str): Current decoded text window; offsets passed with it are relative to this string.
-            match_start (int): Zero-based match start relative to the current text buffer.
-            max_chars (int): Positive preview-width limit in decoded characters, before truncation ellipses.
-            buffer_starts_mid_line (bool): Whether characters preceding the first retained line were discarded.
-            final (bool): Whether this is the EOF scan, so matches and short trailing previews need no further chunk.
-
-        Returns:
-            bool: Whether a short unfinished line requires another chunk before its preview is complete.
-        """
-        return needs_complete_line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
-
-    @staticmethod
-    def _line_preview(
-        buffer: str,
-        match_start: int,
-        max_chars: int,
-        buffer_starts_mid_line: bool,
-        final: bool,
-    ) -> str:
-        """Return a bounded preview of the line containing a match.
-
-        Args:
-            buffer (str): Current decoded text window; offsets passed with it are relative to this string.
-            match_start (int): Zero-based match start relative to the current text buffer.
-            max_chars (int): Positive preview-width limit in decoded characters, before truncation ellipses.
-            buffer_starts_mid_line (bool): Whether characters preceding the first retained line were discarded.
-            final (bool): Whether this is the EOF scan, so matches and short trailing previews need no further chunk.
-
-        Returns:
-            str: Stripped line preview with the configured character cap plus ellipses when either side was truncated.
-        """
-        return line_preview(buffer, match_start, max_chars, buffer_starts_mid_line, final)
+        return self._text_searcher.search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
 
     def _collect_files(
         self,

@@ -1,8 +1,7 @@
-"""
-Unit tests for pylizlib.core.os.snap.searcher
+"""Behavioral tests for snapshot search across content and filenames.
 
-Covers every public and private method of SnapshotSearcher:
-    - search (text content, text not found, regex, invalid regex)
+Covers:
+    - content search (text found/not found, regex, invalid regex)
     - search with extension filter
     - search binary files (graceful skip)
     - search by filename (text + regex + extension filter)
@@ -141,16 +140,6 @@ class TestSnapshotSearcherContentSearch(unittest.TestCase):
         self.assertIn("unicode.txt", {result.file_path.name for result in results})
         results = self.searcher.search(self.snap, SnapshotSearchParams(query="hello café"))
         self.assertIn("unicode-no-bom.txt", {result.file_path.name for result in results})
-
-    def test_cp1252_fallback_is_not_misreported_as_binary(self):
-        source_file = SOURCE_DATA_PATH / "srch1" / "western.txt"
-        source_file.write_bytes("olé".encode("cp1252"))
-
-        encoding, binary, used_fallback = self.searcher._detect_encoding(source_file, None)
-
-        self.assertEqual(encoding, "cp1252")
-        self.assertFalse(binary)
-        self.assertTrue(used_fallback)
 
     def test_late_utf8_decode_error_retries_the_file_with_cp1252(self):
         source_file = SOURCE_DATA_PATH / "srch1" / "late-western.txt"

@@ -5,15 +5,13 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pylizlib.core.os.snap.callbacks import CopyProgressCallback, MessageCallback
+from pylizlib.core.os.snap.callbacks import CopyProgressCallback as ProgressCallback
+from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SourceSnapshotProvider
 from pylizlib.core.os.snap.copying.contracts import MetadataCopier
 from pylizlib.core.os.snap.integrity import IntegrityManifest, assert_manifest_matches
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, is_link_or_junction
-
-if TYPE_CHECKING:
-    from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, SourceSnapshotProvider
 
 
 class ProviderCopySession:
@@ -139,3 +137,114 @@ class ProviderCopySession:
                 metadata_copier(stable_source, copied)
             assert_no_symlinks(copied)
             return copied
+
+
+class _ProviderSnapshotCopyStrategy(DirectoryCopyStrategy):
+    """Copy from a stable tree supplied by a snapshot provider.
+
+    The provider must either hold all writers quiesced for the context or yield
+    an immutable filesystem/server snapshot. The strategy cannot enforce the
+    provider's consistency guarantee itself.
+
+    Attributes:
+        provider (SourceSnapshotProvider): SourceSnapshotProvider supplying a stable tree for the full duration of
+            its context.
+        delegate (DirectoryCopyStrategy): Content-copy strategy retained by reference, preserving its consistency
+            and callback contract.
+    """
+
+    def __init__(self, provider: SourceSnapshotProvider, delegate: DirectoryCopyStrategy | None = None):
+        """Require the existing provider ABC and keep the supplied or default delegate.
+
+        Args:
+            provider (SourceSnapshotProvider): SourceSnapshotProvider supplying a stable tree for the full duration of
+                its context.
+            delegate (DirectoryCopyStrategy | None): Content-copy strategy retained by reference, preserving its
+                consistency and callback contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TypeError: An argument or mutable model field has a type rejected by this contract.
+        """
+        if not isinstance(provider, SourceSnapshotProvider):
+            raise TypeError("provider must implement SourceSnapshotProvider.")
+        self.provider = provider
+        if delegate is None:
+            from pylizlib.core.os.snap.copy_strategy import SequentialFileCopyStrategy
+
+            delegate = SequentialFileCopyStrategy()
+        self.delegate = delegate
+
+    def copy_directory(
+        self,
+        source: Path,
+        destination: Path,
+        progress_callback: ProgressCallback | None = None,
+        message_callback: MessageCallback | None = None,
+        *,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
+    ) -> Path:
+        """Copy from the provider using the standard metadata policy.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after successful content verification/publication. Any supplied output manifest is
+                updated only on success.
+
+        Notes:
+            The provider context covers copying, any requested metadata work and the link check. Expected-manifest
+            comparison and final destination publication occur afterward. The strategy cannot independently prove the
+            provider's consistency guarantee.
+        """
+        return ProviderCopySession(self.provider, self.delegate).copy(source, destination, progress_callback, message_callback, manifest=manifest, expected_manifest=expected_manifest)
+
+    def copy_directory_with_metadata(
+        self,
+        source: Path,
+        destination: Path,
+        progress_callback: ProgressCallback | None = None,
+        message_callback: MessageCallback | None = None,
+        *,
+        metadata_copier: MetadataCopier,
+        manifest: MutableMapping[str, dict[str, str | int | None]] | None = None,
+        expected_manifest: Mapping[str, dict[str, str | int | None]] | None = None,
+    ) -> Path:
+        """Apply the supplied metadata hook while the provider's source stays valid.
+
+        Args:
+            source (Path): Source file or directory whose contents or metadata are read.
+            destination (Path): Target path receiving the copied content or metadata.
+            progress_callback (ProgressCallback | None): Optional observer receiving (copied_bytes, total_bytes),
+                including terminal empty-tree progress; return values do not cancel copying.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+            metadata_copier (MetadataCopier): Optional hook receiving actual stable source and copied staging tree
+                before that source context closes.
+            manifest (MutableMapping[str, dict[str, str | int | None]] | None): Optional mutable captured-integrity
+                output, replaced only on successful copy. expected_manifest can still require verification when this
+                is None.
+            expected_manifest (Mapping[str, dict[str, str | int | None]] | None): Previously captured integrity
+                mapping to verify before publishing; None disables this comparison.
+
+        Returns:
+            Path: Final destination after the metadata hook completed while the actual stable source was still
+                available.
+        """
+        return ProviderCopySession(self.provider, self.delegate).copy(
+            source, destination, progress_callback, message_callback, metadata_copier=metadata_copier, manifest=manifest, expected_manifest=expected_manifest
+        )
