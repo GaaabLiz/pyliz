@@ -38,9 +38,7 @@ def check_path(path, create_if_not: bool = False) -> bool:
     if not os.path.exists(path):
         if create_if_not:
             os.makedirs(path)
-            return False
-        else:
-            return False
+        return False
     if not os.access(path, os.R_OK):
         return False
     return True
@@ -66,8 +64,6 @@ def check_path_dir(path):
         raise IOError(f"Path {path} does not exist!")
     if not os.access(path, os.R_OK):
         raise PermissionError(f"Path {path} is not readable!")
-    if not os.access(path, os.W_OK):
-        raise PermissionError(f"Path {path} is not writable!")
 
     # Check if the path is a directory
     if not os.path.isdir(path):
