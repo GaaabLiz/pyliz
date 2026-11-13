@@ -1,22 +1,23 @@
-"""
-Snapshot management package.
+"""Public snapshot API, retaining original exports and class identities.
 
-Re-exports all public symbols so that existing code using::
-
-    from pylizlib.core.os.snap import SnapshotCatalogue, Snapshot, ...
-
-continues to work unchanged regardless of which sub-module each class lives in.
-
-Sub-modules:
-    domain      – Pure data models (dataclasses, enums).
-    serializer  – JSON serialization / deserialization.
-    utils       – Stateless helper functions.
-    manager     – Single-snapshot lifecycle manager.
-    catalogue   – Multi-snapshot catalogue manager.
-    searcher    – Full-text / filename search across snapshots.
-"""
+operations contains lifecycle, edit, install, sync, backup and transfer flows.
+storage contains snapshot layout, metadata adapters and versioned recovery.
+General path, filesystem, Windows, ZIP and text mechanisms live in their dedicated
+pylizlib.core packages. Model construction normalizes source paths without a
+recursive size scan; Windows mapped-drive normalization can query the OS.
+See README.md for architecture and operation-specific recovery boundaries."""
 
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
+from pylizlib.core.os.snap.copy_strategy import (
+    CopyMetadataMode,
+    DirectoryCopyStrategy,
+    ExtendedMetadataCopyStrategy,
+    ProviderSnapshotCopyStrategy,
+    SequentialFileCopyStrategy,
+    SourceChangedError,
+    SourceSnapshotProvider,
+    VerifiedFileCopyStrategy,
+)
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapDirAssociation,
@@ -27,7 +28,10 @@ from pylizlib.core.os.snap.domain import (
     SnapshotSettings,
     SnapshotSortKey,
 )
+from pylizlib.core.os.snap.integrity import IntegrityManifest, SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
+from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
+from pylizlib.core.os.snap.operations.install import SnapshotInstallMetadataError
 from pylizlib.core.os.snap.searcher import (
     QueryType,
     SearchTarget,
@@ -37,6 +41,7 @@ from pylizlib.core.os.snap.searcher import (
     SnapshotSearchResult,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.coordination import SnapshotBusyError
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
 __all__ = [
@@ -49,6 +54,16 @@ __all__ = [
     "SnapshotBackupInfo",
     "SnapshotSettings",
     "SnapshotSortKey",
+    # copy strategies
+    "DirectoryCopyStrategy",
+    "SequentialFileCopyStrategy",
+    "VerifiedFileCopyStrategy",
+    "SourceSnapshotProvider",
+    "ProviderSnapshotCopyStrategy",
+    "SourceChangedError",
+    # integrity
+    "IntegrityManifest",
+    "SnapshotIntegrityError",
     # serializer
     "SnapshotSerializer",
     # utils
@@ -64,4 +79,9 @@ __all__ = [
     "SnapshotSearcher",
     "SnapshotSearchParams",
     "SnapshotSearchResult",
+    "SnapshotInstallMetadataError",
+    "SnapshotIncompleteError",
+    "CopyMetadataMode",
+    "ExtendedMetadataCopyStrategy",
+    "SnapshotBusyError",
 ]

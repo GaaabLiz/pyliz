@@ -1,0 +1,746 @@
+{
+  "exports": [
+    "BackupType",
+    "SnapDirAssociation",
+    "SnapEditAction",
+    "SnapEditType",
+    "Snapshot",
+    "SnapshotBackupInfo",
+    "SnapshotSettings",
+    "SnapshotSortKey",
+    "DirectoryCopyStrategy",
+    "SequentialFileCopyStrategy",
+    "VerifiedFileCopyStrategy",
+    "SourceSnapshotProvider",
+    "ProviderSnapshotCopyStrategy",
+    "SourceChangedError",
+    "IntegrityManifest",
+    "SnapshotIntegrityError",
+    "SnapshotSerializer",
+    "SnapshotUtils",
+    "SnapshotManager",
+    "SnapshotCatalogue",
+    "QueryType",
+    "SearchTarget",
+    "SnapshotProgressCallback",
+    "SnapshotSearcher",
+    "SnapshotSearchParams",
+    "SnapshotSearchResult"
+  ],
+  "classes": {
+    "catalogue.SnapshotCatalogue": {
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='path_catalogue', annotation=Name(id='Path', ctx=Load())), arg(arg='settings', annotation=Name(id='SnapshotSettings', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Call(func=Name(id='SnapshotSettings', ctx=Load()), args=[], keywords=[])])",
+          "returns": null,
+          "decorators": []
+        },
+        "list_backups": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_dir', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotBackupInfo', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "restore_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "delete_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "set_catalogue_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='new_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "add": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "delete": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "get_all": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[arg(arg='strict', annotation=Name(id='bool', ctx=Load()))], kw_defaults=[Constant(value=False)], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "get_by_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "update_snapshot_by_objs": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='old', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='new', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_snapshot_by_edits": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='edits', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "duplicate_by_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_assoc_dirs": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "export_catalogue": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load())), arg(arg='file_name', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value='catalogue_export.zip')])",
+          "returns": null,
+          "decorators": []
+        },
+        "import_catalogue": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "import_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='zip_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_assoc_with_installed": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "remove_installed_copies": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "install": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='clear_destination', annotation=Name(id='bool', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=True), Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "exists": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": []
+        },
+        "get_snap_directory_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snap', annotation=Name(id='Snapshot', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "BinOp(left=Name(id='Path', ctx=Load()), op=BitOr(), right=Constant(value=None))",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.SourceChangedError": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.DirectoryCopyStrategy": {
+      "methods": {
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='abstractmethod', ctx=Load())"
+          ]
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.SequentialFileCopyStrategy": {
+      "methods": {
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.VerifiedFileCopyStrategy": {
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='max_attempts', annotation=Name(id='int', ctx=Load())), arg(arg='delegate', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=3), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.SourceSnapshotProvider": {
+      "methods": {
+        "create_snapshot": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='ContextManager', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='abstractmethod', ctx=Load())"
+          ]
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "copy_strategy.ProviderSnapshotCopyStrategy": {
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='provider', annotation=Name(id='SourceSnapshotProvider', ctx=Load())), arg(arg='delegate', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "copy_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='destination', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback', annotation=BinOp(left=Name(id='ProgressCallback', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback', annotation=BinOp(left=Name(id='MessageCallback', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kwonlyargs=[arg(arg='manifest', annotation=BinOp(left=Subscript(value=Name(id='MutableMapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Subscript(value=Name(id='Mapping', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), BinOp(left=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Name(id='int', ctx=Load())), op=BitOr(), right=Constant(value=None))], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "domain.SnapDirAssociation": {
+      "methods": {
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "next_index": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "directory_name": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "gen_random": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load())), arg(arg='folder_id_length', annotation=Name(id='int', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=4)])",
+          "returns": "Constant(value='SnapDirAssociation')",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "gen_random_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='count', annotation=Name(id='int', ctx=Load())), arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Constant(value='SnapDirAssociation'), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "copy_install_to": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='catalogue_target_path', annotation=Name(id='Path', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[arg(arg='copy_strategy', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='manifest', annotation=BinOp(left=Name(id='IntegrityManifest', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='expected_manifest', annotation=BinOp(left=Name(id='IntegrityManifest', ctx=Load()), op=BitOr(), right=Constant(value=None)))], kw_defaults=[Constant(value=None), Constant(value=None), Constant(value=None)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        }
+      },
+      "fields": {
+        "index": "AnnAssign(target=Name(id='index', ctx=Store()), annotation=Name(id='int', ctx=Load()), simple=1)",
+        "original_path": "AnnAssign(target=Name(id='original_path', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "folder_id": "AnnAssign(target=Name(id='folder_id', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "mb_size": "AnnAssign(target=Name(id='mb_size', ctx=Store()), annotation=BinOp(left=Name(id='float', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)",
+        "integrity_manifest": "AnnAssign(target=Name(id='integrity_manifest', ctx=Store()), annotation=BinOp(left=Name(id='IntegrityManifest', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "domain.SnapEditType": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {
+        "ADD_DIR": "Add",
+        "REMOVE_DIR": "Remove",
+        "RENAME_DIR": "Rename"
+      }
+    },
+    "domain.BackupType": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {
+        "ASSOCIATED_DIRECTORIES": 1,
+        "SNAPSHOT_DIRECTORY": 2
+      }
+    },
+    "domain.SnapshotBackupInfo": {
+      "methods": {},
+      "fields": {
+        "path": "AnnAssign(target=Name(id='path', ctx=Store()), annotation=Name(id='Path', ctx=Load()), simple=1)",
+        "file_name": "AnnAssign(target=Name(id='file_name', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "snapshot_id": "AnnAssign(target=Name(id='snapshot_id', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), simple=1)",
+        "backup_type": "AnnAssign(target=Name(id='backup_type', ctx=Store()), annotation=BinOp(left=Name(id='BackupType', ctx=Load()), op=BitOr(), right=Constant(value=None)), simple=1)",
+        "prefix": "AnnAssign(target=Name(id='prefix', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "created_at": "AnnAssign(target=Name(id='created_at', ctx=Store()), annotation=BinOp(left=Name(id='datetime', ctx=Load()), op=BitOr(), right=Constant(value=None)), simple=1)",
+        "is_export": "AnnAssign(target=Name(id='is_export', ctx=Store()), annotation=Name(id='bool', ctx=Load()), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "domain.SnapshotSortKey": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {
+        "ID": "id",
+        "NAME": "name",
+        "DESCRIPTION": "desc",
+        "AUTHOR": "author",
+        "DATE_CREATED": "date_created",
+        "DATE_MODIFIED": "date_modified",
+        "DATE_LAST_USED": "date_last_used",
+        "DATE_LAST_MODIFIED": "date_last_modified",
+        "ASSOC_DIR_MB_SIZE": "get_assoc_dir_mb_size"
+      }
+    },
+    "domain.SnapEditAction": {
+      "methods": {
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        }
+      },
+      "fields": {
+        "action_type": "AnnAssign(target=Name(id='action_type', ctx=Store()), annotation=Name(id='SnapEditType', ctx=Load()), simple=1)",
+        "timestamp": "AnnAssign(target=Name(id='timestamp', ctx=Store()), annotation=Name(id='datetime', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Attribute(value=Name(id='datetime', ctx=Load()), attr='now', ctx=Load()))]), simple=1)",
+        "new_path": "AnnAssign(target=Name(id='new_path', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)",
+        "folder_id_to_remove": "AnnAssign(target=Name(id='folder_id_to_remove', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)",
+        "directory_name_to_remove": "AnnAssign(target=Name(id='directory_name_to_remove', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)",
+        "old_directory_name": "AnnAssign(target=Name(id='old_directory_name', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)",
+        "new_directory_name": "AnnAssign(target=Name(id='new_directory_name', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)",
+        "folder_id": "AnnAssign(target=Name(id='folder_id', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value=''), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "domain.SnapshotSettings": {
+      "methods": {
+        "bck_before_install_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "bck_before_modify_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "bck_before_delete_enabled": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        }
+      },
+      "fields": {
+        "json_filename": "AnnAssign(target=Name(id='json_filename', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Constant(value='snapshot.json'), simple=1)",
+        "backup_path": "AnnAssign(target=Name(id='backup_path', ctx=Store()), annotation=BinOp(left=Name(id='Path', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)",
+        "backup_pre_install": "AnnAssign(target=Name(id='backup_pre_install', ctx=Store()), annotation=Name(id='bool', ctx=Load()), value=Constant(value=False), simple=1)",
+        "backup_pre_modify": "AnnAssign(target=Name(id='backup_pre_modify', ctx=Store()), annotation=Name(id='bool', ctx=Load()), value=Constant(value=False), simple=1)",
+        "backup_pre_delete": "AnnAssign(target=Name(id='backup_pre_delete', ctx=Store()), annotation=Name(id='bool', ctx=Load()), value=Constant(value=False), simple=1)",
+        "install_with_everyone_full_control": "AnnAssign(target=Name(id='install_with_everyone_full_control', ctx=Store()), annotation=Name(id='bool', ctx=Load()), value=Constant(value=False), simple=1)",
+        "snap_id_length": "AnnAssign(target=Name(id='snap_id_length', ctx=Store()), annotation=Name(id='int', ctx=Load()), value=Constant(value=20), simple=1)",
+        "folder_id_length": "AnnAssign(target=Name(id='folder_id_length', ctx=Store()), annotation=Name(id='int', ctx=Load()), value=Constant(value=6), simple=1)",
+        "copy_strategy": "AnnAssign(target=Name(id='copy_strategy', ctx=Store()), annotation=Name(id='DirectoryCopyStrategy', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Name(id='SequentialFileCopyStrategy', ctx=Load()))]), simple=1)",
+        "allow_unverified_legacy_snapshots": "AnnAssign(target=Name(id='allow_unverified_legacy_snapshots', ctx=Store()), annotation=Name(id='bool', ctx=Load()), value=Constant(value=False), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "domain.Snapshot": {
+      "methods": {
+        "validate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "tags_as_string": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "get_for_table_array": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key_list', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "folder_name": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "get_assoc_dir_mb_size": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='float', ctx=Load())",
+          "decorators": [
+            "Name(id='property', ctx=Load())"
+          ]
+        },
+        "add_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='value', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "remove_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "has_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bool', ctx=Load())",
+          "decorators": []
+        },
+        "get_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='default', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value='')])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": []
+        },
+        "clear_all_data": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "edit_data_item": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='key', annotation=Name(id='str', ctx=Load())), arg(arg='new_value', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": []
+        },
+        "clone": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value='Snapshot')",
+          "decorators": []
+        }
+      },
+      "fields": {
+        "id": "AnnAssign(target=Name(id='id', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "name": "AnnAssign(target=Name(id='name', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "desc": "AnnAssign(target=Name(id='desc', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "author": "AnnAssign(target=Name(id='author', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default', value=Constant(value='UnknownUser'))]), simple=1)",
+        "directories": "AnnAssign(target=Name(id='directories', ctx=Store()), annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapDirAssociation', ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Name(id='list', ctx=Load()))]), simple=1)",
+        "tags": "AnnAssign(target=Name(id='tags', ctx=Store()), annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Name(id='list', ctx=Load()))]), simple=1)",
+        "date_created": "AnnAssign(target=Name(id='date_created', ctx=Store()), annotation=Name(id='datetime', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Attribute(value=Name(id='datetime', ctx=Load()), attr='now', ctx=Load()))]), simple=1)",
+        "date_modified": "AnnAssign(target=Name(id='date_modified', ctx=Store()), annotation=BinOp(left=Name(id='datetime', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)",
+        "date_last_used": "AnnAssign(target=Name(id='date_last_used', ctx=Store()), annotation=BinOp(left=Name(id='datetime', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)",
+        "date_last_modified": "AnnAssign(target=Name(id='date_last_modified', ctx=Store()), annotation=BinOp(left=Name(id='datetime', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Constant(value=None), simple=1)",
+        "os_created": "AnnAssign(target=Name(id='os_created', ctx=Store()), annotation=Name(id='str', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Attribute(value=Name(id='platform', ctx=Load()), attr='system', ctx=Load()))]), simple=1)",
+        "data": "AnnAssign(target=Name(id='data', ctx=Store()), annotation=Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='str', ctx=Load())], ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Name(id='dict', ctx=Load()))]), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "integrity.SnapshotIntegrityError": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {}
+    },
+    "manager.SnapshotManager": {
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='settings', annotation=Name(id='SnapshotSettings', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Call(func=Name(id='SnapshotSettings', ctx=Load()), args=[], keywords=[])])",
+          "returns": null,
+          "decorators": []
+        },
+        "create": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[arg(arg='replace_existing', annotation=Name(id='bool', ctx=Load()))], kw_defaults=[Constant(value=False)], defaults=[Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "delete": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_json_data_fields": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_json_base_fields": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "install_directory": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='destination_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "uninstall_directory_by_folder_id": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='folder_id', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_from_actions_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='edits', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "duplicate": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "update_associated_dirs_from_system": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "remove_installed_copies": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "install": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='enable_everyone_full_control', annotation=Name(id='bool', ctx=Load())), arg(arg='clear_destination', annotation=Name(id='bool', ctx=Load())), arg(arg='progress_callback'), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False), Constant(value=True), Constant(value=None), Constant(value=None)])",
+          "returns": null,
+          "decorators": []
+        },
+        "create_backup": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='backup_path', annotation=Name(id='Path', ctx=Load())), arg(arg='prefix', annotation=Name(id='str', ctx=Load())), arg(arg='backup_type', annotation=Constant(value='BackupType')), arg(arg='is_export', annotation=Name(id='bool', ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False), Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "searcher.QueryType": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {
+        "TEXT": "text",
+        "REGEX": "regex"
+      }
+    },
+    "searcher.SearchTarget": {
+      "methods": {},
+      "fields": {},
+      "enum_values": {
+        "FILE_NAME": "name",
+        "FILE_CONTENT": "content"
+      }
+    },
+    "searcher.SnapshotSearchResult": {
+      "methods": {},
+      "fields": {
+        "file_path": "AnnAssign(target=Name(id='file_path', ctx=Store()), annotation=Name(id='Path', ctx=Load()), simple=1)",
+        "searched_text": "AnnAssign(target=Name(id='searched_text', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "snapshot_name": "AnnAssign(target=Name(id='snapshot_name', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "line_number": "AnnAssign(target=Name(id='line_number', ctx=Store()), annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='int', ctx=Load()), ctx=Load()), value=Constant(value=None), simple=1)",
+        "line_content": "AnnAssign(target=Name(id='line_content', ctx=Store()), annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Constant(value=None), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "searcher.SnapshotSearchParams": {
+      "methods": {},
+      "fields": {
+        "query": "AnnAssign(target=Name(id='query', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+        "search_target": "AnnAssign(target=Name(id='search_target', ctx=Store()), annotation=Name(id='SearchTarget', ctx=Load()), value=Attribute(value=Name(id='SearchTarget', ctx=Load()), attr='FILE_CONTENT', ctx=Load()), simple=1)",
+        "query_type": "AnnAssign(target=Name(id='query_type', ctx=Store()), annotation=Name(id='QueryType', ctx=Load()), value=Attribute(value=Name(id='QueryType', ctx=Load()), attr='TEXT', ctx=Load()), simple=1)",
+        "extensions": "AnnAssign(target=Name(id='extensions', ctx=Store()), annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), args=[], keywords=[keyword(arg='default_factory', value=Name(id='list', ctx=Load()))]), simple=1)"
+      },
+      "enum_values": {}
+    },
+    "searcher.SnapshotSearcher": {
+      "methods": {
+        "__init__": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='catalogue', annotation=Name(id='SnapshotCatalogue', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": []
+        },
+        "search": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='params', annotation=Name(id='SnapshotSearchParams', ctx=Load())), arg(arg='on_progress', annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='SnapshotProgressCallback', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotSearchResult', ctx=Load()), ctx=Load())",
+          "decorators": []
+        },
+        "search_list": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='snapshots', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())), arg(arg='params', annotation=Name(id='SnapshotSearchParams', ctx=Load())), arg(arg='on_progress', annotation=Subscript(value=Name(id='Optional', ctx=Load()), slice=Name(id='SnapshotProgressCallback', ctx=Load()), ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapshotSearchResult', ctx=Load()), ctx=Load())",
+          "decorators": []
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "serializer.SnapshotSerializer": {
+      "methods": {
+        "read_bytes": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='bytes', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "read_text": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='str', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "write_bytes": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load())), arg(arg='contents', annotation=Name(id='bytes', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "write_text": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='path', annotation=Name(id='Path', ctx=Load())), arg(arg='contents', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "to_json": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='snapshot', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "from_json": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='filepath', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Snapshot', ctx=Load())",
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        },
+        "update_field": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='cls'), arg(arg='filepath', annotation=Name(id='Path', ctx=Load())), arg(arg='field_name', annotation=Name(id='str', ctx=Load())), arg(arg='new_value')], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": null,
+          "decorators": [
+            "Name(id='classmethod', ctx=Load())"
+          ]
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    },
+    "utils.SnapshotUtils": {
+      "methods": {
+        "iter_files_strict": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='root', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='Iterator', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "write_verified_zip": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='zip_path', annotation=Name(id='Path', ctx=Load())), arg(arg='files', annotation=Subscript(value=Name(id='Iterable', ctx=Load()), slice=Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='Path', ctx=Load()), Name(id='Path', ctx=Load())], ctx=Load()), ctx=Load()), ctx=Load())), arg(arg='message_callback')], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=None)])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "cleanup_after_commit": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='paths', annotation=Subscript(value=Name(id='Iterable', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load())), arg(arg='operation', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "assert_no_symlinks": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='root', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Constant(value=None)",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "publish_snapshot_tree": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source', annotation=Name(id='Path', ctx=Load())), arg(arg='snapshot_id', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[arg(arg='replace_existing', annotation=Name(id='bool', ctx=Load())), arg(arg='prepare_staging'), arg(arg='copy_strategy', annotation=BinOp(left=Name(id='DirectoryCopyStrategy', ctx=Load()), op=BitOr(), right=Constant(value=None))), arg(arg='message_callback'), arg(arg='operation', annotation=Name(id='str', ctx=Load()))], kw_defaults=[Constant(value=False), Constant(value=None), Constant(value=None), Constant(value=None), Constant(value='Snapshot copy')], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "gen_random_snap": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='source_folder_for_choices', annotation=Name(id='Path', ctx=Load())), arg(arg='id_length', annotation=Name(id='int', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=10)])",
+          "returns": "Name(id='Snapshot', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_from_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='path_snapshot', annotation=Name(id='Path', ctx=Load())), arg(arg='json_filename', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "BinOp(left=Name(id='Snapshot', ctx=Load()), op=BitOr(), right=Constant(value=None))",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "validate_snapshot_root": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_child_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='child_name', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_snapshot_json_path": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='folder_name', annotation=Name(id='str', ctx=Load())), arg(arg='catalogue_path', annotation=Name(id='Path', ctx=Load())), arg(arg='json_filename', annotation=Name(id='str', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Name(id='Path', ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "get_edits_between_snapshots": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='old', annotation=Name(id='Snapshot', ctx=Load())), arg(arg='new', annotation=Name(id='Snapshot', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='SnapEditAction', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        },
+        "sort_snapshots": {
+          "args": "arguments(posonlyargs=[], args=[arg(arg='snapshots', annotation=Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())), arg(arg='sort_by', annotation=Constant(value='SnapshotSortKey')), arg(arg='reverse', annotation=Name(id='bool', ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=False)])",
+          "returns": "Subscript(value=Name(id='list', ctx=Load()), slice=Name(id='Snapshot', ctx=Load()), ctx=Load())",
+          "decorators": [
+            "Name(id='staticmethod', ctx=Load())"
+          ]
+        }
+      },
+      "fields": {},
+      "enum_values": {}
+    }
+  }
+}

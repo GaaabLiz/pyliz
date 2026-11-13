@@ -68,6 +68,51 @@ class FrameSelector(ABC):
         self.logger.debug(f"Video properties - FPS: {fps}, Total frames: {total_frames}, Duration: {duration:.2f}s")
         return cap, fps, duration, total_frames
 
+    def _extract_indexed_frames(
+        self,
+        cap: cv2.VideoCapture,
+        target_frames: int,
+        *,
+        scene_changes: List[float] | None = None,
+        log_indices: bool = False,
+    ) -> List[Frame]:
+        """Read evenly spaced frames, optionally marking detected transitions.
+
+        Args:
+            cap (cv2.VideoCapture): Open video capture positioned for random access.
+            target_frames (int): Requested number of frames; clamped to the available frame count.
+            scene_changes (List[float] | None): Transition timestamps used to label sampled frames.
+            log_indices (bool): Whether to log the selected source frame indices.
+
+        Returns:
+            List[Frame]: Successfully decoded frames in RGB order, with timestamps and scene labels.
+        """
+        total_frames = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        target_frames = min(max(target_frames, 0), total_frames)
+        if target_frames == 0:
+            return []
+
+        frame_indices = np.linspace(0, total_frames - 1, num=target_frames, dtype=int)
+        if log_indices:
+            self.logger.debug(f"Frame indices selected: {frame_indices.tolist()}")
+
+        frames = []
+        for frame_index in frame_indices:
+            frame_index = int(frame_index)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ret, frame = cap.read()
+            if not ret:
+                self.logger.warning(f"Failed to read frame at position {frame_index}")
+                continue
+
+            timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            is_transition = any(abs(change - timestamp) < 0.1 for change in scene_changes or ())
+            scene_type = SceneType.TRANSITION if is_transition else SceneType.STATIC
+            frames.append(Frame(image=frame_rgb, timestamp=timestamp, scene_type=scene_type))
+
+        return frames
+
 
 class DynamicFrameSelector(FrameSelector):
     """
@@ -152,33 +197,9 @@ class DynamicFrameSelector(FrameSelector):
         scene_changes: List[float],
     ) -> List[Frame]:
         """
-        Extracts specific frames from the video, ensuring scene changes are prioritized
-        and gaps are filled to reach the target count.
+        Extract evenly spaced frames and mark samples near detected transitions.
         """
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        target_frames = min(max(target_frames, 0), total_frames)
-        if target_frames == 0:
-            return []
-
-        frame_indices = np.linspace(0, total_frames - 1, num=target_frames, dtype=int)
-        frames = []
-        for frame_idx in frame_indices:
-            frame_idx = int(frame_idx)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = cap.read()
-            if not ret:
-                self.logger.warning(f"Failed to read frame at position {frame_idx}")
-                continue
-
-            timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            is_scene_change = any(abs(sc - timestamp) < 0.1 for sc in scene_changes)
-            scene_type = SceneType.TRANSITION if is_scene_change else SceneType.STATIC
-
-            frames.append(Frame(image=frame_rgb, timestamp=timestamp, scene_type=scene_type))
-
-        return frames
+        return self._extract_indexed_frames(cap, target_frames, scene_changes=scene_changes)
 
 
 class UniformFrameSelector(FrameSelector):
@@ -212,29 +233,7 @@ class UniformFrameSelector(FrameSelector):
         """
         Inner logic to jump to specific frame indices based on uniform spacing.
         """
-        total_frames = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
-        target_frames = min(max(target_frames, 0), total_frames)
-        if target_frames == 0:
-            return []
-
-        frame_indices = np.linspace(0, total_frames - 1, num=target_frames, dtype=int)
-        self.logger.debug(f"Frame indices selected: {frame_indices.tolist()}")
-
-        frames = []
-        for frame_number in frame_indices:
-            frame_number = int(frame_number)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-            ret, frame = cap.read()
-            if not ret:
-                self.logger.warning(f"Failed to read frame at position {frame_number}")
-                continue
-
-            timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            frames.append(Frame(image=frame_rgb, timestamp=timestamp, scene_type=SceneType.STATIC))
-
-        return frames
+        return self._extract_indexed_frames(cap, target_frames, log_indices=True)
 
 
 class AllFrameSelector(FrameSelector):

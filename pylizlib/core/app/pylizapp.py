@@ -6,7 +6,8 @@ from enum import Enum
 
 from pylizlib.core.app.configini import IniItem, IniManager
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os import path as pathutils
+from pylizlib.core.os.filesystem.directories import check_path, check_path_dir, create_path
+from pylizlib.core.os.paths.locations import get_app_home_dir
 
 
 class PylizDirFoldersTemplate(Enum):
@@ -48,9 +49,9 @@ class PylizApp:
         :param author: Application author name.
         """
         app_folder_name = folder_name if folder_name is not None else app_name
-        self.path: str = pathutils.get_app_home_dir(app_folder_name)
-        pathutils.check_path(self.path, True)
-        pathutils.check_path_dir(self.path)
+        self.path: str = get_app_home_dir(app_folder_name)
+        check_path(self.path, True)
+        check_path_dir(self.path)
         self.name = app_name
         self.version = app_version
         self.author = author
@@ -76,9 +77,9 @@ class PylizApp:
         """Create or update a tracked subfolder inside the app directory."""
 
         folder_path = os.path.join(self.path, folder_name)
-        pathutils.create_path(folder_path)
-        pathutils.check_path(folder_path, True)
-        pathutils.check_path_dir(folder_path)
+        create_path(folder_path)
+        check_path(folder_path, True)
+        check_path_dir(folder_path)
 
         folder = PylizDirFolder(key, folder_name, folder_path)
         existing_index = self._get_folder_index(key)

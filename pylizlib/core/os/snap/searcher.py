@@ -1,10 +1,9 @@
 """
 Full-text and filename search across snapshot contents.
 
-Responsibilities (Single Responsibility Principle):
-    - Defining the search parameter model (query, type, target, extensions).
-    - Searching the files inside one or more snapshots on the filesystem.
-    - Returning structured results that describe where a match was found.
+Searches decode common text encodings, read content in bounded chunks, and keep
+result pages bounded. Regex content searches are multiline and have a timeout
+and a configurable maximum context window.
 
 Classes:
     QueryType            – Enum: TEXT | REGEX.
@@ -14,29 +13,44 @@ Classes:
     SnapshotSearcher     – Executes searches across snapshot directories.
 """
 
-import re
+from __future__ import annotations
+
+import codecs
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional, Protocol
 
+import regex as regex_engine
+
+from pylizlib.core.data.text.models import TimedPattern
+from pylizlib.core.data.text.results import ResultPage as _ResultPage
+from pylizlib.core.data.text.search import TextFileSearcher
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.snap.callbacks import SnapshotProgressCallback
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import Snapshot
 
-# Type alias for a progress callback: (filename, total_files, processed_files) -> Optional[bool]
-SnapshotProgressCallback = Callable[[str, int, int], Optional[bool]]
-
 
 class QueryType(Enum):
-    """Specifies whether a search query is plain text or a regular expression."""
+    """Select literal text or timed regular-expression matching.
+
+    Attributes:
+        TEXT (QueryType): Case-sensitive literal substring search.
+        REGEX (QueryType): regex-engine matching with the configured per-call timeout.
+    """
 
     TEXT = "text"
     REGEX = "regex"
 
 
 class SearchTarget(Enum):
-    """Specifies whether to search for a file name or within file content."""
+    """Select which part of each candidate file is searched.
+
+    Attributes:
+        FILE_NAME (SearchTarget): Match the basename without decoding file contents.
+        FILE_CONTENT (SearchTarget): Decode content and retain at most one result per starting line.
+    """
 
     FILE_NAME = "name"
     FILE_CONTENT = "content"
@@ -44,9 +58,18 @@ class SearchTarget(Enum):
 
 @dataclass
 class SnapshotSearchResult:
-    """
-    Represents a single search result within a snapshot file.
-    Can be a match in file content or a match of a file name.
+    """Represents a single search result within a snapshot file.
+
+    A content match is reported once per matching line. For a multiline match,
+    ``line_number`` and ``line_content`` refer to the line where the match starts.
+
+    Attributes:
+        file_path (Path): Native file path associated with the match or current scan.
+        searched_text (str): Query text or regex source at the time this result was recorded.
+        snapshot_name (str): Snapshot display label copied into each public search result.
+        line_number (Optional[int]): One-based starting line of a content match; None for filename-only results.
+        line_content (Optional[str]): Stripped content-line preview, possibly with ellipses; None for filename-
+            only results.
     """
 
     file_path: Path
@@ -58,29 +81,122 @@ class SnapshotSearchResult:
 
 @dataclass
 class SnapshotSearchParams:
-    """
-    Parameters for searching within a snapshot.
+    """Search query and resource limits for a search operation.
+
+    ``max_results`` and ``result_offset`` provide a bounded result page;
+    ``search_list`` applies that page across the full list of snapshots.
+    ``max_files`` caps the candidate paths retained for a search. Content is
+    read in ``chunk_size`` blocks, with each result's line preview capped by
+    ``max_line_preview_chars``. ``max_context_chars`` bounds retained regex context; it is not a strict
+    maximum match length. Matches spanning beyond retained context are not
+    guaranteed and can depend on chunk and EOF boundaries. ``encoding=None`` recognizes UTF-8 and UTF-16/32 BOMs, an ASCII-heavy
+    bomless UTF-16 layout, UTF-8, then Windows-1252 fallback.
+
+    Attributes:
+        query (str): Query text or regex source; regex syntax is compiled at search time.
+        search_target (SearchTarget): FILE_NAME for basename matching or FILE_CONTENT for decoded text.
+        query_type (QueryType): TEXT for literal substring matching or REGEX for timed regex matching.
+        extensions (list[str]): Case-insensitive suffix filters, with optional leading dots and compound suffixes;
+            empty accepts all files.
+        encoding (str | None): Explicit text codec, or None for the current BOM/UTF/Windows-1252 detection policy.
+        max_files (int): Maximum candidate paths retained per snapshot, default 10000.
+        max_results (int): Maximum retained page results, default 1000; zero produces an empty page.
+        result_offset (int): Number of matching starting lines/names skipped across the complete search page.
+        chunk_size (int): Decoded characters requested per stream read; default 65536, rather than a byte limit.
+        max_context_chars (int): Retained regex-context budget in characters. It is not a hard maximum match
+            length; spans beyond retained context are not guaranteed.
+        max_line_preview_chars (int): Maximum preview characters before truncation ellipses, default 4096.
+        regex_timeout_seconds (float): Timeout per regex call/window, default 0.1 seconds; not a global query
+            deadline.
     """
 
     query: str
     search_target: SearchTarget = SearchTarget.FILE_CONTENT
     query_type: QueryType = QueryType.TEXT
     extensions: list[str] = field(default_factory=list)
+    encoding: str | None = None
+    max_files: int = 10_000
+    max_results: int = 1_000
+    result_offset: int = 0
+    chunk_size: int = 64 * 1024
+    max_context_chars: int = 1024 * 1024
+    max_line_preview_chars: int = 4_096
+    regex_timeout_seconds: float = 0.1
+
+    def __post_init__(self) -> None:
+        """Reject invalid limits before any filesystem work begins.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+            LookupError: If an explicit encoding name is not a recognized codec.
+
+        Notes:
+            This validates numeric bounds and looks up an explicit codec. It does not compile query regex syntax or
+            make the mutable configuration immutable; regex compilation happens when searching.
+        """
+        if self.max_files < 1:
+            raise ValueError("max_files must be at least 1")
+        if self.max_results < 0:
+            raise ValueError("max_results cannot be negative")
+        if self.result_offset < 0:
+            raise ValueError("result_offset cannot be negative")
+        if self.chunk_size < 1:
+            raise ValueError("chunk_size must be at least 1")
+        if self.max_context_chars < 1:
+            raise ValueError("max_context_chars must be at least 1")
+        if self.max_line_preview_chars < 1:
+            raise ValueError("max_line_preview_chars must be at least 1")
+        if self.regex_timeout_seconds <= 0:
+            raise ValueError("regex_timeout_seconds must be greater than 0")
+        if self.encoding is not None:
+            codecs.lookup(self.encoding)
+
+
+class SnapshotPathLookup(Protocol):
+    """The only catalogue capability required by snapshot searching."""
+
+    def get_snap_directory_path(self, snap: Snapshot) -> Path | None:
+        """Resolve a stored snapshot using the catalogue's current lookup policy.
+
+        Args:
+            snap (Snapshot): Snapshot model identifying the stored tree or operation target.
+
+        Returns:
+            Path | None: Validated stored directory when present, otherwise None; catalogue recovery may run before
+                lookup.
+
+        Notes:
+            The catalogue implementation can invoke recovery while resolving the snapshot. Callers must not assume
+            that this capability is filesystem-read-only.
+        """
+        ...
 
 
 class SnapshotSearcher:
+    """Search snapshot files with bounded memory, cancellation, and regex limits.
+
+    Attributes:
+        catalogue (SnapshotPathLookup): Catalogue capability used to resolve stored snapshot paths, including its
+            recovery policy.
     """
-    Searches for textual content within the files of one or more snapshots.
-    """
+
+    _DETECTION_SAMPLE_BYTES = 8 * 1024
 
     def __init__(self, catalogue: SnapshotCatalogue):
-        """
-        Initializes the SnapshotSearcher.
+        """Initialize the searcher with the catalogue path lookup it needs.
 
         Args:
-            catalogue: The SnapshotCatalogue to search in.
+            catalogue (SnapshotCatalogue): Catalogue capability used to resolve stored snapshot paths, including its
+                recovery policy.
+
+        Returns:
+            None: No return value.
         """
-        self.catalogue = catalogue
+        self.catalogue: SnapshotPathLookup = catalogue
+        self._text_searcher = TextFileSearcher(self._DETECTION_SAMPLE_BYTES)
 
     def search(
         self,
@@ -88,29 +204,34 @@ class SnapshotSearcher:
         params: SnapshotSearchParams,
         on_progress: Optional[SnapshotProgressCallback] = None,
     ) -> list[SnapshotSearchResult]:
-        """
-        Performs a search in a single snapshot based on the provided parameters.
+        """Search one snapshot and return at most ``params.max_results`` matches.
 
         Args:
-            snapshot: The `Snapshot` object to search within.
-            params: An object containing the search query and options.
-            on_progress: An optional callback function to report search progress,
-                         receiving (filename, total_files, processed_files).
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
 
         Returns:
-            A list of `SnapshotSearchResult` objects matching the query.
+            list[SnapshotSearchResult]: At most max_results matches after result_offset, in existing traversal order.
+                Content produces at most one result per starting line.
+
+        Notes:
+            A content result represents one starting line, including for multiline regexes. Offsets/results count
+            those lines, not every occurrence. Only literal False from the observer cancels the current snapshot.
+            Observer exceptions propagate unchanged; file read/decode errors are logged and skipped.
         """
+        page = self._new_page(params)
+        compiled_regex = self._compile_regex(params)
+        if params.query_type == QueryType.REGEX and compiled_regex is None:
+            return page.results
+
         snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
-
-        compiled_regex = None
-        if params.query_type == QueryType.REGEX:
-            try:
-                compiled_regex = re.compile(params.query)
-            except re.error as e:
-                logger.error(f"Invalid regex pattern provided: {e}")
-                return []
-
-        return self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress)
+        self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress, page)
+        logger.debug("Finished snapshot search snapshot=%s results=%s", snapshot.id, len(page.results))
+        return page.results
 
     def search_list(
         self,
@@ -118,146 +239,261 @@ class SnapshotSearcher:
         params: SnapshotSearchParams,
         on_progress: Optional[SnapshotProgressCallback] = None,
     ) -> list[SnapshotSearchResult]:
-        """
-        Performs a search across a list of snapshots based on the provided parameters.
+        """Search snapshots in order, applying one bounded page across all of them.
 
         Args:
-            snapshots: A list of Snapshot objects to search within.
-            params: The search parameters (query, type, extensions).
-            on_progress: An optional callback to report progress.
+            snapshots (list[Snapshot]): Snapshot models processed in supplied order; search pagination spans the whole
+                list.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
 
         Returns:
-            A list of all search results found across all specified snapshots.
+            list[SnapshotSearchResult]: One bounded page shared across the supplied snapshot order; max_files and
+                callback cancellation remain scoped to each snapshot.
+
+        Notes:
+            One offset/limit page spans all snapshots. max_files and literal-False cancellation apply to each current
+            snapshot, so later snapshots may still be searched. Encoding retry discards the failed file attempt before
+            committing results.
         """
-        all_results: list[SnapshotSearchResult] = []
+        page = self._new_page(params)
+        compiled_regex = self._compile_regex(params)
+        if params.query_type == QueryType.REGEX and compiled_regex is None:
+            return page.results
+
         for snapshot in snapshots:
-            all_results.extend(self.search(snapshot, params, on_progress))
-        return all_results
+            if page.full:
+                break
+            snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
+            self._search_in_snapshot_path(snapshot, snapshot_path, params, compiled_regex, on_progress, page)
+        return page.results
+
+    @staticmethod
+    def _new_page(params: SnapshotSearchParams) -> _ResultPage:
+        """Create a result page using the caller's pagination limits.
+
+        Args:
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+
+        Returns:
+            _ResultPage: Empty bounded page initialized with the requested global offset and limit.
+        """
+        return _ResultPage(params.result_offset, params.max_results)
+
+    @staticmethod
+    def _compile_regex(params: SnapshotSearchParams) -> Optional[TimedPattern]:
+        """Compile a regex query, logging invalid patterns without raising.
+
+        Args:
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+
+        Returns:
+            Optional[TimedPattern]: Compiled regex for REGEX mode, otherwise None; invalid regex syntax is
+                logged and also yields None.
+        """
+        if params.query_type != QueryType.REGEX:
+            return None
+        try:
+            return regex_engine.compile(params.query)
+        except regex_engine.error as error:
+            logger.error(f"Invalid regex pattern provided: {error}")
+            return None
 
     def _search_in_snapshot_path(
         self,
         snapshot: Snapshot,
-        snapshot_path: Path,
+        snapshot_path: Path | None,
         params: SnapshotSearchParams,
-        compiled_regex: Optional[re.Pattern],
+        compiled_regex: Optional[TimedPattern],
         on_progress: Optional[SnapshotProgressCallback],
-    ) -> list[SnapshotSearchResult]:
-        """
-        Private helper to perform a search within a specific snapshot's directory path.
+        page: _ResultPage,
+    ) -> None:
+        """Search a resolved snapshot directory into an existing bounded page.
 
         Args:
-            snapshot: The snapshot being searched.
-            snapshot_path: The filesystem path of the snapshot's contents.
-            params: The search parameters.
-            compiled_regex: A pre-compiled regex pattern, if applicable.
-            on_progress: The progress callback function.
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            snapshot_path (Path | None): Stored snapshot directory to validate or search.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+            page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
 
         Returns:
-            A list of search results found in the snapshot.
+            None: No return value.
         """
-        results: list[SnapshotSearchResult] = []
+        if page.full:
+            return
         if not snapshot_path or not snapshot_path.is_dir():
             logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
-            return results
+            return
 
-        # 1. Collect all files to be searched
-        files_to_search: list[Path] = []
-        for dir_assoc in snapshot.directories:
-            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
-            if not copied_dir_path.is_dir():
-                continue
-            for file_path in copied_dir_path.rglob("*"):
-                if self._should_search_file(file_path, params.extensions):
-                    files_to_search.append(file_path)
-
-        # 2. Iterate and report progress
+        files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions, params.max_files)
         total_files = len(files_to_search)
-        for i, file_path in enumerate(files_to_search):
-            if on_progress:
-                if on_progress(file_path.name, total_files, i + 1) is False:
-                    break
+        for index, file_path in enumerate(files_to_search, 1):
+            if page.full:
+                break
+            if on_progress and on_progress(file_path.name, total_files, index) is False:
+                break
 
             if params.search_target == SearchTarget.FILE_NAME:
-                found = False
-                if params.query_type == QueryType.TEXT:
-                    if params.query in file_path.name:
-                        found = True
-                elif compiled_regex and compiled_regex.search(file_path.name):
-                    found = True
-
-                if found:
-                    results.append(
+                if self._matches(file_path.name, params, compiled_regex):
+                    page.add(
                         SnapshotSearchResult(
                             file_path=file_path,
                             searched_text=params.query,
                             snapshot_name=snapshot.name,
                         )
                     )
-
             elif params.search_target == SearchTarget.FILE_CONTENT:
-                results.extend(self._search_in_file(file_path, params, compiled_regex, snapshot.name))
+                file_page = page.fork()
+                cancelled = self._search_in_file(
+                    file_path,
+                    params,
+                    compiled_regex,
+                    snapshot.name,
+                    file_page,
+                    on_progress,
+                    total_files,
+                    index,
+                )
+                page.commit(file_page)
+                if cancelled:
+                    break
 
-        return results
+        if len(files_to_search) == params.max_files:
+            logger.warning(
+                "Search reached max_files=%d for snapshot %s; additional files may not have been searched.",
+                params.max_files,
+                snapshot.id,
+            )
 
     def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
-        """
-        Determines if a file should be included in the search.
+        """Apply file and case-insensitive suffix filters, including compound suffixes.
 
         Args:
-            file_path: The path to the file.
-            extensions: A list of file extensions to include. If empty, all files are included.
+            file_path (Path): Native candidate file path to filter, inspect or search.
+            extensions (list[str]): Suffix filters, case-insensitive, with optional leading dots and compound
+                suffixes; empty searches all files.
 
         Returns:
-            True if the file should be searched, False otherwise.
+            bool: Whether the entry is a file and matches any enabled case-insensitive suffix filter.
         """
         if not file_path.is_file():
             return False
         if not extensions:
-            return True  # If no extensions are specified, search all files
-        return file_path.suffix in extensions
+            return True
+        normalized = [extension.casefold() if extension.startswith(".") else f".{extension.casefold()}" for extension in extensions]
+        name = file_path.name.casefold()
+        return any(name.endswith(extension) for extension in normalized if extension != ".")
 
     def _search_in_file(
         self,
         file_path: Path,
         params: SnapshotSearchParams,
-        compiled_regex: Optional[re.Pattern],
+        compiled_regex: Optional[TimedPattern],
         snapshot_name: str,
-    ) -> list[SnapshotSearchResult]:
-        """
-        Performs the search within a single file.
+        page: _ResultPage,
+        on_progress: Optional[SnapshotProgressCallback],
+        total_files: int,
+        processed_files: int,
+    ) -> bool:
+        """Scan a file in chunks; return True when the callback cancels the snapshot.
 
         Args:
-            file_path: The path of the file to search.
-            params: The search parameters.
-            compiled_regex: A pre-compiled regex pattern, if applicable.
-            snapshot_name: The name of the snapshot for including in results.
+            file_path (Path): Native candidate file path to filter, inspect or search.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+            snapshot_name (str): Snapshot display label copied into each public search result.
+            page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
+            on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
+                processed_files), also during chunks; only literal False cancels the current snapshot.
+            total_files (int): Candidate-file count for the current snapshot, passed unchanged to search observers.
+            processed_files (int): One-based index of the current candidate file, passed unchanged during its chunks.
 
         Returns:
-            A list of search results found within the file.
-        """
-        results: list[SnapshotSearchResult] = []
-        try:
-            with file_path.open("r", encoding="utf-8") as f:
-                for i, line in enumerate(f, 1):
-                    found = False
-                    if params.query_type == QueryType.TEXT:
-                        if params.query in line:
-                            found = True
-                    elif compiled_regex and compiled_regex.search(line):
-                        found = True
+            bool: True only when a chunk observer returns literal False; False for normal completion, skipped
+                I/O/decoding or regex timeout.
 
-                    if found:
-                        results.append(
-                            SnapshotSearchResult(
-                                file_path=file_path,
-                                searched_text=params.query,
-                                line_number=i,
-                                line_content=line.strip(),
-                                snapshot_name=snapshot_name,
-                            )
-                        )
-        except UnicodeDecodeError:
-            logger.debug(f"Skipping binary file during search: {file_path}")
-        except Exception as e:
-            logger.warning(f"Error reading file {file_path} during search: {e}")
-        return results
+        Notes:
+            File I/O/decoding failures are logged and skipped. Observer exceptions propagate unchanged. A late UTF-8
+            failure retries the whole file as Windows-1252 without retaining the first attempt's page.
+        """
+        from pylizlib.core.os.snap.searching import SnapshotMatchPage, SnapshotTextOptions
+
+        on_chunk = None if on_progress is None else (lambda: on_progress(file_path.name, total_files, processed_files) if on_progress else None)
+        return self._text_searcher.search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
+
+    def _collect_files(
+        self,
+        snapshot: Snapshot,
+        snapshot_path: Path,
+        extensions: list[str],
+        max_files: int,
+    ) -> list[Path]:
+        """Collect no more than the configured number of searchable file paths.
+
+        Args:
+            snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
+                where documented.
+            snapshot_path (Path): Stored snapshot directory to validate or search.
+            extensions (list[str]): Suffix filters, case-insensitive, with optional leading dots and compound
+                suffixes; empty searches all files.
+            max_files (int): Maximum candidate paths retained for one snapshot; later candidates are not visited after
+                the limit.
+
+        Returns:
+            list[Path]: At most max_files matching paths, visited by association order then the native rglob
+                traversal.
+        """
+        files_to_search: list[Path] = []
+        for dir_assoc in snapshot.directories:
+            copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
+            if not copied_dir_path.is_dir():
+                continue
+            for file_path in copied_dir_path.rglob("*"):
+                if self._should_search_file(file_path, extensions):
+                    files_to_search.append(file_path)
+                    if len(files_to_search) >= max_files:
+                        return files_to_search
+        return files_to_search
+
+    @staticmethod
+    def _matches(
+        text: str,
+        params: SnapshotSearchParams,
+        compiled_regex: Optional[TimedPattern],
+    ) -> bool:
+        """Match a filename using the same text and timed-regex rules as content.
+
+        Args:
+            text (str): Filename or text string to match using the selected literal/regex policy.
+            params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
+                configuration.
+            compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
+                None produces no regex matches.
+
+        Returns:
+            bool: Whether literal substring or timed regex matching accepts the filename; regex timeouts return False.
+        """
+        if params.query_type == QueryType.TEXT:
+            return params.query in text
+        if compiled_regex is None:
+            return False
+        try:
+            return bool(compiled_regex.search(text, timeout=params.regex_timeout_seconds))
+        except TimeoutError:
+            logger.warning(
+                "Regex search timed out while checking a filename after %.3f seconds",
+                params.regex_timeout_seconds,
+            )
+            return False

@@ -1,7 +1,8 @@
-import os
 from pathlib import Path
 
 from qfluentwidgets import ConfigValidator
+
+from pylizlib.core.os.commands import is_software_installed
 
 
 class ExecutableValidator(ConfigValidator):
@@ -9,13 +10,11 @@ class ExecutableValidator(ConfigValidator):
 
     def validate(self, value):
         path = Path(value)
-        # Controlla che il file esista ed è eseguibile
-        return path.is_file() and os.access(path, os.X_OK)
+        return is_software_installed(path)
 
     def correct(self, value):
         path = Path(value)
-        # Se il file non esiste o non è eseguibile, ritorna valore senza modifiche
-        if not path.exists() or not os.access(path, os.X_OK):
+        if not is_software_installed(path):
             return value
         # Ritorna il percorso assoluto con slashes forward
         return str(path.resolve()).replace("\\", "/")

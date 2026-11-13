@@ -1,0 +1,784 @@
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from pylizlib.core.os.filesystem.directories import (
+    PathMatcher,
+    check_path,
+    check_path_dir,
+    check_path_file,
+    clear_folder_contents,
+    count_items,
+    count_pathsub_dirs,
+    count_pathsub_elements,
+    count_pathsub_files,
+    create_path,
+    dir_contains,
+    dir_contains_image,
+    dir_contains_video,
+    duplicate_directory,
+    get_files_from,
+    get_folders_from,
+    get_path_items,
+    random_subfolder,
+    remove_directory_or_move_to_temp,
+    scan_directory,
+    scan_directory_match_bool,
+)
+from pylizlib.core.os.paths.lexical import get_filename, get_filename_no_ext, get_second_to_last_directory
+from pylizlib.core.os.paths.locations import get_app_home_dir, get_home_dir
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a small reproducible directory tree inside a temp dir
+# ---------------------------------------------------------------------------
+def _build_tree(root: str):
+    """
+    Creates the following tree under *root*:
+        root/
+            a.txt
+            b.png
+            sub1/
+                c.txt
+                d.mp4
+            sub2/
+                e.jpg
+    """
+    os.makedirs(os.path.join(root, "sub1"))
+    os.makedirs(os.path.join(root, "sub2"))
+    for name in ("a.txt", "b.png"):
+        open(os.path.join(root, name), "w").close()
+    for name in ("c.txt", "d.mp4"):
+        open(os.path.join(root, "sub1", name), "w").close()
+    open(os.path.join(root, "sub2", "e.jpg"), "w").close()
+
+
+class GetHomeDirTestCase(unittest.TestCase):
+    def test_returns_existing_directory(self):
+        home = get_home_dir()
+        self.assertTrue(os.path.isdir(home))
+
+
+class GetAppHomeDirTestCase(unittest.TestCase):
+    def test_creates_app_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            app_name = os.path.join(td, ".test_pyliz_app")
+            result = get_app_home_dir(app_name, create_if_not=True)
+            self.assertTrue(os.path.isdir(result))
+
+    def test_no_create_flag(self):
+        result = get_app_home_dir(".unlikely_test_app_xyz_999", create_if_not=False)
+        # should just return the path string without creating it
+        self.assertIsInstance(result, str)
+
+
+class CreatePathTestCase(unittest.TestCase):
+    def test_creates_nested_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            nested = os.path.join(td, "a", "b", "c")
+            create_path(nested)
+            self.assertTrue(os.path.isdir(nested))
+
+    def test_existing_path_no_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            create_path(td)  # should not raise
+
+
+class CheckPathTestCase(unittest.TestCase):
+    def test_existing_readable_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertTrue(check_path(td))
+
+    def test_check_path_not_readable(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch("pylizlib.core.os.filesystem.directories.os.access", return_value=False):
+                self.assertFalse(check_path(td))
+
+    def test_non_existing_dir(self):
+        self.assertFalse(check_path("/non/existing/path/xyz"))
+
+    def test_create_if_not(self):
+        with tempfile.TemporaryDirectory() as td:
+            new = os.path.join(td, "new_dir")
+            result = check_path(new, create_if_not=True)
+            self.assertFalse(result)  # returns False but creates it
+            self.assertTrue(os.path.isdir(new))
+
+
+class CheckPathDirTestCase(unittest.TestCase):
+    def test_valid_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            check_path_dir(td)  # should not raise
+
+    def test_not_readable_raises_permission_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+    def test_not_writable_raises_permission_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+    def test_non_existing_raises_ioerror(self):
+        with self.assertRaises(IOError):
+            check_path_dir("/non/existing/xyz")
+
+    def test_file_raises_not_a_directory(self):
+        with tempfile.NamedTemporaryFile() as tmp:
+            with self.assertRaises(Exception):
+                check_path_dir(tmp.name)
+
+
+class CheckPathFileTestCase(unittest.TestCase):
+    def test_valid_file(self):
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_name = tmp.name
+        try:
+            check_path_file(tmp_name)  # should not raise
+        finally:
+            os.unlink(tmp_name)
+
+    def test_not_readable_raises_permission_error(self):
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_name = tmp.name
+        try:
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.R_OK else True):
+                with self.assertRaises(PermissionError):
+                    check_path_file(tmp_name)
+        finally:
+            os.unlink(tmp_name)
+
+    def test_not_writable_raises_permission_error(self):
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_name = tmp.name
+        try:
+            with patch("pylizlib.core.os.filesystem.directories.os.access", side_effect=lambda p, mode: False if mode == os.W_OK else True):
+                with self.assertRaises(PermissionError):
+                    check_path_file(tmp_name)
+        finally:
+            os.unlink(tmp_name)
+
+    def test_non_existing_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            check_path_file("/non/existing/file.txt")
+
+    def test_directory_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(Exception):
+                check_path_file(td)
+
+
+class GetSecondToLastDirectoryTestCase(unittest.TestCase):
+    def test_normal_path(self):
+        self.assertEqual(get_second_to_last_directory("/a/b/c"), "b")
+
+    def test_short_path(self):
+        self.assertIsNone(get_second_to_last_directory("single"))
+
+    def test_two_components(self):
+        result = get_second_to_last_directory("/root/child")
+        self.assertEqual(result, "root")
+
+
+class CountPathSubTestCase(unittest.TestCase):
+    def test_count_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertEqual(count_pathsub_files(td), 5)
+
+    def test_count_dirs(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertEqual(count_pathsub_dirs(td), 2)
+
+    def test_count_elements(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertEqual(count_pathsub_elements(td), 7)
+
+
+class GetFilenameTestCase(unittest.TestCase):
+    def test_get_filename(self):
+        self.assertEqual(get_filename("/a/b/photo.jpg"), "photo.jpg")
+
+    def test_get_filename_no_ext(self):
+        self.assertEqual(get_filename_no_ext("/a/b/photo.jpg"), "photo")
+
+    def test_get_filename_no_ext_no_extension(self):
+        self.assertEqual(get_filename_no_ext("/a/b/README"), "README")
+
+
+class ScanDirectoryMatchBoolTestCase(unittest.TestCase):
+    def test_returns_matching_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            result = scan_directory_match_bool(td, lambda p: p.endswith(".txt"))
+            self.assertEqual(len(result), 2)
+
+    def test_no_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            result = scan_directory_match_bool(td, lambda p: p.endswith(".zip"))
+            self.assertEqual(len(result), 0)
+
+
+class ScanDirectoryTestCase(unittest.TestCase):
+    def test_nested_tree_visits_each_item_once_with_full_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            nested = first / "nested"
+            second = root / "second"
+            nested.mkdir(parents=True)
+            second.mkdir()
+            expected_files = {str(root / "root.txt"), str(first / "same.txt"), str(nested / "leaf.txt")}
+            for file_path in expected_files:
+                Path(file_path).write_text("data", encoding="utf-8")
+            expected_folders = {str(first), str(nested), str(second)}
+            found_files = []
+            found_folders = []
+
+            scan_directory(str(root), found_files.append, found_folders.append)
+
+            self.assertCountEqual(found_files, expected_files)
+            self.assertCountEqual(found_folders, expected_folders)
+            self.assertEqual(len(found_files), len(expected_files))
+
+
+class DirContainsTestCase(unittest.TestCase):
+    def _assert_dir_contains_media(self, predicate):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertTrue(predicate(td))
+            empty_dir = os.path.join(td, "empty_dir")
+            os.mkdir(empty_dir)
+            self.assertFalse(predicate(empty_dir))
+
+    def test_contains_all(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertTrue(dir_contains(td, ["sub1", "sub2"]))
+
+    def test_contains_all_false(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertFalse(dir_contains(td, ["sub1", "missing"]))
+
+    def test_at_least_one_true(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertTrue(dir_contains(td, ["sub1", "missing"], at_least_one=True))
+
+    def test_at_least_one_false(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            self.assertFalse(dir_contains(td, ["x", "y"], at_least_one=True))
+
+    def test_dir_contains_image(self):
+        self._assert_dir_contains_media(dir_contains_image)
+
+    def test_dir_contains_video(self):
+        self._assert_dir_contains_media(dir_contains_video)
+
+
+class GetFoldersFromTestCase(unittest.TestCase):
+    def test_non_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            folders = get_folders_from(td)
+            names = [os.path.basename(f) for f in folders]
+            self.assertIn("sub1", names)
+            self.assertIn("sub2", names)
+
+    def test_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            folders = get_folders_from(td, recursive=True)
+            self.assertEqual(len(folders), 2)
+
+
+class GetFilesFromTestCase(unittest.TestCase):
+    def test_non_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            files = get_files_from(td)
+            self.assertEqual(len(files), 2)  # a.txt, b.png
+
+    def test_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            files = get_files_from(td, recursive=True)
+            self.assertEqual(len(files), 5)
+
+    def test_extension_filter(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            files = get_files_from(td, recursive=True, extension=".txt")
+            self.assertEqual(len(files), 2)
+
+
+class GetPathItemsTestCase(unittest.TestCase):
+    def test_non_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            items = get_path_items(Path(td))
+            # top level: a.txt, b.png, sub1, sub2
+            self.assertEqual(len(items), 4)
+
+    def test_recursive(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            items = get_path_items(Path(td), recursive=True)
+            # 2 dirs + 5 files = 7
+            self.assertEqual(len(items), 7)
+
+    def test_recursive_scan_reports_symlinks_without_following_them(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "root"
+            outside = Path(td) / "outside"
+            (root / "inside").mkdir(parents=True)
+            outside.mkdir()
+            (root / "inside" / "file.txt").write_text("inside", encoding="utf-8")
+            (outside / "outside.txt").write_text("outside", encoding="utf-8")
+            (root / "cycle").symlink_to(root, target_is_directory=True)
+            (root / "external").symlink_to(outside, target_is_directory=True)
+
+            items = get_path_items(root, recursive=True)
+            relative_items = {item.relative_to(root).as_posix() for item in items}
+
+            self.assertIn("cycle", relative_items)
+            self.assertIn("external", relative_items)
+            self.assertIn("inside", relative_items)
+            self.assertIn("inside/file.txt", relative_items)
+            self.assertEqual(relative_items, {"cycle", "external", "inside", "inside/file.txt"})
+
+    def test_permission_error_ignored(self):
+        from unittest.mock import patch
+
+        mock_entry = MagicMock()
+        mock_entry.path = "/mock/forbidden"
+        type(mock_entry).is_dir = MagicMock(side_effect=PermissionError("access denied"))
+        with patch("pylizlib.core.os.filesystem.directories.os.scandir") as mock_scandir:
+            mock_scandir.return_value.__enter__.return_value = [mock_entry]
+            items = get_path_items(Path("/mock"), recursive=True)
+            self.assertEqual(len(items), 1)
+
+
+class ClearFolderContentsTestCase(unittest.TestCase):
+    def test_clears_all(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            clear_folder_contents(Path(td))
+            self.assertEqual(len(os.listdir(td)), 0)
+
+    def test_not_a_dir_raises(self):
+        with tempfile.NamedTemporaryFile() as tmp:
+            with self.assertRaises(NotADirectoryError):
+                clear_folder_contents(Path(tmp.name))
+
+    def test_item_deletion_exception_is_logged(self):
+        with tempfile.TemporaryDirectory() as td:
+            file_path = Path(td) / "file.txt"
+            file_path.write_text("hello")
+            with patch.object(Path, "unlink", side_effect=OSError("unlink error")):
+                with patch("pylizlib.core.os.filesystem.directories.logger.error") as mock_log:
+                    clear_folder_contents(Path(td))
+                    mock_log.assert_called_once()
+
+
+class CountItemsTestCase(unittest.TestCase):
+    def test_count(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            # top-level: a.txt, b.png, sub1, sub2 = 4
+            self.assertEqual(count_items(Path(td)), 4)
+
+    def test_not_a_dir_raises(self):
+        with tempfile.NamedTemporaryFile() as tmp:
+            with self.assertRaises(ValueError):
+                count_items(Path(tmp.name))
+
+
+class DuplicateDirectoryTestCase(unittest.TestCase):
+    def test_invalid_src_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            duplicate_directory(Path("/non/existing/src"))
+
+    def test_duplicate_with_message_callback(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "origin"
+            src.mkdir()
+            (src / "file.txt").write_text("hello")
+            messages = []
+            duplicate_directory(src, message_callback=messages.append)
+            self.assertTrue(any("Copia in corso: file.txt" in m for m in messages))
+
+    def test_duplicate_default_suffix(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "origin"
+            src.mkdir()
+            (src / "file.txt").write_text("hello")
+
+            dup = duplicate_directory(src)
+            self.assertTrue(dup.exists())
+            self.assertEqual((dup / "file.txt").read_text(), "hello")
+            self.assertEqual(dup.name, "origin_copy")
+
+    def test_duplicate_custom_dest(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "origin"
+            src.mkdir()
+            (src / "file.txt").write_text("data")
+
+            dest = Path(td) / "my_copy"
+            dup = duplicate_directory(src, dest_dir=dest)
+            self.assertTrue(dup.exists())
+
+    def test_duplicate_existing_dest_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "origin"
+            src.mkdir()
+            dest = Path(td) / "existing"
+            dest.mkdir()
+            with self.assertRaises(FileExistsError):
+                duplicate_directory(src, dest_dir=dest)
+
+    def test_rejects_destinations_inside_source_even_through_symlink_alias(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "origin"
+            child = src / "child"
+            child.mkdir(parents=True)
+            (child / "file.txt").write_text("data", encoding="utf-8")
+            alias = root / "alias"
+            alias.symlink_to(src, target_is_directory=True)
+
+            for dest in (child / "copy", alias / "child" / "copy"):
+                with self.subTest(destination=dest), self.assertRaises(ValueError):
+                    duplicate_directory(src, dest_dir=dest)
+                self.assertFalse((child / "copy").exists())
+
+
+class RandomSubfolderTestCase(unittest.TestCase):
+    def test_returns_subfolder(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            result = random_subfolder(Path(td))
+            self.assertIn(result.name, ("sub1", "sub2"))
+
+    def test_no_subfolder_returns_none(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = random_subfolder(Path(td))
+            self.assertIsNone(result)
+
+
+class RemoveDirectoryOrMoveToTempTestCase(unittest.TestCase):
+    def test_removal_errors_propagate_with_and_without_callback(self):
+        for with_callback in (False, True):
+            with self.subTest(with_callback=with_callback), tempfile.TemporaryDirectory() as td:
+                target = Path(td) / "locked"
+                target.mkdir()
+                important = target / "important.txt"
+                important.write_text("must remain visible")
+                messages = []
+
+                with patch("pylizlib.core.os.filesystem.directories.shutil.rmtree", side_effect=PermissionError("directory is locked")):
+                    with self.assertRaisesRegex(PermissionError, "directory is locked"):
+                        remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
+
+                self.assertEqual(important.read_text(), "must remain visible")
+
+    def _symlink(self, link, target, target_is_directory=False):
+        try:
+            link.symlink_to(target, target_is_directory=target_is_directory)
+        except (OSError, NotImplementedError) as e:
+            self.skipTest(f"Symbolic links are unavailable: {e}")
+
+    def test_removal_preserves_external_symlink_targets_with_and_without_callback(self):
+        for with_callback in (False, True):
+            with self.subTest(with_callback=with_callback), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                outside = root / "outside"
+                outside.mkdir()
+                important = outside / "important.txt"
+                important.write_text("must survive")
+                target = root / "to_delete"
+                nested = target / "nested"
+                nested.mkdir(parents=True)
+                (nested / "local.txt").write_text("delete me")
+                self._symlink(nested / "linked", outside, target_is_directory=True)
+                self._symlink(nested / "file_link", important)
+                self._symlink(nested / "broken", root / "missing", target_is_directory=True)
+                messages = []
+
+                remove_directory_or_move_to_temp(target, message_callback=messages.append if with_callback else None)
+
+                self.assertFalse(target.exists())
+                self.assertEqual(important.read_text(), "must survive")
+                self.assertEqual(list(outside.iterdir()), [important])
+                if with_callback:
+                    self.assertTrue(messages)
+
+    def test_removing_root_symlink_only_unlinks_it(self):
+        for with_callback in (False, True):
+            for broken in (False, True):
+                with self.subTest(with_callback=with_callback, broken=broken), tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    outside = root / "outside"
+                    if not broken:
+                        outside.mkdir()
+                        (outside / "important.txt").write_text("must survive")
+                    link = root / "linked"
+                    self._symlink(link, outside, target_is_directory=True)
+                    messages = []
+
+                    remove_directory_or_move_to_temp(link, message_callback=messages.append if with_callback else None)
+
+                    self.assertFalse(link.is_symlink())
+                    if not broken:
+                        self.assertEqual((outside / "important.txt").read_text(), "must survive")
+
+    def test_clear_deletes_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "to_delete"
+            target.mkdir()
+            (target / "x.txt").write_text("bye")
+            remove_directory_or_move_to_temp(target)
+            self.assertFalse(target.exists())
+
+    def test_callback_deletion_does_not_follow_directory_symlinks(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            target = root / "target"
+            outside = root / "outside"
+            target.mkdir()
+            outside.mkdir()
+            protected_file = outside / "keep.txt"
+            protected_file.write_text("keep", encoding="utf-8")
+            (target / "external").symlink_to(outside, target_is_directory=True)
+
+            remove_directory_or_move_to_temp(target, message_callback=lambda _: None)
+
+            self.assertFalse(target.exists())
+            self.assertEqual(protected_file.read_text(encoding="utf-8"), "keep")
+
+    def test_move_to_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "to_move"
+            target.mkdir()
+            (target / "x.txt").write_text("data")
+            remove_directory_or_move_to_temp(target, temp_path=Path("pyliz_test_tmp"), move_to_temp=True)
+            self.assertFalse(target.exists())
+
+    def test_move_to_temp_none_temp_path(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "to_move"
+            target.mkdir()
+            with patch("pylizlib.core.os.filesystem.directories.logger.error") as mock_log:
+                remove_directory_or_move_to_temp(target, temp_path=None, move_to_temp=True)
+                mock_log.assert_called_once_with("Temp path cannot be None")
+                self.assertTrue(target.exists())
+
+    def test_move_to_temp_with_message_callback(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "to_move"
+            target.mkdir()
+            messages = []
+            remove_directory_or_move_to_temp(target, temp_path=Path("tmp_pyliz"), move_to_temp=True, message_callback=messages.append)
+            self.assertTrue(any("Spostamento:" in m for m in messages))
+
+    def test_clear_with_message_callback(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "to_delete"
+            target.mkdir()
+            (target / "file.txt").write_text("content")
+            messages = []
+            remove_directory_or_move_to_temp(target, message_callback=messages.append)
+            self.assertTrue(any("Eliminazione: file.txt" in m for m in messages))
+            self.assertTrue(any(f"Eliminazione: {target.name}" in m for m in messages))
+
+
+class PathMatcherTestCase(unittest.TestCase):
+    def test_match_with_file_list(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as other_td:
+            _build_tree(td)
+            list_file = Path(other_td) / "list.txt"
+            list_file.write_text("a.txt\nb.png\nsub1\nsub2", encoding="utf-8")
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=False)
+            intersection, perc = pm.match_with_file_list(list_file)
+            self.assertEqual(intersection, 4)
+            self.assertEqual(perc, 100.0)
+
+    def test_log_all(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=False)
+            with patch("builtins.print") as mock_print, patch("pylizlib.core.os.filesystem.directories.logger.debug") as mock_debug:
+                pm.log_all()
+                mock_debug.assert_called_once()
+                self.assertGreater(mock_print.call_count, 0)
+
+    def test_load_and_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=False)
+            intersection, perc = pm.match_with_list(["a.txt", "b.png", "sub1", "sub2"])
+            self.assertEqual(intersection, 4)
+            self.assertEqual(perc, 100.0)
+
+    def test_partial_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=False)
+            intersection, perc = pm.match_with_list(["a.txt", "unknown"])
+            self.assertEqual(intersection, 1)
+            self.assertGreater(perc, 0)
+            self.assertLess(perc, 100)
+
+    def test_export_file_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=False)
+            pm.export_file_list(Path(td), name="list.txt")
+            out_file = Path(td) / "list.txt"
+            self.assertTrue(out_file.exists())
+            lines = out_file.read_text().strip().splitlines()
+            self.assertEqual(len(lines), 4)
+
+    def test_match_with_file_list_expanded(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td), recursive=True)
+
+            list_file = Path(td) / "match_candidates.txt"
+            list_file.write_text("a.txt\nsub1/c.txt\nnonexistent.txt\n")
+
+            intersection, perc = pm.match_with_file_list(list_file)
+            self.assertEqual(intersection, 2)
+
+    def test_log_all_expanded(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            pm = PathMatcher()
+            pm.load_path(Path(td))
+            with patch("builtins.print") as mock_print:
+                pm.log_all()
+                self.assertTrue(mock_print.called)
+
+
+class PathExtraCoverageTestCase(unittest.TestCase):
+    def test_check_path_dir_permission_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch("os.access", side_effect=[False, True, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+            with patch("os.access", side_effect=[True, False, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_dir(td)
+
+    def test_check_path_file_permission_and_type_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            test_file = Path(td) / "test.txt"
+            test_file.write_text("hello")
+
+            with patch("os.access", side_effect=[False, True]):
+                with self.assertRaises(PermissionError):
+                    check_path_file(str(test_file))
+
+            with patch("os.access", side_effect=[True, False]):
+                with self.assertRaises(PermissionError):
+                    check_path_file(str(test_file))
+
+            # Not a file
+            with self.assertRaises(NotADirectoryError):
+                check_path_file(td)
+
+    def test_scan_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            _build_tree(td)
+            found_files = []
+            scan_directory(td, on_file=lambda f: found_files.append(f), on_folder=lambda d: None)
+            self.assertIn(str(Path(td) / "a.txt"), found_files)
+            self.assertIn(str(Path(td) / "sub1" / "c.txt"), found_files)
+
+    def test_dir_contains_image_and_video(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(dir_contains_image(td))
+            self.assertFalse(dir_contains_video(td))
+
+            _build_tree(td)
+            self.assertTrue(dir_contains_image(td))
+            self.assertTrue(dir_contains_video(td))
+
+    def test_remove_directory_with_message_callback(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "remove_me"
+            target.mkdir()
+            (target / "file1.txt").write_text("content")
+            sub = target / "sub"
+            sub.mkdir()
+            (sub / "file2.txt").write_text("content")
+
+            messages = []
+            remove_directory_or_move_to_temp(target, message_callback=lambda m: messages.append(m))
+            self.assertFalse(target.exists())
+            self.assertTrue(len(messages) > 0)
+
+    def test_remove_directory_move_to_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "move_me"
+            target.mkdir()
+            (target / "file.txt").write_text("hello")
+
+            messages = []
+            # temp_path is None should log error and return
+            remove_directory_or_move_to_temp(target, temp_path=None, move_to_temp=True)
+            self.assertTrue(target.exists())
+
+            # temp_path provided
+            remove_directory_or_move_to_temp(target, temp_path=Path("my_test_temp_pyliz"), move_to_temp=True, message_callback=lambda m: messages.append(m))
+            self.assertFalse(target.exists())
+            self.assertTrue(any("Spostamento" in m for m in messages))
+
+    def test_clear_folder_contents_handles_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            (p / "f1.txt").write_text("hi")
+            with patch("shutil.rmtree", side_effect=OSError("rmtree fail")):
+                with patch.object(Path, "unlink", side_effect=OSError("unlink fail")):
+                    # Should log error and not crash
+                    clear_folder_contents(p)
+
+    def test_duplicate_directory_invalid_src_and_callbacks(self):
+        with tempfile.TemporaryDirectory() as td:
+            non_dir = Path(td) / "not_a_dir.txt"
+            non_dir.write_text("hi")
+            with self.assertRaises(ValueError):
+                duplicate_directory(non_dir)
+
+            src = Path(td) / "source_folder"
+            src.mkdir()
+            (src / "child.txt").write_text("child")
+            messages = []
+            dest = duplicate_directory(src, message_callback=lambda m: messages.append(m))
+            self.assertTrue(dest.exists())
+            self.assertTrue((dest / "child.txt").exists())
+            self.assertTrue(any("Copia in corso" in m for m in messages))
+
+
+if __name__ == "__main__":
+    unittest.main()

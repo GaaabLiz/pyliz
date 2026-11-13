@@ -54,6 +54,8 @@ pip install .[ai]
 
 - **macOS (CPU/MPS)**
 
+  `ai-macos` resta disponibile come alias compatibile dell'extra `ai`.
+
 ```bash
 uv pip install -e '.[ai-macos]'
 ```
@@ -66,16 +68,16 @@ uv pip install -e '.[ai-linux-nvidia]'
 
 > Nota: per Linux NVIDIA servono driver CUDA compatibili lato host; `torch` usera `cuda` automaticamente quando disponibile.
 
-I test unitari in `test/ai/ai_media_scanner.py` usano provider stub e non richiedono i modelli AI reali.
+I test unitari in `test/unit/ai/ai_media_scanner.py` usano provider stub e non richiedono i modelli AI reali.
 
 ## Test di integrazione reali
 
-È stato aggiunto anche `test/ai/ai_media_scanner_integration.py`.
+I test di integrazione sono raggruppati per feature in `test/integration/ai/test_media_scanner.py`.
 
 Questo test:
 
 - scarica immagini da internet;
-- usa `/Users/gabliz/Developer/pyliz/test_local/ai_media_scanner_integration` come cartella di lavoro temporanea/cache;
+- usa `test_local/ai_media_scanner_integration` come cartella di lavoro temporanea/cache;
 - esercita davvero `TAGS`, `NSFW` e `OCR` tramite `AiMediaScanner`.
 
 Se l'ambiente non ha ancora le dipendenze AI richieste o non ha connettività internet, i test vengono marcati come `skipped` in modo esplicito.
@@ -83,17 +85,15 @@ Se l'ambiente non ha ancora le dipendenze AI richieste o non ha connettività in
 Esecuzione:
 
 ```bash
-cd /Users/gabliz/Developer/pyliz
-python -m pytest test/ai/ai_media_scanner.py test/ai/ai_media_scanner_integration.py test/media/util/source.py -q
+uv run pytest test/unit/ai/ai_media_scanner.py test/integration/ai/test_media_scanner.py test/unit/media/util/source.py -q
 ```
 
 Per salvare report persistenti in `test_local`:
 
 ```bash
-cd /Users/gabliz/Developer/pyliz
-mkdir -p /Users/gabliz/Developer/pyliz/test_local/ai_media_scanner_reports
-python -m pytest test/ai/ai_media_scanner_integration.py -vv \
-  --junitxml=/Users/gabliz/Developer/pyliz/test_local/ai_media_scanner_reports/integration_junit.xml \
-  | tee /Users/gabliz/Developer/pyliz/test_local/ai_media_scanner_reports/integration_run.log
+mkdir -p test_local/ai_media_scanner_reports
+uv run pytest test/integration/ai/test_media_scanner.py -vv \
+  --junitxml=test_local/ai_media_scanner_reports/integration_junit.xml \
+  | tee test_local/ai_media_scanner_reports/integration_run.log
 ```
 

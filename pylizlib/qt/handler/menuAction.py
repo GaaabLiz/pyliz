@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Any
 
 from PySide6.QtGui import QAction
@@ -25,7 +26,6 @@ from pylizlib.qt.handler.menuActionToolbar import ToolbarHandler
 from pylizlib.qt.util.menuActionTool import create_action_toggle_dock
 
 
-# noinspection DuplicatedCode
 class MenuMasterHandler:
     def __init__(
         self,
@@ -139,19 +139,18 @@ class MenuMasterHandler:
         inst.menu_install(self.menu)
         inst.toolbar_install(self.toolbar_handler)
 
-    def reinstall_actions(self):
+    def _reinstall_instances(self, instances: Iterable[InstanceAction | InstanceActionGroup], description: str) -> None:
         if not self.menu_installed:
-            logger.error("Cannot reinstall actions. Menu is not installed.")
+            logger.error("Cannot reinstall %s. Menu is not installed.", description)
             return
-        for instance in self.inst_actions:
+        for instance in instances:
             self.reinstall_instance(instance)
 
+    def reinstall_actions(self):
+        self._reinstall_instances(self.inst_actions, "actions")
+
     def reinstall_action_groups(self):
-        if not self.menu_installed:
-            logger.error("Cannot reinstall action groups. Menu is not installed.")
-            return
-        for instance in self.inst_group:
-            self.reinstall_instance(instance)
+        self._reinstall_instances(self.inst_group, "action groups")
 
     def reinstall_all(self):
         if not self.menu_installed:
