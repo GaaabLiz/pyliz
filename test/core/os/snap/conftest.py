@@ -6,12 +6,16 @@ logic in a single place and avoid repetition.
 """
 
 import shutil
+import unittest
 from pathlib import Path
 
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.os.snap import (
     SnapDirAssociation,
     Snapshot,
+    SnapshotCatalogue,
+    SnapshotManager,
+    SnapshotSettings,
 )
 from pylizlib.core.testing.sample_downloader import SampleImageDownloader
 
@@ -33,6 +37,29 @@ downloader = SampleImageDownloader(cache_dir=_IMAGE_CACHE)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class SnapshotManagerTestHelper(unittest.TestCase):
+    """Share the standard manager factory across focused manager test modules."""
+
+    def _mgr(self, snapshot: Snapshot, settings: SnapshotSettings | None = None) -> SnapshotManager:
+        return SnapshotManager(snapshot, CATALOGUE_PATH, settings or SnapshotSettings())
+
+
+def make_catalogue(settings: SnapshotSettings | None = None) -> SnapshotCatalogue:
+    """Build a catalogue at the shared test path with optional live settings."""
+    return SnapshotCatalogue(CATALOGUE_PATH, settings=settings or SnapshotSettings())
+
+
+def make_catalogue_with_backup() -> SnapshotCatalogue:
+    """Build a catalogue with all supported automatic backup triggers enabled."""
+    settings = SnapshotSettings(
+        backup_path=BACKUP_PATH,
+        backup_pre_install=True,
+        backup_pre_modify=True,
+        backup_pre_delete=True,
+    )
+    return make_catalogue(settings)
 
 
 def reset_index() -> None:

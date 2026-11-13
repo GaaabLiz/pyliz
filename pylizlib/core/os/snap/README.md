@@ -10,7 +10,9 @@ firme, valori restituiti e comportamenti in caso di errore.
 |---|---|
 | API su uno snapshot | `manager.py` |
 | API sul catalogo e backup preventivi | `catalogue.py` |
-| Modelli, enum, configurazione e invarianti | `domain.py` |
+| Dichiarazioni pubbliche dei modelli, enum, azioni e configurazione | `domain.py` |
+| Validazione e operazioni sulle associazioni | `association_model.py` |
+| Validazione, metadati e clonazione degli snapshot | `snapshot_model.py` |
 | Creazione, duplicazione e cancellazione | `operations/lifecycle.py` |
 | Installazione e rimozione delle copie installate | `operations/install.py` |
 | Aggiornamento delle copie interne dal sistema | `operations/sync.py` |
@@ -33,8 +35,10 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Persistenza e facciata journal | `storage/transactions.py` |
 | Codec, dispatch e handler di recupero | `storage/recovery/` |
 | Copia di un'associazione nel suo storage | `storage/association.py` |
-| Strategie pubbliche di copia | `copy_strategy.py` |
-| Sessioni di copia, provider e capacità metadata | `copying/` |
+| Contratti e classi pubbliche delle strategie | `copy_strategy.py` |
+| Implementazioni sequenziale e verificata | `copying/file_strategies.py` |
+| Implementazione della copia dei metadati estesi | `copying/metadata_strategy.py` |
+| Implementazione provider, sessioni e capability metadata | `copying/provider.py`, `copying/session.py`, `copying/contracts.py` |
 | Validazione e confronto dei manifest | `integrity.py` |
 | Query pubbliche e risoluzione dei percorsi | `searcher.py` |
 | Adapter di configurazione live e risultati | `searching.py` |

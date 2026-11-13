@@ -1,13 +1,10 @@
-"""Snapshot models, validation rules, enum values and shared configuration.
+"""Public snapshot models, enums, edit payloads and settings.
 
-Models remain mutable. Association construction does not scan the source tree;
-captured sizes come from the copied-content manifest. Validation normalizes
-original paths, and compatibility helpers delegate copy and example generation
-to dedicated modules.
+Association and snapshot behavior is implemented in ``association_model`` and
+``snapshot_model``. The public model declarations remain here to preserve their
+historical import paths and class identities.
 """
 
-import hashlib
-import math
 import platform
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,43 +12,16 @@ from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
 
+from pylizlib.core.os.snap.association_model import _AssociationModel, validate_directory_component
 from pylizlib.core.os.snap.copy_strategy import CopyMetadataMode, DirectoryCopyStrategy, ExtendedMetadataCopyStrategy, SequentialFileCopyStrategy
-from pylizlib.core.os.snap.integrity import IntegrityManifest, integrity_manifest_size_mb, validate_integrity_manifest
+from pylizlib.core.os.snap.integrity import IntegrityManifest
+from pylizlib.core.os.snap.snapshot_model import _SnapshotModel
 from pylizlib.core.os.snap.storage.archive_limits import DEFAULT_MAX_ARCHIVE_ENTRIES, DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES
 from pylizlib.core.os.snap.storage.original_paths import normalize_original_path
 
 
-def validate_directory_component(value: str, field_name: str = "directory name", allow_empty: bool = False) -> str:
-    """Validate one relative component under the snapshot library's existing rules.
-
-    Args:
-        value (str): Component to retain unchanged; separators, colon, NUL, dot/parent,
-            absolute paths and an empty value are rejected unless allow_empty permits it.
-        field_name (str): Human-readable field label included in validation errors.
-        allow_empty (bool): Permit exactly the empty string when True, default False.
-
-    Returns:
-        str: The original accepted component, without normalization or sanitization.
-
-    Raises:
-        TypeError: If value is not a string.
-        ValueError: If the component violates the rules above.
-
-    Notes:
-        This is not a complete Windows reserved-name or cross-filesystem filename validator. Whitespace is not
-        stripped and names are never silently rewritten.
-    """
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string.")
-    if allow_empty and value == "":
-        return value
-    if not value or value in {".", ".."} or "/" in value or "\\" in value or ":" in value or "\x00" in value or Path(value).is_absolute() or Path(value).name != value:
-        raise ValueError(f"{field_name} must be a single relative path component: {value!r}.")
-    return value
-
-
 @dataclass
-class SnapDirAssociation:
+class SnapDirAssociation(_AssociationModel):
     """Represents the association between an original directory and its copy within a snapshot.
 
     Attributes:
@@ -79,36 +49,6 @@ class SnapDirAssociation:
     integrity_manifest: IntegrityManifest | None = None
     _current_index: ClassVar[int] = 0
 
-    def __post_init__(self):
-        """Validate and normalize without scanning the possibly remote source tree.
-
-        Returns:
-            None: No return value.
-        """
-        self._storage_name = None
-        self._storage_id = None
-        self._path_initialized = False
-        self.validate()
-
-    def record_captured_content(self, manifest: IntegrityManifest) -> None:
-        """Retain independent integrity entries and the exact captured content size.
-
-        Args:
-            manifest (IntegrityManifest): Complete validated tree manifest, including the
-                dot-root directory entry. A missing/None manifest is not an input to this API.
-
-        Returns:
-            None: integrity_manifest receives new entry dictionaries and mb_size is recalculated
-            from captured file bytes divided by 1024**2, without scanning the original source.
-
-        Raises:
-            TypeError: If manifest is not an accepted integrity mapping.
-            ValueError: If a path, entry, byte size, hash or required root entry is invalid.
-        """
-        validate_integrity_manifest(manifest)
-        self.integrity_manifest = {path: dict(entry) for path, entry in manifest.items()}
-        self.mb_size = integrity_manifest_size_mb(self.integrity_manifest)
-
     def validate(self) -> None:
         """Validate the fields that define this association's stored path.
 
@@ -124,40 +64,7 @@ class SnapDirAssociation:
             source paths are accepted only during initial construction. Validation does not recursively measure or
             copy the source tree.
         """
-
-        # Validate ordering and source identity before any path normalization.
-        if type(self.index) is not int:
-            raise TypeError("Snapshot directory index must be an integer.")
-        if self.index < 0:
-            raise ValueError("Snapshot directory index cannot be negative.")
-        if not isinstance(self.original_path, str):
-            raise TypeError("Snapshot directory original_path must be a string.")
-        if not self.original_path or "\x00" in self.original_path:
-            raise ValueError("Snapshot directory original_path must be a non-empty path without NUL characters.")
-        if not isinstance(self.folder_id, str) or not self.folder_id:
-            raise TypeError("Snapshot directory folder_id must be a non-empty string.")
-
-        # Only initial construction may anchor a relative source to the current CWD.
-        self.original_path = normalize_original_path(
-            self.original_path,
-            allow_relative=not self._path_initialized,
-        )
-        self._path_initialized = True
-
-        # A supplied legacy size is accepted without scanning the source tree.
-        if self.mb_size is not None:
-            if type(self.mb_size) not in (int, float):
-                raise TypeError("Snapshot directory mb_size must be a non-negative number or None.")
-            if self.mb_size < 0 or (type(self.mb_size) is float and not math.isfinite(self.mb_size)):
-                raise ValueError("Snapshot directory mb_size must be finite and non-negative.")
-
-        # Once captured content exists, its file-byte total is authoritative.
-        validate_integrity_manifest(self.integrity_manifest)
-
-        # The captured tree is authoritative; a copied source-size estimate
-        # from older metadata must not override the stored content size.
-        if self.integrity_manifest is not None:
-            self.mb_size = integrity_manifest_size_mb(self.integrity_manifest)
+        return super().validate()
 
     @classmethod
     def next_index(cls):
@@ -166,8 +73,7 @@ class SnapDirAssociation:
         Returns:
             int: The next integer index.
         """
-        cls._current_index += 1
-        return cls._current_index
+        return super().next_index()
 
     @property
     def directory_name(self) -> str:
@@ -181,47 +87,10 @@ class SnapDirAssociation:
             Reading this property calls validate and can normalize the source or refresh its manifest-derived size.
             Persisted legacy storage names remain authoritative while their folder_id is unchanged.
         """
-        self.validate()
-        stored_name = getattr(self, "_storage_name", None)
-        stored_id = getattr(self, "_storage_id", None)
-        if stored_name is not None and stored_id == self.folder_id:
-            return validate_directory_component(stored_name, "snapshot association storage name")
-        digest = hashlib.sha256(self.folder_id.encode("utf-8")).hexdigest()
-        return f"assoc-{digest}"
-
-    @property
-    def _legacy_directory_name(self) -> str:
-        """Return the index-and-basename name used by snapshots before storage IDs.
-
-        Returns:
-            str: Legacy index-basename component; current normal storage names are independent of the index.
-
-        Raises:
-            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
-        """
-        self.validate()
-        basename = Path(self.original_path).name
-        if not basename:
-            raise ValueError("Snapshot directory original_path must have a final path component.")
-        return validate_directory_component(f"{self.index}-{basename}")
-
-    def _set_storage_name(self, storage_name: str) -> None:
-        """Retain a physical name loaded from metadata or copied from a clone.
-
-        Args:
-            storage_name (str): Persisted physical association-directory component, including accepted legacy names.
-
-        Returns:
-            None: No return value.
-        """
-        self._storage_name = validate_directory_component(storage_name, "snapshot association storage name")
-        self._storage_id = self.folder_id
+        return super().directory_name
 
     @staticmethod
-    def gen_random(
-        source_folder_for_choices: Path,
-        folder_id_length: int = 4,
-    ) -> "SnapDirAssociation":
+    def gen_random(source_folder_for_choices: Path, folder_id_length: int = 4) -> "SnapDirAssociation":
         """Generates a single, random SnapDirAssociation for testing purposes.
 
         Args:
@@ -291,9 +160,7 @@ class SnapDirAssociation:
             Reading directory_name validates the mutable association. Current link checks are repeated around copying;
             this API is not an atomic multi-directory transaction.
         """
-        from pylizlib.core.os.snap.storage.association import copy_association
-
-        return copy_association(self, catalogue_target_path, progress_callback, message_callback, copy_strategy=copy_strategy, manifest=manifest, expected_manifest=expected_manifest)
+        return super().copy_install_to(catalogue_target_path, progress_callback, message_callback, copy_strategy=copy_strategy, manifest=manifest, expected_manifest=expected_manifest)
 
 
 class SnapEditType(Enum):
@@ -591,7 +458,7 @@ class SnapshotSettings:
 
 
 @dataclass
-class Snapshot:
+class Snapshot(_SnapshotModel):
     """Represents a snapshot, which is a collection of directory associations
     and metadata at a specific point in time.
 
@@ -641,14 +508,6 @@ class Snapshot:
     capture_started_at: datetime | None = None
     capture_completed_at: datetime | None = None
 
-    def __post_init__(self):
-        """Validate a new mutable snapshot and every contained association.
-
-        Returns:
-            None: No return value.
-        """
-        self.validate()
-
     def validate(self) -> None:
         """Validate snapshot metadata, including every association used for paths.
 
@@ -659,49 +518,7 @@ class Snapshot:
             TypeError: An argument or mutable model field has a type rejected by this contract.
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
         """
-
-        # Check textual identity before it can influence any stored path.
-        for name in ("id", "name", "desc", "author", "os_created"):
-            if not isinstance(getattr(self, name), str):
-                raise TypeError(f"Snapshot {name} must be a string.")
-        if not self.id:
-            raise ValueError("Snapshot ID cannot be empty.")
-        validate_directory_component(self.id, "Snapshot ID")
-
-        # Retain legacy datetime handling while requiring aware acquisition intervals.
-        if not isinstance(self.date_created, datetime):
-            raise TypeError("Snapshot date_created must be a datetime.")
-        for name in ("date_modified", "date_last_used", "date_last_modified"):
-            value = getattr(self, name)
-            if value is not None and not isinstance(value, datetime):
-                raise TypeError(f"Snapshot {name} must be a datetime or None.")
-        for name in ("capture_started_at", "capture_completed_at"):
-            value = getattr(self, name)
-            if value is not None and not isinstance(value, datetime):
-                raise TypeError(f"Snapshot {name} must be a timezone-aware datetime or None.")
-            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
-                raise ValueError(f"Snapshot {name} must include an explicit timezone.")
-        if self.capture_started_at is not None and self.capture_completed_at is not None:
-            if self.capture_completed_at < self.capture_started_at:
-                raise ValueError("Snapshot capture_completed_at cannot precede capture_started_at.")
-
-        # Validate association models before enforcing unique stored names and stable IDs.
-        if not isinstance(self.directories, list) or any(not isinstance(item, SnapDirAssociation) for item in self.directories):
-            raise TypeError("Snapshot directories must be a list of SnapDirAssociation objects.")
-        for association in self.directories:
-            association.validate()
-        directory_names = [association.directory_name for association in self.directories]
-        folder_ids = [association.folder_id for association in self.directories]
-        if len(set(directory_names)) != len(directory_names):
-            raise ValueError("Snapshot association directory names must be unique.")
-        if len(set(folder_ids)) != len(folder_ids):
-            raise ValueError("Snapshot association folder IDs must be unique.")
-
-        # Validate extension data without converting or silently dropping user fields.
-        if not isinstance(self.tags, list) or any(not isinstance(tag, str) for tag in self.tags):
-            raise TypeError("Snapshot tags must be a list of strings.")
-        if not isinstance(self.data, dict) or any(not isinstance(key, str) or not isinstance(value, str) for key, value in self.data.items()):
-            raise TypeError("Snapshot data must be a dictionary of strings.")
+        return super().validate()
 
     @property
     def tags_as_string(self) -> str:
@@ -710,7 +527,7 @@ class Snapshot:
         Returns:
             str: Sorted tags joined by comma-space, or one space when tags is empty.
         """
-        return ", ".join(sorted(self.tags)) if self.tags else " "
+        return super().tags_as_string
 
     def get_for_table_array(self, key_list: list[str]) -> list[str]:
         """Generates a list of strings representing the snapshot's data for table display.
@@ -721,13 +538,7 @@ class Snapshot:
         Returns:
             list[str]: Name, description, requested data values, date_created formatted as DD/MM/YYYY HH:MM:SS, and tags_as_string, in that order.
         """
-        array = [self.name, self.desc]
-        for key in key_list:
-            value = self.data.get(key, "")
-            array.append(value)
-        array.append(self.date_created.strftime("%d/%m/%Y %H:%M:%S"))
-        array.append(self.tags_as_string)
-        return array
+        return super().get_for_table_array(key_list)
 
     @property
     def folder_name(self) -> str:
@@ -736,7 +547,7 @@ class Snapshot:
         Returns:
             str: Snapshot ID used as its catalogue-directory component.
         """
-        return self.id
+        return super().folder_name
 
     @property
     def get_assoc_dir_mb_size(self) -> float:
@@ -746,7 +557,7 @@ class Snapshot:
             float: Sum of known captured association sizes in MiB; unknown values are omitted and an empty sum is
                 zero.
         """
-        return sum(d.mb_size for d in self.directories if d.mb_size is not None)
+        return super().get_assoc_dir_mb_size
 
     def add_data_item(self, key: str, value: str) -> None:
         """Adds a key-value pair to the custom data dictionary.
@@ -758,7 +569,7 @@ class Snapshot:
         Returns:
             None: No return value.
         """
-        self.data[key] = value
+        return super().add_data_item(key, value)
 
     def remove_data_item(self, key: str) -> Optional[str]:
         """Removes an item from the data dictionary and returns its value.
@@ -769,7 +580,7 @@ class Snapshot:
         Returns:
             Optional[str]: The value of the removed item, or None if the key was not found.
         """
-        return self.data.pop(key, None)
+        return super().remove_data_item(key)
 
     def has_data_item(self, key: str) -> bool:
         """Checks if a key exists in the data dictionary.
@@ -780,7 +591,7 @@ class Snapshot:
         Returns:
             bool: True if the key exists, False otherwise.
         """
-        return key in self.data
+        return super().has_data_item(key)
 
     def get_data_item(self, key: str, default: str = "") -> str:
         """Gets a value from the data dictionary, returning a default if the key is not found.
@@ -792,7 +603,7 @@ class Snapshot:
         Returns:
             str: The value associated with the key, or the default value.
         """
-        return self.data.get(key, default)
+        return super().get_data_item(key, default)
 
     def clear_all_data(self) -> None:
         """Clears all items from the data dictionary.
@@ -800,7 +611,7 @@ class Snapshot:
         Returns:
             None: No return value.
         """
-        self.data.clear()
+        return super().clear_all_data()
 
     def edit_data_item(self, key: str, new_value: str) -> None:
         """Edits the value of an existing item in the data dictionary.
@@ -815,10 +626,7 @@ class Snapshot:
         Raises:
             KeyError: If the key does not exist in the data dictionary.
         """
-        if key in self.data:
-            self.data[key] = new_value
-        else:
-            raise KeyError(f"Key '{key}' not found in data.")
+        return super().edit_data_item(key, new_value)
 
     def clone(self) -> "Snapshot":
         """Creates a deep, independent copy of the Snapshot instance.
@@ -826,40 +634,4 @@ class Snapshot:
         Returns:
             Snapshot: A new `Snapshot` object with the same data as the original.
         """
-        return Snapshot(
-            id=self.id,
-            name=self.name,
-            desc=self.desc,
-            author=self.author,
-            directories=[self._clone_association(dir_assoc) for dir_assoc in self.directories],
-            tags=list(self.tags),
-            date_created=self.date_created,
-            date_modified=self.date_modified,
-            date_last_used=self.date_last_used,
-            date_last_modified=self.date_last_modified,
-            os_created=self.os_created,
-            data=dict(self.data),
-            capture_started_at=self.capture_started_at,
-            capture_completed_at=self.capture_completed_at,
-        )
-
-    @staticmethod
-    def _clone_association(dir_assoc: SnapDirAssociation) -> SnapDirAssociation:
-        """Clone all association metadata while retaining its stable storage path.
-
-        Args:
-            dir_assoc (SnapDirAssociation): Directory association whose stored contents or installed copy is operated
-                on.
-
-        Returns:
-            SnapDirAssociation: Independent association metadata retaining the same stable physical storage name.
-        """
-        clone = SnapDirAssociation(
-            index=dir_assoc.index,
-            original_path=dir_assoc.original_path,
-            folder_id=dir_assoc.folder_id,
-            mb_size=dir_assoc.mb_size,
-            integrity_manifest=({path: dict(entry) for path, entry in dir_assoc.integrity_manifest.items()} if dir_assoc.integrity_manifest is not None else None),
-        )
-        clone._set_storage_name(dir_assoc.directory_name)
-        return clone
+        return super().clone()

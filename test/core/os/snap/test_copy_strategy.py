@@ -176,9 +176,9 @@ class TestDirectoryCopyStrategies(unittest.TestCase):
         source = self.root / "xattr-source"
         destination = self.root / "xattr-destination"
         with (
-            patch("pylizlib.core.os.snap.copy_strategy.os.listxattr", return_value=["user.sample"], create=True),
-            patch("pylizlib.core.os.snap.copy_strategy.os.getxattr", return_value=b"value", create=True),
-            patch("pylizlib.core.os.snap.copy_strategy.os.setxattr", create=True) as set_xattr,
+            patch("pylizlib.core.os.filesystem.metadata.os.listxattr", return_value=["user.sample"], create=True),
+            patch("pylizlib.core.os.filesystem.metadata.os.getxattr", return_value=b"value", create=True),
+            patch("pylizlib.core.os.filesystem.metadata.os.setxattr", create=True) as set_xattr,
         ):
             ExtendedMetadataCopyStrategy._copy_extended_attributes(source, destination)
 

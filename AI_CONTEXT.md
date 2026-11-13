@@ -30,6 +30,8 @@ The project is both an importable library and a source for optional application 
 
 The main public entry points are `SnapshotCatalogue`, `SnapshotManager`, `Snapshot`, and `SnapshotSettings`, exported from `pylizlib.core.os.snap`. The catalogue and manager are orchestration facades. Their workflows are implemented in `operations/`; on-disk layout, metadata access, and transaction recovery live in `storage/` and `storage/recovery/`.
 
+`domain.py` and `copy_strategy.py` retain the historical public class locations and imports. The model declarations and strategy contracts stay in those modules; association and snapshot validation, cloning, and copy algorithms are delegated to `association_model.py`, `snapshot_model.py`, and `copying/`.
+
 Copy behavior is selected through `SnapshotSettings.copy_strategy` and `copy_metadata_mode`. Captured association contents have integrity manifests. Snapshot creation, edits, synchronization, installation, and restore use staged publication and persistent transaction records where defined by the operation. Backups and exports use versioned ZIP metadata. Search reuses the shared text-search components.
 
 The detailed snapshot guide is [pylizlib/core/os/snap/README.md](pylizlib/core/os/snap/README.md). Read it before changing snapshot contracts, recovery, archive handling, or copy guarantees. Shared primitives are documented in their own modules; keep snapshot policy in `snap` and reusable filesystem behavior in `core/os/`.
