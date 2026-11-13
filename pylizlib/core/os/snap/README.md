@@ -149,6 +149,13 @@ il tipo o l'identità. Prima di
 installare, ripristinare o rimuovere copie, la libreria verifica che le
 destinazioni non siano critiche, sovrapposte al catalogo o coincidenti/annidate
 fra loro. Se un percorso non può essere risolto, l'operazione viene rifiutata.
+Le destinazioni distruttive con componenti simbolici o junction vengono rifiutate,
+anche se il link precede `..`: il modello conserva la forma lessicale, mentre
+install/restore/remove richiedono un percorso utilizzabile senza attraversare
+link. I componenti `..` senza link mantengono il loro significato; non vengono
+collassati con `abspath()`. Install e restore ricontrollano i target pianificati
+dopo lo staging. Una recovery con genitori diventati link si ferma conservando
+journal e copie disponibili.
 I backup possono essere ripristinati anche dopo aver eliminato lo snapshot dal
 catalogo. I vecchi manifest AD e gli archivi precedenti senza manifest
 mantengono il percorso di compatibilità con i metadati del catalogo o col nome

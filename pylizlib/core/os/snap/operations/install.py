@@ -1,6 +1,5 @@
 """Staged snapshot installation, legacy merge and installed-copy removal."""
 
-import os
 import shutil
 import stat
 from dataclasses import dataclass
@@ -269,7 +268,7 @@ class SnapshotInstaller:
         """
         replacements = []
         for association in self.storage.snapshot.directories:
-            install_location = Path(os.path.abspath(association.original_path))
+            install_location = Path(association.original_path).absolute()
             staging_dir = install_location.with_name(f"{install_location.name}_staging_{gen_random_string(6)}")
             backup_dir = install_location.with_name(f"{install_location.name}_bck_{gen_random_string(6)}")
             if staging_dir.exists() or staging_dir.is_symlink() or backup_dir.exists() or backup_dir.is_symlink():
@@ -399,6 +398,14 @@ class SnapshotInstaller:
             FileNotFoundError: A required source, stored association or metadata entry is absent.
             FileExistsError: A destination or generated staging name already exists or changes before publication.
         """
+
+        # Revalidate the actual planned paths after copying, before the first live replacement.
+        validate_destructive_destinations(
+            [(replacement.folder_id, replacement.install_loc) for replacement in replacements],
+            catalogue_path=self.storage.path_catalogue,
+            origin_os=self.storage.snapshot.os_created,
+            operation="publish installed copies",
+        )
 
         # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
         for rb in replacements:

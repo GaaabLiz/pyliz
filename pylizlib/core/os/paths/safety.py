@@ -5,6 +5,34 @@ import sys
 from pathlib import Path
 
 
+def assert_no_link_components(path: str | Path) -> None:
+    """Reject symbolic links and junctions in a path before destructive use.
+
+    Args:
+        path (str | Path): Native path whose leaf and lexical ancestors are inspected. Relative paths are
+            anchored to CWD without collapsing parent components.
+
+    Returns:
+        None: When no component is a link. Missing components are permitted so callers may create destinations.
+
+    Raises:
+        ValueError: A symbolic link or junction occurs in the path, including before a parent component.
+        OSError: A component cannot be inspected.
+
+    Notes:
+        This check reserves no filesystem entry. Callers must revalidate before publication and coordinate their
+        own concurrent operations; it does not follow a link to select a different destination.
+    """
+
+    # Filesystem traversal also imports path containment; defer this shared capability to the call.
+    from pylizlib.core.os.filesystem.tree import is_link_or_junction
+
+    lexical = Path(path).absolute()
+    for component in (*reversed(lexical.parents), lexical):
+        if is_link_or_junction(component):
+            raise ValueError(f"Destructive path '{lexical}' contains a symbolic link or junction: '{component}'.")
+
+
 def is_critical_system_path(path: str | Path) -> bool:
     """Check whether a path is critical, failing closed when it cannot be resolved.
 
