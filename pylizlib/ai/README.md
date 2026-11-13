@@ -54,6 +54,8 @@ pip install .[ai]
 
 - **macOS (CPU/MPS)**
 
+  `ai-macos` resta disponibile come alias compatibile dell'extra `ai`.
+
 ```bash
 uv pip install -e '.[ai-macos]'
 ```

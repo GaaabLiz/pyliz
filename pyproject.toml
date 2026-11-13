@@ -1,7 +1,7 @@
 [project]
 name = "pylizlib"
 version = "0.6.11"
-description = "Add your description here"
+description = "General-purpose Python utilities for application configuration, data handling, filesystem operations, and directory snapshots."
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -31,7 +31,6 @@ media = [
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
     "pillow>=11.3.0",
-    "pydantic>=2.11.9",
     "sd-parsers>=0.6",
     "exifread>=3.5.1",
 ]
@@ -51,22 +50,8 @@ ai = [
     "torchvision>=0.23.0",
     "transformers>=4.56.0",
 ]
-ai-macos = [
-    "easyocr>=1.7.2",
-    "einops>=0.8.1",
-    "exifread>=3.5.1",
-    "ffmpeg-python>=0.2.0",
-    "huggingface-hub>=0.34.4",
-    "nudenet>=3.4.2",
-    "onnxruntime>=1.22.0",
-    "numpy>=2.3.3",
-    "opencv-python>=4.11.0.86",
-    "pillow>=11.3.0",
-    "sd-parsers>=0.6",
-    "torch>=2.8.0",
-    "torchvision>=0.23.0",
-    "transformers>=4.56.0",
-]
+# Publicly documented compatibility alias; keep in sync by referencing the canonical extra.
+ai-macos = ["pylizlib[ai]"]
 ai-linux-nvidia = [
     "easyocr>=1.7.2",
     "einops>=0.8.1",
