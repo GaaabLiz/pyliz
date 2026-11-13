@@ -2,6 +2,8 @@
 
 import json
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol
 
@@ -77,6 +79,36 @@ class CatalogueTransferService:
         self.settings = settings
         self.query = query
 
+    @contextmanager
+    def _extract_archive(self, zip_path: Path) -> Iterator[Path]:
+        """Validate a transfer archive and expose its bounded temporary extraction tree.
+
+        Args:
+            zip_path (Path): Existing .zip archive to extract.
+
+        Yields:
+            Path: Temporary extraction root, removed when the import finishes.
+
+        Raises:
+            ValueError: The path is not an existing .zip file.
+            OSError: Staging or extraction fails.
+        """
+        if not zip_path.is_file() or zip_path.suffix != ".zip":
+            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
+
+        temp_parent = self.settings.archive_temp_directory or self.path_catalogue
+        temp_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            extract_zip(
+                zip_path,
+                temp_dir_path,
+                max_entries=self.settings.max_archive_entries,
+                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+                additional_space_paths=[self.path_catalogue],
+            )
+            yield temp_dir_path
+
     @coordinated("path_catalogue")
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
         """Exports the entire catalogue to a single zip file.
@@ -127,23 +159,7 @@ class CatalogueTransferService:
             ValueError: If the provided path is not a valid .zip file or contains operational transaction storage.
             IOError: If the zip file fails to extract.
         """
-        if not zip_path.is_file() or zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
-
-        temp_parent = self.settings.archive_temp_directory or self.path_catalogue
-        temp_parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
-            temp_dir_path = Path(temp_dir)
-
-            # Extract the zip to a temporary directory
-            extract_zip(
-                zip_path,
-                temp_dir_path,
-                max_entries=self.settings.max_archive_entries,
-                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
-                additional_space_paths=[self.path_catalogue],
-            )
-
+        with self._extract_archive(zip_path) as temp_dir_path:
             # Reject imported recovery instructions before publishing any catalogue entry.
             assert_no_operational_storage(temp_dir_path)
             for entry in temp_dir_path.iterdir():
@@ -170,23 +186,7 @@ class CatalogueTransferService:
                 contains operational transaction storage, or if a snapshot with the same ID already exists.
             IOError: If the zip file fails to extract.
         """
-        if not zip_path.is_file() or zip_path.suffix != ".zip":
-            raise ValueError(f"Provided path '{zip_path}' is not a valid .zip file.")
-
-        temp_parent = self.settings.archive_temp_directory or self.path_catalogue
-        temp_parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".archive_staging_", dir=temp_parent) as temp_dir:
-            temp_dir_path = Path(temp_dir)
-
-            # Extract the zip to a temporary directory
-            extract_zip(
-                zip_path,
-                temp_dir_path,
-                max_entries=self.settings.max_archive_entries,
-                max_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
-                additional_space_paths=[self.path_catalogue],
-            )
-
+        with self._extract_archive(zip_path) as temp_dir_path:
             # Validate the content and get snapshot
             snapshot_to_import = self._read_imported_snapshot(temp_dir_path)
 
