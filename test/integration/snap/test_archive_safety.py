@@ -24,9 +24,9 @@ def _captured_snapshot(workspace: Path):
 
 
 @pytest.mark.parametrize("entry_point", ["import_snapshot", "import_catalogue", "restore_backup"])
-@pytest.mark.parametrize("transaction_name", [".pyliz_transactions", ".PYLIZ_TRANSACTIONS", ".pyliz_transactions. "])
+@pytest.mark.parametrize("transaction_name", [".pyliz_transactions", ".PYLIZ_TRANSACTIONS", ".pyliz_transactions. ", ".pyliz_snapshot.lock", ".PYLIZ_SNAPSHOT.LOCK", ".pyliz_snapshot.lock. "])
 def test_archive_journals_are_rejected_before_publication(snapshot_workspace: Path, entry_point: str, transaction_name: str) -> None:
-    """Incoming recovery instructions never reach the locally trusted store."""
+    """Incoming recovery instructions or lock replacements never reach the locally trusted store."""
     catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
     existing = Snapshot("existing", "original metadata", "")
     catalogue.add(existing)

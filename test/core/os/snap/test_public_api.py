@@ -32,6 +32,7 @@ def test_original_exports_and_class_locations_are_preserved():
         "SnapshotIncompleteError",
         "CopyMetadataMode",
         "ExtendedMetadataCopyStrategy",
+        "SnapshotBusyError",
     ]
     for qualified_name in FIXTURE["classes"]:
         module_name, class_name = qualified_name.split(".")

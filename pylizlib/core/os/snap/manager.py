@@ -23,6 +23,7 @@ from pylizlib.core.os.snap.operations.lifecycle import SnapshotLifecycle
 from pylizlib.core.os.snap.operations.sync import SnapshotSynchronizer
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import catalogue_access
 from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
 from pylizlib.core.os.snap.utils import SnapshotUtils
 
@@ -32,6 +33,10 @@ class SnapshotManager:
 
     The facade retains legacy signatures, shared default settings, public paths
     and return values. Each invocation builds dependencies from current state.
+
+    Operations hold the same catalogue gate as SnapshotCatalogue. Other threads
+    or processes receive SnapshotBusyError while an operation is active. Progress
+    and message observers can query metadata but cannot start modifying calls.
 
     Attributes:
         snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
@@ -117,6 +122,7 @@ class SnapshotManager:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             FileExistsError: If the destination exists and replacement is disabled.
         """
         SnapshotLifecycle(self._storage()).create(progress_callback, message_callback, replace_existing=replace_existing)
@@ -130,8 +136,12 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        SnapshotLifecycle(self._storage()).delete(message_callback=message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotLifecycle(self._storage()).delete(message_callback=message_callback)
 
     def update_json_data_fields(self):
         """Updates the 'data' and 'date_last_modified' fields in the snapshot's JSON file.
@@ -139,13 +149,17 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        recover_storage_transactions(self._storage())
-        self.snapshot.validate()
-        json_path = self._snapshot_child_path(self.settings.json_filename)
-        SnapshotSerializer.update_field(json_path, "data", self.snapshot.data)
-        SnapshotSerializer.update_field(json_path, "date_last_modified", datetime.now().isoformat())
-        self.snapshot.date_last_modified = datetime.now()
+        with catalogue_access(self.path_catalogue):
+            recover_storage_transactions(self._storage())
+            self.snapshot.validate()
+            json_path = self._snapshot_child_path(self.settings.json_filename)
+            SnapshotSerializer.update_field(json_path, "data", self.snapshot.data)
+            SnapshotSerializer.update_field(json_path, "date_last_modified", datetime.now().isoformat())
+            self.snapshot.date_last_modified = datetime.now()
 
     def update_json_base_fields(self):
         """Updates the basic metadata fields (name, desc, author, tags, date_modified)
@@ -153,16 +167,20 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        recover_storage_transactions(self._storage())
-        self.snapshot.validate()
-        json_path = self._snapshot_child_path(self.settings.json_filename)
-        SnapshotSerializer.update_field(json_path, "name", self.snapshot.name)
-        SnapshotSerializer.update_field(json_path, "desc", self.snapshot.desc)
-        SnapshotSerializer.update_field(json_path, "author", self.snapshot.author)
-        SnapshotSerializer.update_field(json_path, "tags", self.snapshot.tags)
-        SnapshotSerializer.update_field(json_path, "date_modified", datetime.now().isoformat())
-        self.snapshot.date_modified = datetime.now()
+        with catalogue_access(self.path_catalogue):
+            recover_storage_transactions(self._storage())
+            self.snapshot.validate()
+            json_path = self._snapshot_child_path(self.settings.json_filename)
+            SnapshotSerializer.update_field(json_path, "name", self.snapshot.name)
+            SnapshotSerializer.update_field(json_path, "desc", self.snapshot.desc)
+            SnapshotSerializer.update_field(json_path, "author", self.snapshot.author)
+            SnapshotSerializer.update_field(json_path, "tags", self.snapshot.tags)
+            SnapshotSerializer.update_field(json_path, "date_modified", datetime.now().isoformat())
+            self.snapshot.date_modified = datetime.now()
 
     def install_directory(self, destination_path: Path):
         """Adds a new directory to the snapshot, copying its contents into the
@@ -175,36 +193,38 @@ class SnapshotManager:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If the destination_path is not a valid directory.
 
         Notes:
             This legacy single-association flow copies, appends the live association and saves metadata. It does not
             use the complete edit journal; failures can have different rollback effects from update_from_actions_list.
         """
-        recover_storage_transactions(self._storage())
-        if not destination_path.exists() or not destination_path.is_dir():
-            raise ValueError(f"The provided path {destination_path} is not a valid directory.")
-        used_ids = {association.folder_id for association in self.snapshot.directories}
-        existing_indices = [association.index for association in self.snapshot.directories]
-        index = max(existing_indices, default=0) + 1
-        storage_root = self._snapshot_root_path()
-        while True:
-            folder_id = gen_random_string(self.settings.folder_id_length)
-            if folder_id in used_ids:
-                continue
-            new_dir = SnapDirAssociation(index=index, original_path=destination_path.as_posix(), folder_id=folder_id)
-            stored_path = storage_root / new_dir.directory_name
-            if not stored_path.exists() and not stored_path.is_symlink():
-                break
-            used_ids.add(folder_id)
-        manifest = {}
-        new_dir.copy_install_to(
-            storage_root,
-            copy_strategy=self.settings.copy_strategy,
-            manifest=manifest,
-        )
-        self.snapshot.directories.append(new_dir)
-        self.__save_json()
+        with catalogue_access(self.path_catalogue):
+            recover_storage_transactions(self._storage())
+            if not destination_path.exists() or not destination_path.is_dir():
+                raise ValueError(f"The provided path {destination_path} is not a valid directory.")
+            used_ids = {association.folder_id for association in self.snapshot.directories}
+            existing_indices = [association.index for association in self.snapshot.directories]
+            index = max(existing_indices, default=0) + 1
+            storage_root = self._snapshot_root_path()
+            while True:
+                folder_id = gen_random_string(self.settings.folder_id_length)
+                if folder_id in used_ids:
+                    continue
+                new_dir = SnapDirAssociation(index=index, original_path=destination_path.as_posix(), folder_id=folder_id)
+                stored_path = storage_root / new_dir.directory_name
+                if not stored_path.exists() and not stored_path.is_symlink():
+                    break
+                used_ids.add(folder_id)
+            manifest = {}
+            new_dir.copy_install_to(
+                storage_root,
+                copy_strategy=self.settings.copy_strategy,
+                manifest=manifest,
+            )
+            self.snapshot.directories.append(new_dir)
+            self.__save_json()
 
     def uninstall_directory_by_folder_id(self, folder_id: str):
         """Removes a directory from the snapshot based on its folder_id.
@@ -215,14 +235,18 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        recover_storage_transactions(self._storage())
-        dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
-        if dir_to_remove:
-            dir_path = self._snapshot_child_path(dir_to_remove.directory_name)
-            remove_directory_or_move_to_temp(dir_path)
-            self.snapshot.directories.remove(dir_to_remove)
-            self.__save_json()
+        with catalogue_access(self.path_catalogue):
+            recover_storage_transactions(self._storage())
+            dir_to_remove = next((d for d in self.snapshot.directories if d.folder_id == folder_id), None)
+            if dir_to_remove:
+                dir_path = self._snapshot_child_path(dir_to_remove.directory_name)
+                remove_directory_or_move_to_temp(dir_path)
+                self.snapshot.directories.remove(dir_to_remove)
+                self.__save_json()
 
     def update_from_actions_list(self, edits: list[SnapEditAction], message_callback=None):
         """Plans edits by association ID against the stored metadata, then stages all
@@ -236,8 +260,12 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        SnapshotEditor(self._storage()).apply(edits, message_callback=message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotEditor(self._storage()).apply(edits, message_callback=message_callback)
 
     def duplicate(self, message_callback=None):
         """Creates a duplicate of the current snapshot with a new ID and name.
@@ -251,9 +279,11 @@ class SnapshotManager:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             FileNotFoundError: If the original snapshot path does not exist.
         """
-        SnapshotLifecycle(self._storage()).duplicate(message_callback=message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotLifecycle(self._storage()).duplicate(message_callback=message_callback)
 
     def update_associated_dirs_from_system(self, message_callback=None):
         """Updates the snapshot's internal copy of each associated directory
@@ -265,8 +295,12 @@ class SnapshotManager:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
-        SnapshotSynchronizer(self._storage()).update_associated_dirs_from_system(message_callback=message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotSynchronizer(self._storage()).update_associated_dirs_from_system(message_callback=message_callback)
 
     def remove_installed_copies(self, message_callback=None):
         """Removes all directories on the system that this snapshot is managing.
@@ -282,10 +316,12 @@ class SnapshotManager:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ExceptionGroup: If any target could not be removed. Other targets are still attempted, and metadata is
                 left unchanged.
         """
-        SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
 
     def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """Installs the snapshot's contents to their original locations on the filesystem.
@@ -306,6 +342,7 @@ class SnapshotManager:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If two associated install paths are the same or nested.
             SnapshotInstallMetadataError: The directory contents were installed, but updating ``date_last_used``
                 failed. Inspect ``metadata_published`` to determine whether the JSON update became visible.
@@ -316,7 +353,8 @@ class SnapshotManager:
             installed even though date_last_used or final journal persistence failed; inspect metadata_published and
             durability_confirmed before retrying.
         """
-        SnapshotInstaller(self._storage()).install(enable_everyone_full_control, clear_destination, progress_callback, message_callback)
+        with catalogue_access(self.path_catalogue):
+            SnapshotInstaller(self._storage()).install(enable_everyone_full_control, clear_destination, progress_callback, message_callback)
 
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
         """Creates, verifies and atomically publishes a zip archive of the snapshot's data.
@@ -334,10 +372,12 @@ class SnapshotManager:
             Path: The path of the verified, published archive.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             SnapshotIncompleteError: If an associated-directory backup is missing one or more source folders. Inspect
                 ``missing_folders``.
         """
-        return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
+        with catalogue_access(self.path_catalogue):
+            return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
 
     def _storage(self) -> SnapshotStorage:
         """Build operation dependencies from the facade's current public state.

@@ -393,7 +393,7 @@ class TestSnapshotCatalogueBackupFailurePaths(unittest.TestCase):
         mock_rename.assert_called_once()
         self.assertTrue(dest.is_dir())
         self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, original_files)
-        self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {dest, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
 
     def test_restore_backup_sd_cleans_partial_copy_on_error(self):
         snap = make_snapshot("RestoreSDPartialFail", self._src, n=1)
@@ -420,10 +420,10 @@ class TestSnapshotCatalogueBackupFailurePaths(unittest.TestCase):
 
                 if destination_exists:
                     self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, original_files)
-                    self.assertEqual(list(CATALOGUE_PATH.iterdir()), [dest])
+                    self.assertEqual(set(CATALOGUE_PATH.iterdir()), {dest, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
                 else:
                     self.assertFalse(dest.exists())
-                    self.assertEqual(list(CATALOGUE_PATH.iterdir()), [])
+                    self.assertEqual(list(CATALOGUE_PATH.iterdir()), [CATALOGUE_PATH / ".pyliz_snapshot.lock"])
 
     @patch("shutil.copytree")
     def test_restore_backup_sd_rolls_back_on_error(self, mock_copytree):

@@ -9,7 +9,8 @@ from pylizlib.core.os.snap.copy_strategy import DirectoryCopyStrategy, Sequentia
 from pylizlib.core.os.snap.domain import Snapshot, validate_directory_component
 from pylizlib.core.os.snap.integrity import assert_manifest_matches, build_integrity_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
-from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage, get_snapshot_path, validate_snapshot_root
+from pylizlib.core.os.snap.storage.coordination import catalogue_access, observer_callback
+from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage, get_snapshot_path, validate_snapshot_root
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source, assert_no_symlinks
 
@@ -62,7 +63,7 @@ def validate_staged_snapshot_tree(
     """
     staged_path = Path(staged_path)
     assert_no_symlinks(staged_path)
-    assert_no_transaction_storage(staged_path)
+    assert_no_operational_storage(staged_path)
     json_path = staged_path / validate_directory_component(json_filename, "Snapshot JSON filename")
     if not json_path.is_file():
         raise FileNotFoundError(f"Staged snapshot metadata '{json_path}' is missing.")
@@ -109,77 +110,81 @@ def publish_snapshot_tree(
         Path: Published catalogue snapshot path after staging and journal-driven directory renames.
 
     Raises:
+        SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         TypeError: An argument or mutable model field has a type rejected by this contract.
         FileExistsError: A destination or generated staging name already exists or changes before publication.
         FileNotFoundError: A required source, stored association or metadata entry is absent.
     """
 
     # Incoming trees cannot introduce instructions into locally trusted recovery storage.
-    assert_no_transaction_storage(Path(source))
+    assert_destination_outside_source(source, catalogue_path)
+    with catalogue_access(catalogue_path):
+        message_callback = observer_callback(message_callback)
+        assert_no_operational_storage(Path(source))
 
-    # Validate containment and recover older work before allocating a new journal.
-    catalogue_root = Path(catalogue_path).resolve(strict=False)
-    assert_destination_outside_source(source, catalogue_root)
-    destination_path = get_snapshot_path(snapshot_id, catalogue_path)
-    catalogue_path.mkdir(parents=True, exist_ok=True)
-    recover_pending_transactions(catalogue_root)
-    had_original = destination_path.exists() or destination_path.is_symlink()
+        # Validate containment and recover older work before allocating a new journal.
+        catalogue_root = Path(catalogue_path).resolve(strict=False)
+        assert_destination_outside_source(source, catalogue_root)
+        destination_path = get_snapshot_path(snapshot_id, catalogue_path)
+        catalogue_path.mkdir(parents=True, exist_ok=True)
+        recover_pending_transactions(catalogue_root)
+        had_original = destination_path.exists() or destination_path.is_symlink()
 
-    # Record intent before copying or moving any visible destination.
-    journal = SnapshotTransactionJournal.begin(catalogue_root, "snapshot_tree", {"snapshot_id": snapshot_id, "had_original": had_original})
-    transaction_path = journal.workspace
-    staged_path = transaction_path / "snapshot"
-    backup_path = transaction_path / "original"
-    selected_strategy = copy_strategy or SequentialFileCopyStrategy()
-    if not isinstance(selected_strategy, DirectoryCopyStrategy):
-        journal.cleanup()
-        raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
+        # Record intent before copying or moving any visible destination.
+        journal = SnapshotTransactionJournal.begin(catalogue_root, "snapshot_tree", {"snapshot_id": snapshot_id, "had_original": had_original})
+        transaction_path = journal.workspace
+        staged_path = transaction_path / "snapshot"
+        backup_path = transaction_path / "original"
+        selected_strategy = copy_strategy or SequentialFileCopyStrategy()
+        if not isinstance(selected_strategy, DirectoryCopyStrategy):
+            journal.cleanup()
+            raise TypeError("copy_strategy must implement DirectoryCopyStrategy.")
 
-    # Reject source links, then recheck the completed private copy before publication.
-    try:
-        assert_no_symlinks(source)
-        selected_strategy.copy_directory(source, staged_path, message_callback=message_callback)
-        assert_no_symlinks(staged_path)
-        if prepare_staging is not None:
-            prepare_staging(staged_path)
-        assert_no_symlinks(staged_path)
-        assert_no_transaction_storage(staged_path)
-
-        # Recheck the target after staging; concurrent presence changes abort publication.
-        destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
-        currently_exists = destination_path.exists() or destination_path.is_symlink()
-        if currently_exists != had_original:
-            raise FileExistsError(f"Snapshot destination '{destination_path}' changed during publication.")
-        if currently_exists:
-            if not replace_existing:
-                raise FileExistsError(f"Snapshot destination '{destination_path}' already exists.")
-
-        # Persist commit intent before moving the old root aside.
-        journal.set_state("commit_decided")
-        if currently_exists:
-            rename_and_sync(destination_path, backup_path)
-
-        # Revalidate after the old entry has moved. rename() publishes the
-        # staged directory itself and never writes through a destination link.
-        destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
-        if destination_path.exists() or destination_path.is_symlink():
-            raise FileExistsError(f"Snapshot destination '{destination_path}' was recreated during publication.")
-        rename_and_sync(staged_path, destination_path)
-        if not destination_path.is_dir():
-            raise FileNotFoundError(f"Published snapshot '{destination_path}' is not visible after its rename.")
-        journal.set_state("committed")
-    except Exception as error:
+        # Reject source links, then recheck the completed private copy before publication.
         try:
-            journal.decide_rollback()
-        except Exception as rollback_error:
-            logger.error(f"{operation} rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
-            error.add_note(f"Persistent recovery journal retained at '{journal.path}'.")
-        raise
+            assert_no_symlinks(source)
+            selected_strategy.copy_directory(source, staged_path, message_callback=message_callback)
+            assert_no_symlinks(staged_path)
+            if prepare_staging is not None:
+                prepare_staging(staged_path)
+            assert_no_symlinks(staged_path)
+            assert_no_operational_storage(staged_path)
 
-    # Committed cleanup never changes the decision to keep the published tree.
-    journal.finalize([backup_path], operation)
-    try:
-        (catalogue_root / ".pyliz_transactions").rmdir()
-    except OSError:
-        pass
-    return destination_path
+            # Recheck the target after staging; concurrent presence changes abort publication.
+            destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
+            currently_exists = destination_path.exists() or destination_path.is_symlink()
+            if currently_exists != had_original:
+                raise FileExistsError(f"Snapshot destination '{destination_path}' changed during publication.")
+            if currently_exists:
+                if not replace_existing:
+                    raise FileExistsError(f"Snapshot destination '{destination_path}' already exists.")
+
+            # Persist commit intent before moving the old root aside.
+            journal.set_state("commit_decided")
+            if currently_exists:
+                rename_and_sync(destination_path, backup_path)
+
+            # Revalidate after the old entry has moved. rename() publishes the
+            # staged directory itself and never writes through a destination link.
+            destination_path = validate_snapshot_root(snapshot_id, catalogue_path)
+            if destination_path.exists() or destination_path.is_symlink():
+                raise FileExistsError(f"Snapshot destination '{destination_path}' was recreated during publication.")
+            rename_and_sync(staged_path, destination_path)
+            if not destination_path.is_dir():
+                raise FileNotFoundError(f"Published snapshot '{destination_path}' is not visible after its rename.")
+            journal.set_state("committed")
+        except Exception as error:
+            try:
+                journal.decide_rollback()
+            except Exception as rollback_error:
+                logger.error(f"{operation} rollback is incomplete; journal retained at '{journal.path}': {rollback_error}")
+                error.add_note(f"Persistent recovery journal retained at '{journal.path}'.")
+            raise
+
+        # Committed cleanup never changes the decision to keep the published tree.
+        journal.finalize([backup_path], operation)
+        try:
+            (catalogue_root / ".pyliz_transactions").rmdir()
+        except OSError:
+            pass
+        return destination_path

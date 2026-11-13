@@ -14,6 +14,7 @@ from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, build_backup_manifest
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
@@ -41,6 +42,7 @@ class BackupCreator:
         self.storage = storage
         self.now = now
 
+    @coordinated("storage.path_catalogue")
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
         """Creates, verifies and atomically publishes a zip archive of the snapshot's data.
         Failures propagate to the caller so protected operations cannot continue.
@@ -57,6 +59,7 @@ class BackupCreator:
             Path: The path of the verified, published archive.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             SnapshotIncompleteError: If any associated source folder is missing or ceases to be readable as a
                 directory during enumeration.
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.

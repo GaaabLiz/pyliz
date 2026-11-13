@@ -8,6 +8,7 @@ from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
 from pylizlib.core.os.snap.model_state import restore_snapshot_model
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
 from pylizlib.core.os.snap.storage.transactions import (
     SnapshotTransactionJournal,
@@ -208,6 +209,7 @@ class SnapshotEditor:
         """
         self.storage = storage
 
+    @coordinated("storage.path_catalogue")
     def apply(self, edits: list[SnapEditAction], message_callback=None) -> None:
         """Build a complete plan before staging or publishing any association.
 
@@ -219,6 +221,9 @@ class SnapshotEditor:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
         recover_storage_transactions(self.storage)
         plan = SnapshotEditPlanner(self.storage).build(edits)

@@ -17,7 +17,8 @@ from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
-from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage
+from pylizlib.core.os.snap.storage.coordination import coordinated
+from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.recovery.models import ReplacementEntry
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
@@ -45,6 +46,7 @@ class SnapshotTreeRestorer:
         self.path_catalogue = path_catalogue
         self.settings = settings
 
+    @coordinated("path_catalogue")
     def restore(self, temp_dir_path: Path, metadata: _ArchiveMetadata) -> None:
         """Replace a complete snapshot root after checking its embedded identity and associations.
 
@@ -56,11 +58,12 @@ class SnapshotTreeRestorer:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
             OSError: Staging validation or publication fails; the cause identifies missing data, integrity mismatch
                 or the underlying filesystem failure. The previous snapshot is retained before commit.
         """
-        assert_no_transaction_storage(temp_dir_path)
+        assert_no_operational_storage(temp_dir_path)
         json_path = temp_dir_path / self.settings.json_filename
         if not json_path.is_file():
             raise ValueError(f"Snapshot-directory backup does not contain '{self.settings.json_filename}'.")
@@ -133,6 +136,7 @@ class AssociationRestorer:
         self.path_catalogue = planner.path_catalogue
         self.settings = planner.settings
 
+    @coordinated("path_catalogue")
     def restore(self, metadata: _ArchiveMetadata, temp_dir_path: Path, destination_mapping: Mapping[str, str | Path] | None = None) -> None:
         """Revalidate extracted AD contents and execute the resulting plan.
 
@@ -144,11 +148,15 @@ class AssociationRestorer:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
         associations, origin_os = self.planner.associations_from(metadata)
         tasks = self.planner.build(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
         self.execute(tasks)
 
+    @coordinated("path_catalogue")
     def execute(self, tasks: list[AssociationRestoreTask]) -> None:
         """Persist recovery paths, stage every copy, publish, then finalize.
 
@@ -158,6 +166,9 @@ class AssociationRestorer:
 
         Returns:
             None: No return value.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
 
         Notes:
             Every owned path is journaled before copying. All copies finish before the first destination swap. Failure
@@ -279,6 +290,7 @@ class BackupRestorer:
         self.association_restorer = AssociationRestorer(self.planner)
         self.extractor = extractor
 
+    @coordinated("path_catalogue")
     def restore(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path] | None) -> None:
         """Validate, extract and dispatch one archive, with optional AD remapping.
 
@@ -292,6 +304,7 @@ class BackupRestorer:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
             FileNotFoundError: A required source, stored association or metadata entry is absent.
 

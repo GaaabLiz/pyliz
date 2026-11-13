@@ -11,7 +11,8 @@ from pylizlib.core.os.snap.operations.backup.associations import association_ide
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
-from pylizlib.core.os.snap.storage.paths import assert_no_transaction_storage, get_snapshot_path
+from pylizlib.core.os.snap.storage.coordination import coordinated
+from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.tree import iter_tree_entries_strict
 
@@ -76,6 +77,7 @@ class CatalogueTransferService:
         self.settings = settings
         self.query = query
 
+    @coordinated("path_catalogue")
     def export_catalogue(self, destination_path: Path, file_name: str = "catalogue_export.zip"):
         """Exports the entire catalogue to a single zip file.
 
@@ -85,6 +87,9 @@ class CatalogueTransferService:
 
         Returns:
             Path | None: Published ZIP path, or None when the catalogue has no snapshots.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
         destination_path.mkdir(parents=True, exist_ok=True)
         zip_path = destination_path.joinpath(file_name)
@@ -107,6 +112,7 @@ class CatalogueTransferService:
 
         return write_verified_zip(zip_path, files_to_archive())
 
+    @coordinated("path_catalogue")
     def import_catalogue(self, zip_path: Path):
         """Imports all snapshots from a catalogue zip file, skipping existing ones.
 
@@ -117,6 +123,7 @@ class CatalogueTransferService:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If the provided path is not a valid .zip file or contains operational transaction storage.
             IOError: If the zip file fails to extract.
         """
@@ -138,15 +145,16 @@ class CatalogueTransferService:
             )
 
             # Reject imported recovery instructions before publishing any catalogue entry.
-            assert_no_transaction_storage(temp_dir_path)
+            assert_no_operational_storage(temp_dir_path)
             for entry in temp_dir_path.iterdir():
                 if entry.is_dir():
-                    assert_no_transaction_storage(entry)
+                    assert_no_operational_storage(entry)
 
             # Iterate through extracted folders and import them
             for potential_snap_dir in temp_dir_path.iterdir():
                 self._import_entry(potential_snap_dir)
 
+    @coordinated("path_catalogue")
     def import_snapshot(self, zip_path: Path):
         """Imports a snapshot from a zip file into the catalogue.
 
@@ -157,6 +165,7 @@ class CatalogueTransferService:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If the path is not a valid zip file, if the zip is corrupted, if the snapshot.json is missing,
                 contains operational transaction storage, or if a snapshot with the same ID already exists.
             IOError: If the zip file fails to extract.
@@ -269,7 +278,7 @@ class CatalogueTransferService:
                 manifest disagrees with its type, ID or association set.
             OSError: If reading or removing a manifest fails outside the mapped errors.
         """
-        assert_no_transaction_storage(temp_dir_path)
+        assert_no_operational_storage(temp_dir_path)
         json_path = temp_dir_path / self.settings.json_filename
         if not json_path.is_file():
             raise ValueError(f"The zip file does not contain a snapshot json file ('{self.settings.json_filename}').")

@@ -33,6 +33,7 @@ firme, valori restituiti e comportamenti in caso di errore.
 | Scansione delle voci del catalogo | `storage/catalogue.py` |
 | Dipendenze di una singola operazione | `storage/context.py` |
 | Persistenza e facciata journal | `storage/transactions.py` |
+| Coordinamento operazioni e recovery | `storage/coordination.py`; lock nativi riutilizzabili in `core/os/filesystem/locking.py` |
 | Codec, dispatch e handler di recupero | `storage/recovery/` |
 | Copia di un'associazione nel suo storage | `storage/association.py` |
 | Contratti e classi pubbliche delle strategie | `copy_strategy.py` |
@@ -283,6 +284,31 @@ Gli altri journal restano v1. I journal edit v1 vengono recuperati quando lo sta
 non è più nello staging, il recupero si ferma conservando ogni copia disponibile.
 Non usare una versione precedente della libreria con journal v2 ancora pendenti:
 il lettore precedente li rifiuta perché non conosce le nuove fasi di rollback.
+
+Ogni operazione mantiene un accesso esclusivo al catalogo dalla recovery iniziale
+fino al completamento della pulizia. Il coordinamento usa un gate per i thread e
+un lock nativo sul file stabile `.pyliz_snapshot.lock` nella radice del catalogo.
+Il file resta presente a operazione terminata: non eliminarlo o sostituirlo mentre
+la libreria è in uso, perché i processi devono riferirsi allo stesso file. Gli
+archivi non possono introdurre questo nome operativo, comprese le sue varianti
+Windows; un file omonimo dentro un'associazione resta normale contenuto utente.
+
+I callback di avanzamento e messaggio possono eseguire `get_all()`, `get_by_id()`
+ed `exists()` sul catalogo corrente. La recovery implicita salta i journal creati
+dall'operazione attiva. I callback non possono avviare modifiche, backup o export;
+questi tentativi, e l'accesso di altri thread o processi durante un'operazione,
+sollevano `SnapshotBusyError`, esportato da `pylizlib.core.os.snap`, prima di
+modificare dati. Dopo la conclusione dell'operazione il chiamante può riprovare.
+Un'eccezione o un arresto del processo rilascia il lock; la chiamata successiva
+può recuperare i journal lasciati pendenti. I worker creati con `fork` scartano
+lease e descrittori ereditati e devono acquisire autonomamente il lock.
+
+I lock coordinano i chiamanti della libreria che condividono lo stesso catalogo.
+Le applicazioni devono inoltre serializzare operazioni su cataloghi differenti
+che installano nelle stesse destinazioni. Su filesystem remoti il server deve
+supportare i lock nativi: un errore di acquisizione viene propagato e l'operazione
+non continua senza protezione. Questo coordinamento non attesta il supporto dei
+lock tra macchine o la durabilità fisica di una specifica condivisione SMB/NFS.
 
 | Flusso | Ordine e limite da conservare |
 |---|---|

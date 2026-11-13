@@ -16,6 +16,7 @@ from pylizlib.core.os.snap.operations.backup_manifest import (
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
+from pylizlib.core.os.snap.storage.coordination import coordinated
 
 ASSOCIATED_DIRECTORIES_MANIFEST = LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST
 
@@ -98,6 +99,7 @@ class SnapshotArchiveService:
         """
         self.storage = storage
 
+    @coordinated("storage.path_catalogue")
     def create_backup(self, backup_path: Path, prefix: str, backup_type: "BackupType", is_export: bool = False, message_callback=None) -> Path:
         """Create a verified AD/SD backup using the dedicated creator.
 
@@ -112,6 +114,9 @@ class SnapshotArchiveService:
 
         Returns:
             Path: Verified archive path after exclusive publication, with numeric collision suffixes as needed.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
         from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
 
@@ -227,6 +232,7 @@ class CatalogueBackupService:
             reverse=True,
         )
 
+    @coordinated("path_catalogue")
     def restore_backup(self, backup_zip_path: Path):
         """Restores a backup using the archive manifest, with filename fallback for legacy ZIPs.
 
@@ -240,6 +246,7 @@ class CatalogueBackupService:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If the archive is invalid, its embedded metadata is not supported, or the restore cannot be
                 performed.
             SnapshotIncompleteError: If any expected associated directory is missing from an associated-directories
@@ -248,6 +255,7 @@ class CatalogueBackupService:
         """
         self._restore_backup(backup_zip_path, None)
 
+    @coordinated("path_catalogue")
     def restore_backup_with_mapping(self, backup_zip_path: Path, destination_mapping: Mapping[str, str | Path]) -> None:
         """Restore an AD archive while overriding destinations by association ID.
 
@@ -267,6 +275,7 @@ class CatalogueBackupService:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             TypeError: An argument or mutable model field has a type rejected by this contract.
 
         Notes:
@@ -294,6 +303,7 @@ class CatalogueBackupService:
 
         BackupRestorer(self.path_catalogue, self.settings, self.lookup, self.parse_info, extractor=extract_zip).restore(backup_zip_path, destination_mapping)
 
+    @coordinated("path_catalogue")
     def delete_backup(self, backup_zip_path: Path):
         """Deletes a backup archive from the filesystem.
 
@@ -304,6 +314,7 @@ class CatalogueBackupService:
             None: No return value.
 
         Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If the path is absent or is not recognized as a valid ZIP archive.
             OSError: If unlinking the existing archive fails.
         """

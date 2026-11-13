@@ -6,8 +6,8 @@ from pathlib import Path
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import Snapshot, SnapshotSettings
 from pylizlib.core.os.snap.storage.metadata import get_snapshot_from_path
-from pylizlib.core.os.snap.storage.paths import get_snapshot_path
-from pylizlib.core.os.snap.storage.transactions import TRANSACTION_DIRECTORY
+from pylizlib.core.os.snap.storage.paths import get_snapshot_path, is_operational_storage_name
+from pylizlib.core.os.snap.storage.transactions import TRANSACTION_DIRECTORY as TRANSACTION_DIRECTORY
 
 
 def _is_operational_directory(name: str) -> bool:
@@ -19,7 +19,7 @@ def _is_operational_directory(name: str) -> bool:
     Returns:
         bool: Whether a name belongs to transaction, staging or backup storage excluded from catalogue entries.
     """
-    return name == TRANSACTION_DIRECTORY or name.startswith("_staging_") or "_staging_" in name or "_bck_" in name
+    return is_operational_storage_name(name) or name.startswith("_staging_") or "_staging_" in name or "_bck_" in name
 
 
 def read_snapshot_by_id(path_catalogue: Path, snap_id: str, settings: SnapshotSettings) -> Snapshot | None:
