@@ -106,10 +106,10 @@ CI_UV_VERSION ?= 0.13.6
 CI_QUALITY_TARGETS ?= lint format-check
 
 # Override this for unittest, nox, tox, or a project-specific test runner.
-# The AI extra is large, so install and import-check it on the Linux/Python
-# 3.12 matrix entry. The complete suite runs with the regular media and Qt extras.
+# The suite renders API docs, so include the docs group in its environment.
+# The AI extra is large; import-check it on the Linux/Python 3.12 matrix entry.
 CI_AI_IMPORT_CHECK ?= uv run --locked --extra ai python -c 'import easyocr, huggingface_hub, nudenet, onnxruntime, torch, torchvision; from pylizlib.ai import AiMediaScanner'
-CI_TEST_COMMAND ?= $(if $(and $(filter Linux,$(RUNNER_OS)),$(filter 3.12,$(CI_PYTHON_VERSION))),$(CI_AI_IMPORT_CHECK) && ,)uv run --extra media --extra qt --extra qtfw pytest $(TESTS_PATH)
+CI_TEST_COMMAND ?= $(if $(and $(filter Linux,$(RUNNER_OS)),$(filter 3.12,$(CI_PYTHON_VERSION))),$(CI_AI_IMPORT_CHECK) && ,)uv run --group docs --extra media --extra qt --extra qtfw pytest $(TESTS_PATH)
 
 # Enable/disable API docs generation during the release workflow.
 # When enabled, CI includes docs/api/ in the generated-files pull request.
