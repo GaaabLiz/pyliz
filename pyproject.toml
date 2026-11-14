@@ -91,6 +91,7 @@ python_functions = ["test_*"]
 dev = [
     "git-cliff>=2.10.1",
     "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
     "ruff>=0.13.1",
 ]
 build = [
