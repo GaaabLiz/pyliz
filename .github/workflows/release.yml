@@ -253,7 +253,11 @@ jobs:
     needs:
       - ci-config
       - release-ready
-    if: needs.ci-config.outputs.enable_pypi_publish == '1'
+    if: >-
+      always() &&
+      needs.ci-config.result == 'success' &&
+      needs.release-ready.result == 'success' &&
+      needs.ci-config.outputs.enable_pypi_publish == '1'
     runs-on: ubuntu-latest
     environment: ${{ needs.ci-config.outputs.pypi_environment }}
     permissions:
