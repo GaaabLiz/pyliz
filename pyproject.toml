@@ -3,6 +3,8 @@ name = "pylizlib"
 version = "0.6.11"
 description = "General-purpose Python utilities for application configuration, data handling, filesystem operations, and directory snapshots."
 readme = "README.md"
+license = "Unlicense"
+license-files = ["UNLICENSE"]
 requires-python = ">=3.12"
 authors = [
     {name = "Gabliz", email = "gabliz.dev@gmail.com"},

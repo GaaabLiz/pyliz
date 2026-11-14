@@ -178,7 +178,7 @@ CI_CHOCOLATEY_PACKAGE_ID ?= myapp
 CI_CHOCOLATEY_PACKAGE_TITLE ?= My App
 CI_CHOCOLATEY_AUTHORS ?= Your Name
 CI_CHOCOLATEY_PROJECT_URL ?= https://github.com/your-org/your-repo
-CI_CHOCOLATEY_LICENSE_URL ?= https://github.com/your-org/your-repo/blob/main/LICENSE
+CI_CHOCOLATEY_LICENSE_URL ?= https://github.com/your-org/your-repo/blob/main/UNLICENSE
 CI_CHOCOLATEY_TAGS ?= python cli
 
 # Human-readable metadata shown on Chocolatey package page.

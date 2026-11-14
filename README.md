@@ -7,7 +7,7 @@ and Qt desktop components.
 
 - **Python:** 3.12 or later
 - **Package:** [`pylizlib` on PyPI](https://pypi.org/project/pylizlib/)
-- **License:** [MIT](LICENSE)
+- **License:** [The Unlicense](UNLICENSE) (`Unlicense` SPDX identifier)
 
 The core utilities install with the base package. Media, AI, and Qt dependencies
 are optional so applications only need to install the features they use.
@@ -168,6 +168,19 @@ print(media.ai_nsfw)
 
 The [AI guide](pylizlib/ai/README.md) documents accepted tool names, base64
 inputs, platform extras, and integration requirements.
+
+## License
+
+This project is released under [The Unlicense](UNLICENSE), with the aim of
+dedicating its copyright to the public domain. It allows anyone to use, copy,
+modify, publish, distribute, compile, and sell the project for any purpose,
+without requiring permission, attribution, or preservation of copyright
+notices. The license text also disclaims warranties and liability.
+
+The legal effect of a public-domain dedication can vary by jurisdiction. This
+license applies to material the project authors are entitled to release;
+third-party dependencies and separately identified third-party materials keep
+their own licenses.
 
 ## Development
 
