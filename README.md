@@ -8,10 +8,12 @@ installation, ZIP backup/restore and bounded text search. See the
 [snapshot guide](pylizlib/core/os/snap/README.md) for the package map,
 copying guarantees, recovery behavior and compatibility constraints.
 
-Install the development environment with `uv sync --group dev`. Run
-`make docs-snap` to generate a focused API preview under
-`temp_local/docs_snap_preview`, or `make docs` for the full API under `docs/api`.
-Both commands render the typed Google-style docstrings with pdoc.
+Install the core development tools with `uv sync --group dev`. Optional
+tooling is split into the `build`, `typing`, `docs`, and `graphics` groups;
+add a group with `uv sync --group <name>`. Run `make docs-snap` to generate a
+focused API preview under `temp_local/docs_snap_preview`, or `make docs` for the
+full API under `docs/api`. Both commands render the typed Google-style
+docstrings with pdoc.
 
 Run the snapshot and shared-primitive checks from the repository root:
 

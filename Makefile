@@ -377,18 +377,18 @@ build-installer: build-app-onefile installer
 #  |_____/ \____/ \_____|_____/
 #
 #  Generate API documentation with pdoc.
-#  Install pdoc first: `uv add --group dev pdoc`
+#  Install pdoc with `uv sync --group docs`.
 # ==============================================================================
 
 ## docs                 – Generate HTML docs in docs/api using Google-style docstrings
 .PHONY: docs
 docs:
-	uv run --group dev pdoc -o docs/api -d google $(PYTHON_MAIN_PACKAGE)
+	uv run --group docs pdoc -o docs/api -d google $(PYTHON_MAIN_PACKAGE)
 
 ## docs-snap            – Preview snapshot and shared-primitive API docs in temp_local
 .PHONY: docs-snap
 docs-snap:
-	uv run --group dev pdoc -o temp_local/docs_snap_preview -d google \
+	uv run --group docs pdoc -o temp_local/docs_snap_preview -d google \
 		pylizlib/core/os/snap/*.py pylizlib.core.os.snap.operations \
 		pylizlib.core.os.snap.storage pylizlib.core.os.snap.copying \
 		pylizlib.core.os.paths pylizlib.core.os.filesystem \

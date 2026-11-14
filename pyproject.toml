@@ -30,7 +30,7 @@ media = [
     "ffmpeg-python>=0.2.0",
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
-    "pillow>=11.3.0",
+    "pillow>=13.0.0",
     "sd-parsers>=0.6",
     "exifread>=3.5.1",
 ]
@@ -44,11 +44,11 @@ ai = [
     "onnxruntime>=1.22.0",
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
-    "pillow>=11.3.0",
+    "pillow>=13.0.0",
     "sd-parsers>=0.6",
-    "torch>=2.8.0",
-    "torchvision>=0.23.0",
-    "transformers>=4.56.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "transformers>=5.10.0",
 ]
 # Publicly documented compatibility alias; keep in sync by referencing the canonical extra.
 ai-macos = ["pylizlib[ai]"]
@@ -62,11 +62,11 @@ ai-linux-nvidia = [
     "onnxruntime-gpu>=1.22.0 ; sys_platform == 'linux'",
     "numpy>=2.3.3",
     "opencv-python>=4.11.0.86",
-    "pillow>=11.3.0",
+    "pillow>=13.0.0",
     "sd-parsers>=0.6",
-    "torch>=2.8.0",
-    "torchvision>=0.23.0",
-    "transformers>=4.56.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "transformers>=5.10.0",
 ]
 qtfw = [
     "pyside6>=6.9.2",
@@ -74,7 +74,7 @@ qtfw = [
 ]
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=84.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -90,9 +90,22 @@ python_functions = ["test_*"]
 [dependency-groups]
 dev = [
     "git-cliff>=2.10.1",
-    "pdoc>=15.0.4",
-    "pyinstaller>=6.16.0",
     "pytest>=8.4.2",
     "ruff>=0.13.1",
+]
+build = [
+    "pyinstaller>=6.22.1",
+]
+typing = [
     "ty>=0.0.1a21",
+]
+docs = [
+    "pdoc>=15.0.4",
+]
+graphics = [
+    "cairosvg>=2.7",
+    "pillow>=13.0.0",
+    "svglib>=1.5",
+    "reportlab>=4.0",
+    "skia-python>=87.6",
 ]
