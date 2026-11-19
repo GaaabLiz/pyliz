@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from pylizlib.core.os.filesystem.tree import assert_no_symlinks, iter_files_strict, iter_tree_entries_strict
+from pylizlib.core.os.filesystem.tree import assert_no_symlinks, iter_files_strict, iter_tree_entries_strict, iter_tree_entry_stats_strict
 from pylizlib.core.os.paths.containment import assert_destination_outside_source
 from pylizlib.core.os.paths.identity import same_filesystem_entry
 
@@ -17,6 +17,9 @@ def test_tree_preserves_empty_directories_and_omits_root(tmp_path):
     (tmp_path / "file").write_bytes(b"content")
     assert set(iter_tree_entries_strict(tmp_path)) == {tmp_path / "empty", tmp_path / "file"}
     assert list(iter_files_strict(tmp_path)) == [tmp_path / "file"]
+    metadata = dict(iter_tree_entry_stats_strict(tmp_path))
+    assert metadata.keys() == {tmp_path / "empty", tmp_path / "file"}
+    assert metadata[tmp_path / "file"].st_size == len(b"content")
     assert assert_no_symlinks(tmp_path) is None
 
 
@@ -52,8 +55,8 @@ def test_general_primitives_import_without_snapshot_dependencies():
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("enumerate_entries", [iter_files_strict, iter_tree_entries_strict])
-def test_both_enumerators_are_lazy_and_propagate_scan_failures(tmp_path, monkeypatch, enumerate_entries):
+@pytest.mark.parametrize("enumerate_entries", [iter_files_strict, iter_tree_entries_strict, iter_tree_entry_stats_strict])
+def test_tree_enumerators_are_lazy_and_propagate_scan_failures(tmp_path, monkeypatch, enumerate_entries):
     """Sharing traversal does not swallow I/O errors or move work to construction."""
     scan = Mock(side_effect=OSError("scan denied"))
     monkeypatch.setattr("pylizlib.core.os.filesystem.tree.os.scandir", scan)

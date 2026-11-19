@@ -25,6 +25,8 @@ from pylizlib.core.os.snap.domain import (
     SnapEditType,
     Snapshot,
     SnapshotBackupInfo,
+    SnapshotCatalogueStatistics,
+    SnapshotFileInfo,
     SnapshotSettings,
     SnapshotSortKey,
 )
@@ -84,4 +86,6 @@ __all__ = [
     "CopyMetadataMode",
     "ExtendedMetadataCopyStrategy",
     "SnapshotBusyError",
+    "SnapshotCatalogueStatistics",
+    "SnapshotFileInfo",
 ]

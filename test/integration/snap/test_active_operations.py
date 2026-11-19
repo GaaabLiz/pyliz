@@ -36,6 +36,7 @@ def test_catalogue_queries_inside_create_callbacks_preserve_active_staging(snaps
         assert previous.id in {snapshot.id for snapshot in snapshots}
         assert catalogue.get_by_id(previous.id).id == previous.id
         assert catalogue.exists(previous.id)
+        assert catalogue.get_statistics(include_backups=False).snapshot_count == 1
         observed.append(True)
 
     catalogue.add(current, **{f"{callback_kind}_callback": inspect})
@@ -87,7 +88,7 @@ def test_callback_write_is_rejected_before_deleting_an_existing_snapshot(snapsho
     assert (catalogue.path_catalogue / previous.id / previous.directories[0].directory_name / "identity").read_bytes() == b"previous"
 
 
-@pytest.mark.parametrize("entrypoint", ["catalogue-read", "snapshot-read", "direct-recovery", "manager-write"])
+@pytest.mark.parametrize("entrypoint", ["catalogue-read", "catalogue-statistics", "snapshot-read", "direct-recovery", "manager-write"])
 def test_another_process_cannot_recover_or_modify_an_active_operation(snapshot_workspace: Path, entrypoint: str) -> None:
     """The stable OS lock protects every public facade and direct implicit-recovery entry point."""
     catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
@@ -103,6 +104,7 @@ def test_another_process_cannot_recover_or_modify_an_active_operation(snapshot_w
             "catalogue = SnapshotCatalogue(root)",
             "try:",
             "    if sys.argv[2] == 'catalogue-read': catalogue.get_all()",
+            "    elif sys.argv[2] == 'catalogue-statistics': catalogue.get_statistics()",
             "    elif sys.argv[2] == 'snapshot-read': catalogue.get_by_id('previous')",
             "    elif sys.argv[2] == 'direct-recovery': recover_pending_transactions(root)",
             "    else: SnapshotManager(Snapshot('previous', 'previous', ''), root).delete()",
@@ -188,7 +190,7 @@ def test_real_process_termination_releases_gate_for_recovery(snapshot_workspace:
     assert result.returncode == 47, result.stderr
     assert list(catalogue_path.rglob("journal.json"))
     catalogue = SnapshotCatalogue(catalogue_path, SnapshotSettings())
-    assert catalogue.get_all() == []
+    assert catalogue.get_statistics().snapshot_count == 0
     assert not list(catalogue_path.rglob("journal.json"))
     catalogue.add(snapshot)
     assert catalogue.get_by_id(snapshot.id) is not None

@@ -1,7 +1,7 @@
 """Snapshot backup creation and catalogue restore operations."""
 
 import zipfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +19,20 @@ from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
 
 ASSOCIATED_DIRECTORIES_MANIFEST = LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST
+
+
+def _iter_backup_archives(backup_dir: Path) -> Iterator[Path]:
+    """Recognize the immediate files eligible for the backup listing.
+
+    Args:
+        backup_dir (Path): Directory containing the archives.
+
+    Yields:
+        Path: File recognized as a ZIP archive, regardless of its extension.
+    """
+    for path in backup_dir.iterdir():
+        if path.is_file() and zipfile.is_zipfile(path):
+            yield path
 
 
 @dataclass(frozen=True)
@@ -212,9 +226,7 @@ class CatalogueBackupService:
             raise ValueError(f"Provided backup directory '{backup_dir}' is not a valid folder.")
 
         backups: list[SnapshotBackupInfo] = []
-        for zip_path in backup_dir.iterdir():
-            if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
-                continue
+        for zip_path in _iter_backup_archives(backup_dir):
             try:
                 validate_zip_archive(
                     zip_path,
@@ -231,6 +243,20 @@ class CatalogueBackupService:
             key=lambda b: (b.created_at is not None, b.created_at or datetime.min, b.file_name),
             reverse=True,
         )
+
+    def count_backups(self) -> int:
+        """Count the configured backup directory's ZIP files without parsing their entries.
+
+        Returns:
+            int: Number of recognized archives, or zero when the backup directory is unset or missing.
+        """
+        backup_dir = self.settings.backup_path
+        if backup_dir is None:
+            return 0
+        try:
+            return sum(1 for _ in _iter_backup_archives(backup_dir))
+        except FileNotFoundError:
+            return 0
 
     @coordinated("path_catalogue")
     def restore_backup(self, backup_zip_path: Path):
