@@ -1,363 +1,394 @@
-# Manutenzione del sistema snapshot
+# Snapshot subsystem maintenance
 
-L'API pubblica rimane disponibile tramite `pylizlib.core.os.snap` e i moduli
-storici. Il refactor separa le responsabilità interne conservando formati,
-firme, valori restituiti e comportamenti in caso di errore.
+The public API remains available through `pylizlib.core.os.snap` and the
+historical modules. The refactor separates internal responsibilities while
+preserving formats, signatures, return values, and error behavior.
 
-## Da dove iniziare
+## Where to start
 
-| Esigenza | Modulo da leggere |
+| Need | Module to read |
 |---|---|
-| API su uno snapshot | `manager.py` |
-| API sul catalogo e backup preventivi | `catalogue.py` |
-| Dichiarazioni pubbliche dei modelli, enum, azioni e configurazione | `domain.py` |
-| Validazione e operazioni sulle associazioni | `association_model.py` |
-| Validazione, metadati e clonazione degli snapshot | `snapshot_model.py` |
-| Creazione, duplicazione e cancellazione | `operations/lifecycle.py` |
-| Installazione e rimozione delle copie installate | `operations/install.py` |
-| Aggiornamento delle copie interne dal sistema | `operations/sync.py` |
-| Pianificazione ed esecuzione degli edit | `operations/edits.py` |
-| Facciata compatibile backup e ripristino | `operations/archives.py` |
-| Creazione e ispezione degli archivi | `operations/backup/creation.py`, `inspection.py` |
-| Piano, staging e pubblicazione del restore | `operations/backup/planning.py`, `restore.py` |
-| Codec e regole delle associazioni archiviate | `operations/backup_manifest.py`, `backup/associations.py` |
-| Generazione e parsing dei nomi dei backup | `operations/backup_names.py` |
-| Import/export del catalogo | `operations/transfers.py` |
-| Percorsi contenuti nello storage | `storage/paths.py` |
-| Scansione rigorosa e politiche sui link | `core/os/filesystem/tree.py`; deleghe in `storage/tree.py` |
-| Pubblicazione delle directory e pulizia | `storage/publication.py` |
-| Primitive di lettura e scrittura ZIP | `core/os/archives/zip/`; deleghe in `storage/archives.py` |
-| Limiti predefiniti per import e restore ZIP | `storage/archive_limits.py` |
-| Conversione JSON snapshot | `storage/metadata.py` |
-| File descriptor protetti e scritture atomiche | `core/os/filesystem/atomic.py` |
-| Scansione delle voci del catalogo | `storage/catalogue.py` |
-| Dipendenze di una singola operazione | `storage/context.py` |
-| Persistenza e facciata journal | `storage/transactions.py` |
-| Coordinamento operazioni e recovery | `storage/coordination.py`; lock nativi riutilizzabili in `core/os/filesystem/locking.py` |
-| Codec, dispatch e handler di recupero | `storage/recovery/` |
-| Copia di un'associazione nel suo storage | `storage/association.py` |
-| Contratti e classi pubbliche delle strategie | `copy_strategy.py` |
-| Implementazioni sequenziale e verificata | `copying/file_strategies.py` |
-| Implementazione della copia dei metadati estesi | `copying/metadata_strategy.py` |
-| Implementazione provider, sessioni e capability metadata | `copying/provider.py`, `copying/session.py`, `copying/contracts.py` |
-| Validazione e confronto dei manifest | `integrity.py` |
-| Query pubbliche e risoluzione dei percorsi | `searcher.py` |
-| Adapter di configurazione live e risultati | `searching.py` |
-| Motore testuale, encoding, finestre e preview | `core/data/text/` |
-| Ripristino del modello e stato di acquisizione | `model_state.py` |
-| Contratti delle callback | `callbacks.py` |
-| Confronto delle associazioni e ordinamento | `diff.py`, `sorting.py` |
-| Generazione di esempi casuali | `factories.py` |
+| API for one snapshot | `manager.py` |
+| Catalogue API, statistics, and backup operations | `catalogue.py` |
+| Public model, enum, action, and configuration declarations | `domain.py` |
+| Association validation and operations | `association_model.py` |
+| Snapshot validation, metadata, and cloning | `snapshot_model.py` |
+| Creation, duplication, and deletion | `operations/lifecycle.py` |
+| Installing and removing installed copies | `operations/install.py` |
+| Updating internal copies from the source | `operations/sync.py` |
+| Catalogue statistics | `operations/statistics.py` |
+| Edit planning and execution | `operations/edits.py` |
+| Compatible backup and restore facade | `operations/archives.py` |
+| Archive creation and inspection | `operations/backup/creation.py`, `inspection.py` |
+| Restore planning, staging, and publication | `operations/backup/planning.py`, `restore.py` |
+| Codec and rules for archived associations | `operations/backup_manifest.py`, `backup/associations.py` |
+| Backup name generation and parsing | `operations/backup_names.py` |
+| Catalogue import/export | `operations/transfers.py` |
+| Paths contained in storage | `storage/paths.py` |
+| Strict scanning and symlink policies | `core/os/filesystem/tree.py`; delegates in `storage/tree.py` |
+| Directory publication and cleanup | `storage/publication.py` |
+| ZIP read and write primitives | `core/os/archives/zip/`; delegates in `storage/archives.py` |
+| Default limits for ZIP import and restore | `storage/archive_limits.py` |
+| Snapshot JSON conversion | `storage/metadata.py` |
+| Protected file descriptors and atomic writes | `core/os/filesystem/atomic.py` |
+| Catalogue entry scanning | `storage/catalogue.py` |
+| Dependencies for a single operation | `storage/context.py` |
+| Journal persistence and facade | `storage/transactions.py` |
+| Operation coordination and recovery | `storage/coordination.py`; reusable native locks in `core/os/filesystem/locking.py` |
+| Recovery codecs, dispatch, and handlers | `storage/recovery/` |
+| Copying an association into its storage | `storage/association.py` |
+| Public strategy contracts and classes | `copy_strategy.py` |
+| Sequential and verified implementations | `copying/file_strategies.py` |
+| Extended metadata copy implementation | `copying/metadata_strategy.py` |
+| Provider, sessions, and metadata capabilities | `copying/provider.py`, `copying/session.py`, `copying/contracts.py` |
+| Manifest validation and comparison | `integrity.py` |
+| Public queries and path resolution | `searcher.py` |
+| Live configuration adapters and results | `searching.py` |
+| Text engine, encoding, windows, and previews | `core/data/text/` |
+| Model restoration and capture state | `model_state.py` |
+| Callback contracts | `callbacks.py` |
+| Association comparison and sorting | `diff.py`, `sorting.py` |
+| Randomized example generation | `factories.py` |
 
-I percorsi che iniziano con `core/` sono relativi a `pylizlib/`. Gli altri sono
-relativi a questo package. Le primitive generali non importano `snap`: possono
-essere usate per altri dati e filesystem. In particolare:
+Paths beginning with `core/` are relative to `pylizlib/`. The other paths are
+relative to this package. General-purpose primitives do not import `snap` and
+can be used with other data and filesystems. In particular:
 
-- `core/os/paths/` distingue forma lessicale, identità filesystem e containment;
-- `core/os/filesystem/` contiene alberi, metadati, fingerprint, capacità, entry,
-  scrittura atomica e conferma delle rinomine;
-- `core/os/windows/` isola drive, descrittori di sicurezza e alternate data streams,
-  caricando i binding nativi soltanto quando chiamati;
-- `core/os/archives/zip/` valida, estrae e pubblica archivi generici;
-- `core/data/text/` legge testo e raccoglie match tramite contratti strutturali.
+- `core/os/paths/` distinguishes lexical form, filesystem identity, and containment;
+- `core/os/filesystem/` contains trees, metadata, fingerprints, capacity checks,
+  entries, atomic writes, and rename durability;
+- `core/os/windows/` isolates drives, security descriptors, and alternate data
+  streams, loading native bindings only when called;
+- `core/os/archives/zip/` validates, extracts, and publishes generic archives;
+- `core/data/text/` reads text and collects matches through structural contracts.
 
-Le policy su ID, nomi riservati, associazioni, formati legacy e stati di commit
-rimangono in `snap`. I vecchi moduli di storage restano disponibili come adapter
-di compatibilità; il codice condiviso ha una sola implementazione.
+Policies for IDs, reserved names, associations, legacy formats, and commit
+states remain in `snap`. The old storage modules remain available as
+compatibility adapters; shared code has a single implementation.
 
-Le scritture dei metadati preparano un file temporaneo nella stessa directory,
-sincronizzano i suoi contenuti, conservano i byte precedenti in un sidecar
-`.previous` e pubblicano con `os.replace`. Se il flush finale della directory
-fallisce dopo la rinomina, `MetadataDurabilityError.published` distingue il
-JSON già visibile da una scrittura non pubblicata. Su SMB/NFS un `fsync`
-completato è comunque soltanto la conferma del sistema/server: la libreria non
-può attestare che il server abbia persistito i byte su supporto stabile.
-`SnapshotManager.install()` segnala con `SnapshotInstallMetadataError` un errore
-di `date_last_used` dopo il commit dei dati. L'eccezione indica che le directory
-sono già state installate, espone `metadata_published` (True, False o None se
-l'adapter non può determinarlo). In modalità sostituzione lascia le copie
-precedenti temporanee per il recupero. Il merge registra invece le sostituzioni
-delle entry di primo livello e le relative copie di rollback: non ricostruisce
-un backup ricorsivo dell'intera destinazione.
-Un adapter alternativo dovrebbe esporre `published` e
-`durability_confirmed` sulle eccezioni di scrittura post-pubblicazione.
+Metadata writes prepare a temporary file in the same directory, flush its
+contents, preserve the previous bytes in a `.previous` sidecar, and publish it
+with `os.replace`. If the final directory flush fails after the rename,
+`MetadataDurabilityError.published` distinguishes JSON that is already visible
+from a write that was not published. On SMB/NFS, a completed `fsync` is still
+only confirmation from the system or server: the library cannot attest that the
+server persisted the bytes to stable storage.
 
-I backup e i ripristini delle directory associate richiedono che tutte le
-associazioni siano presenti. Se manca una sorgente o una cartella nell'archivio,
-viene sollevata `SnapshotIncompleteError`; `missing_folders` contiene i percorsi
-originali mancanti e `unexpected_entries` le voci dell'archivio senza
-corrispondenza. Il ripristino controlla l'insieme completo prima di modificare
-le destinazioni.
+`SnapshotManager.install()` reports a `date_last_used` error after the data has
+been committed by raising `SnapshotInstallMetadataError`. The exception
+indicates that the directories have already been installed and exposes
+`metadata_published` (True, False, or None if the adapter cannot determine it).
+In replacement mode, the previous copies are left temporarily available for
+recovery. Merge mode instead records top-level entry replacements and their
+rollback copies; it does not create a recursive backup of the entire
+destination. An alternative adapter should expose `published` and
+`durability_confirmed` on post-publication write exceptions.
 
-## Ricerca dei contenuti
+Backing up and restoring associated directories requires every association to
+be present. If a source or an archive folder is missing,
+`SnapshotIncompleteError` is raised; `missing_folders` contains the missing
+original paths and `unexpected_entries` contains archive entries with no
+matching association. Restore checks the complete set before changing any
+destinations.
 
-`SnapshotSearchParams` usa una lettura a blocchi e limita i candidati a
-`max_files` (default 10.000), i risultati a `max_results` (default 1.000) e il
-testo mostrato per riga a `max_line_preview_chars` (default 4.096). La
-paginazione usa `result_offset`; in `search_list()` la pagina è condivisa fra
-tutti gli snapshot. Le estensioni sono confrontate senza distinzione fra
-maiuscole e minuscole e possono essere composte, ad esempio `.TAR.GZ`.
+## Content search
 
-Se non viene indicata `encoding`, la ricerca riconosce BOM e UTF-16 senza BOM
-con testo ASCII, prova UTF-8 e usa Windows-1252 se il testo non è UTF-8 valido. Se la
-decodifica fallisce più avanti nel file, il file viene riletto con Windows-1252.
-I file che il campione iniziale identifica come binari vengono saltati; un
-errore di decodifica testuale non viene descritto come file binario. Per altri
-codici si può impostare `encoding` esplicitamente.
+`SnapshotSearchParams` reads in chunks and limits candidates to `max_files`
+(default 10,000), results to `max_results` (default 1,000), and displayed text
+per line to `max_line_preview_chars` (default 4,096). Pagination uses
+`result_offset`; in `search_list()`, the page is shared across all snapshots.
+Extensions are compared case-insensitively and can be compound, such as
+`.TAR.GZ`.
 
-Le query di testo e regex possono attraversare le righe. Il contenuto è letto
-con blocchi da `chunk_size` (default 65.536 **caratteri decodificati**); il campione
-iniziale per l'encoding è invece di 8.192 byte. Le regex hanno un timeout per
-operazione di matching (`regex_timeout_seconds`, default 0,1 s), non una scadenza
-globale della ricerca. `max_context_chars` (default 1.048.576 caratteri) è il
-budget del contesto trattenuto fra i blocchi. Non impone una lunghezza massima
-rigida a ciascun match: uno span più lungo può essere trovato quando entra nella
-finestra corrente, ma non è garantito fra chunk e coda EOF. Solo `False`
-interrompe la ricerca dello snapshot
-corrente; la callback viene richiamata anche durante la lettura, così può
-interrompere un file molto grande.
+If `encoding` is not specified, search detects BOMs and UTF-16 without a BOM
+when the text is ASCII, tries UTF-8, and uses Windows-1252 if the text is not
+valid UTF-8. If decoding fails later in the file, the file is read again using
+Windows-1252. Files identified as binary by the initial sample are skipped; a
+text decoding error is not reported as a binary file. Set `encoding` explicitly
+to use another encoding.
 
-## Dimensioni e tempi di acquisizione
+Text and regex queries can span lines. Content is read in chunks of
+`chunk_size` (default 65,536 **decoded characters**); the initial encoding
+sample is 8,192 bytes. Regexes have a timeout for each match operation
+(`regex_timeout_seconds`, default 0.1 seconds), not a global search deadline.
+`max_context_chars` (default 1,048,576 characters) is the context budget held
+between chunks. It does not impose a strict maximum length on each match: a
+longer span may be found when it fits in the current window, but matches across
+chunks and the EOF tail are not guaranteed. Only `False` stops the current
+snapshot search; the callback is also called while reading, so it can stop a
+very large file.
 
-`SnapDirAssociation` non misura la sorgente nel costruttore o durante il
-caricamento del JSON. Se `mb_size` manca resta `None`, così un lookup non avvia
-scansioni potenzialmente lente su percorsi di rete. Dopo una copia riuscita,
-create, aggiunta, edit e sincronizzazione calcolano `mb_size` dal manifest della
-copia effettivamente acquisita. Una directory vuota acquisita ha dimensione
-zero; un valore legacy sconosciuto resta distinto da zero fino alla prossima
-acquisizione.
+## Catalogue statistics
 
-Le callback di copia non superano il 100% e ricevono un aggiornamento terminale
-anche per alberi vuoti o quando la sorgente cambia dimensione durante la copia.
-Senza callback, create non esegue la scansione preliminare dei byte per stimare
-il progresso.
+```python
+from pathlib import Path
 
-`date_created` conserva il significato storico di creazione dell'oggetto
-metadata. `capture_started_at` e `capture_completed_at` registrano invece
-l'inizio e la fine dell'ultima acquisizione completa eseguita da create o sync,
-come timestamp UTC con offset esplicito (`+00:00`). Gli snapshot legacy hanno
-entrambi i campi a `None` finché non vengono acquisiti di nuovo.
+from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotSettings
 
-La destinazione di un backup deve risolversi fuori dagli alberi che verranno
-archiviati. Questo evita di includere ZIP precedenti e viene controllato anche
-quando la destinazione usa un alias o un link simbolico.
+catalogue = SnapshotCatalogue(Path("catalogue"), SnapshotSettings(backup_path=Path("backups")))
+stats = catalogue.get_statistics()
+print(stats.snapshot_count, stats.total_size_bytes, stats.average_snapshot_size_bytes)
+print(stats.file_count, stats.directory_count, stats.largest_file)
+print(stats.oldest_snapshot_date, stats.newest_snapshot_date, stats.backup_count, stats.catalogue_path)
+```
 
-I nuovi backup AD e SD includono `.pyliz_backup_manifest.json` con versione,
-tipo, ID e nome snapshot, data, prefisso, OS di provenienza e associazioni
-(ID, indice, nome interno e percorso originario). Il restore e
-`list_backups()` leggono questi dati dall'archivio; rinominare lo ZIP non cambia
-il tipo o l'identità. Prima di
-installare, ripristinare o rimuovere copie, la libreria verifica che le
-destinazioni non siano critiche, sovrapposte al catalogo o coincidenti/annidate
-fra loro. Se un percorso non può essere risolto, l'operazione viene rifiutata.
-Le destinazioni distruttive con componenti simbolici o junction vengono rifiutate,
-anche se il link precede `..`: il modello conserva la forma lessicale, mentre
-install/restore/remove richiedono un percorso utilizzabile senza attraversare
-link. I componenti `..` senza link mantengono il loro significato; non vengono
-collassati con `abspath()`. Install e restore ricontrollano i target pianificati
-dopo lo staging. Una recovery con genitori diventati link si ferma conservando
-journal e copie disponibili.
-I backup possono essere ripristinati anche dopo aver eliminato lo snapshot dal
-catalogo. I vecchi manifest AD e gli archivi precedenti senza manifest
-mantengono il percorso di compatibilità con i metadati del catalogo o col nome
-legacy. Per cambiare destinazione,
+`get_statistics()` loads snapshots using the same rules as `get_all()` and
+aggregates their manifests in one pass. Totals cover captured association
+contents. Sizes are logical bytes per path, and directory counts include each
+association root and empty directories. `largest_file` reports the size,
+snapshot ID, association ID, and relative path. Dates preserve the
+`date_created` value and are ordered by interpreting timestamps without a time
+zone as local times. For an empty catalogue, counts and sizes are zero, while
+dates and the largest file are `None`.
+
+For legacy associations without manifests, the operation reads only filesystem
+metadata for copies in the catalogue. Contained paths and strict scanning use
+the existing symlink rules. Errors from legacy scans are propagated.
+`strict=True` also propagates I/O errors when loading snapshot metadata, as
+`get_all()` does.
+
+`get_snapshot_count()` reads only snapshot metadata. `get_backup_count()` counts
+the ZIP files recognized by `list_backups()` in
+`SnapshotSettings.backup_path` without inspecting their members. If that
+directory is missing or not configured, the count is zero.
+`get_statistics(include_backups=False)` skips the backup count and returns
+`backup_count=None`.
+
+## Sizes and capture times
+
+`SnapDirAssociation` does not measure the source when constructed or when JSON
+is loaded. If `mb_size` is missing, it remains `None`, so a lookup does not
+start potentially slow scans on network paths. After a successful copy,
+create, add, edit, and sync calculate `mb_size` from the manifest of the copy
+that was actually captured. A captured empty directory has size zero; an
+unknown legacy value remains distinct from zero until the next capture.
+
+Copy callbacks never exceed 100% and receive a final update even for empty
+trees or when the source changes size during copying. Without a callback,
+create does not perform a preliminary byte scan to estimate progress.
+
+`date_created` retains its historical meaning as the creation time of the
+metadata object. `capture_started_at` and `capture_completed_at` instead record
+the start and end of the latest complete capture performed by create or sync,
+as UTC timestamps with an explicit offset (`+00:00`). Both fields remain `None`
+for legacy snapshots until they are captured again.
+
+A backup destination must resolve outside the trees that will be archived.
+This prevents previous ZIP files from being included and is checked even when
+the destination uses an alias or symlink.
+
+New AD and SD backups include `.pyliz_backup_manifest.json` with the version,
+type, snapshot ID and name, date, source OS, and associations (ID, index,
+internal name, and original path). Restore and `list_backups()` read this data
+from the archive; renaming the ZIP does not change its type or identity. Before
+installing, restoring, or removing copies, the library checks that destinations
+are not critical, do not overlap the catalogue, and do not coincide with or
+contain one another. The operation is rejected if a path cannot be resolved.
+Destructive destinations with symlink or junction components are rejected,
+even when the link appears before `..`: the model preserves the lexical form,
+while install/restore/remove require a path that can be used without traversing
+links. A `..` component without a link keeps its meaning; it is not collapsed
+with `abspath()`. Install and restore recheck planned targets after staging. If
+a recovery parent has become a link, recovery stops and preserves the journal
+and available copies.
+
+Backups can also be restored after the snapshot has been deleted from the
+catalogue. Older AD manifests and earlier archives without a manifest retain
+the compatibility path that uses catalogue metadata or the legacy name. To
+change the destination,
 `SnapshotCatalogue.restore_backup_with_mapping(zip_path, {folder_id: path})`
-accetta una mappa dagli ID persistenti delle associazioni ai nuovi percorsi; le
-associazioni non indicate mantengono il percorso salvato nell'archivio.
+accepts a mapping from persistent association IDs to new paths; associations
+not listed keep the path saved in the archive.
 
-Import e restore SD rifiutano alberi che contengono lo storage operativo
-`.pyliz_transactions` alla radice dello snapshot. L'import del catalogo verifica
-tutti gli ingressi prima di pubblicare la prima voce. La riserva comprende le
-varianti di maiuscole e i suffissi di punti/spazi che possono diventare alias
-su Windows. Anche gli ID snapshot non possono occupare questo namespace.
-I journal vengono creati localmente dalle operazioni; gli archivi trasportano
-dati, senza introdurre istruzioni da eseguire al lookup successivo. Una cartella
-con quel nome dentro i dati di un'associazione resta un normale contenuto.
+SD import and restore reject trees containing the operational storage
+`.pyliz_transactions` at the snapshot root. Catalogue import checks every
+entry before publishing the first one. The reserved name includes case
+variants and trailing dots or spaces that can become aliases on Windows.
+Snapshot IDs cannot use this namespace either. Journals are created locally by
+operations; archives carry data without introducing instructions to execute on
+the next lookup. A directory with that name inside association data remains
+ordinary user content.
 
-Prima della sostituzione di uno snapshot tramite restore SD viene verificata la
-copia effettiva nello staging: tutte le associazioni devono esistere e i manifest
-disponibili devono corrispondere a percorsi, tipi, dimensioni e SHA-256 dei file.
-Un archivio incompleto o incoerente lascia intatto lo snapshot precedente. La
-stessa verifica protegge import singolo e duplicazione. I metadati legacy senza
-manifest restano esplicitamente non verificati; `allow_unverified_legacy_snapshots`
-continua a regolare la loro installazione e non inventa garanzie di integrità.
+Before replacing a snapshot through SD restore, the actual staged copy is
+verified: every association must exist, and available manifests must match
+paths, types, sizes, and file SHA-256 values. An incomplete or inconsistent
+archive leaves the previous snapshot intact. The same check protects single
+imports and duplication. Legacy metadata without a manifest remains explicitly
+unverified; `allow_unverified_legacy_snapshots` continues to control its
+installation and does not imply integrity guarantees.
 
-La scrittura degli ZIP accetta anche timestamp sorgente precedenti al 1980 e li
-limita all'intervallo rappresentabile dal formato. Import e restore controllano
-prima dell'estrazione il numero di voci, il totale dei byte non compressi e lo
-spazio disponibile, includendo il secondo staging necessario alla pubblicazione.
-I limiti predefiniti sono 100 GiB e 1.000.000 di voci e si possono modificare o
-disabilitare con `SnapshotSettings.max_archive_uncompressed_bytes` e
-`max_archive_entries`. Import e restore SD usano il filesystem del catalogo per
-lo staging; il restore AD sceglie il volume di una destinazione associata. Si può
-impostare `SnapshotSettings.archive_temp_directory` per scegliere un altro
-volume. Il controllo verifica anche lo spazio per la copia finale, ma non riserva
-capacità contro scritture concorrenti.
+ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
+the range representable by the format. Before extraction, import and restore
+check the entry count, total uncompressed bytes, and available space, including
+the second staging area needed for publication. Defaults are 100 GiB and
+1,000,000 entries; they can be changed or disabled with
+`SnapshotSettings.max_archive_uncompressed_bytes` and
+`max_archive_entries`. SD import and restore use the catalogue filesystem for
+staging; AD restore chooses the volume of an associated destination. Set
+`SnapshotSettings.archive_temp_directory` to choose another volume. The check
+also accounts for the final copy, but does not reserve capacity against
+concurrent writes.
 
-`utils.py` e `serializer.py` conservano le vecchie API come facciate. Le nuove
-implementazioni interne usano direttamente i moduli responsabili, evitando di
-passare dall'esportazione aggregata di `snap.__init__`.
+`utils.py` and `serializer.py` retain the old APIs as facades. New internal
+implementations use the responsible modules directly instead of going through
+the aggregated exports in `snap.__init__`.
 
-## Composizione e interfacce
+## Composition and interfaces
 
-Manager e catalogo coordinano le operazioni; non contengono più i grandi
-algoritmi di copia, pubblicazione o ripristino. I servizi ricevono dipendenze
-esplicite e non ereditano da un manager generale.
+The manager and catalogue coordinate operations; they no longer contain the
+large copy, publication, or restore algorithms. Services receive explicit
+dependencies and do not inherit from a general-purpose manager.
 
-`SnapshotStorage` viene costruito a ogni invocazione del manager usando i suoi
-attributi pubblici correnti. Conserva il riferimento al modello e alle
-impostazioni, senza copiarli. Le destinazioni catturate dal manager continuano
-a essere confrontate con i percorsi richiesti, per rilevare cambiamenti di ID
-o del nome del JSON.
+`SnapshotStorage` is constructed on each manager invocation using its current
+public attributes. It retains references to the model and settings without
+copying them. Destinations captured by the manager continue to be compared
+against the requested paths to detect changes to an ID or JSON filename.
 
-I contratti sono limitati alle capacità utilizzate:
+The contracts are limited to the capabilities in use:
 
-- `DirectoryCopyStrategy` e `SourceSnapshotProvider` mantengono le ABC pubbliche
-  esistenti e i controlli runtime sui tipi.
-- `SnapshotMetadata` descrive salvataggio, lettura, aggiornamento parziale e
-  accesso ai byte necessari al recupero. L'adapter predefinito è il serializer.
-- `SnapshotPathLookup` descrive l'unica capacità del catalogo richiesta dalla
-  ricerca; la firma storica del costruttore resta disponibile.
-- `SnapshotLookup` permette il lookup usato dal restore delle associazioni.
-- `CatalogueQuery` espone le letture necessarie ai trasferimenti ZIP.
-- `MetadataCopyCapability` permette alla strategia estesa di mantenere aperta
-  la sorgente stabile durante la copia degli attributi, senza dipendere dalla
-  classe concreta del provider.
-- `TextSearchConfiguration`, `MatchPage` e `TimedPattern` espongono al motore
-  testuale soltanto configurazione live, pagine isolate per retry e matching
-  con timeout. Il motore non conosce nomi o modelli snapshot.
+- `DirectoryCopyStrategy` and `SourceSnapshotProvider` retain their existing
+  public ABCs and runtime type checks.
+- `SnapshotMetadata` describes saving, reading, partial updates, and access to
+  the bytes needed for recovery. The default adapter is the serializer.
+- `SnapshotPathLookup` describes the only catalogue capability required by
+  search; the historical constructor signature remains available.
+- `SnapshotLookup` provides the lookup used by association restore.
+- `CatalogueQuery` exposes the reads needed for ZIP transfers.
+- `MetadataCopyCapability` lets the extended strategy keep the source stable
+  while copying attributes, without depending on the concrete provider class.
+- `TextSearchConfiguration`, `MatchPage`, and `TimedPattern` expose only live
+  configuration, pages isolated for retries, and matching with a timeout to
+  the text engine. The engine does not know snapshot names or models.
 
-La copia usa `SnapshotSettings.copy_metadata_mode`. Il default `BASIC` mantiene
-il comportamento corrente: contenuti con `copy2`, metadati standard dei file e
-delle sottocartelle, senza copiare gli attributi della directory radice
-associata. Si seleziona il livello esteso con
+Copying uses `SnapshotSettings.copy_metadata_mode`. The `BASIC` default
+preserves current behavior: content is copied with `copy2`, along with standard
+file and subdirectory metadata, but not metadata for the associated root
+directory. Select the extended level with
 `SnapshotSettings(copy_metadata_mode=CopyMetadataMode.EXTENDED)`. `EXTENDED`
-decora la strategia configurata e conserva anche gli
-attributi della radice, owner e group quando il processo ha i permessi
-necessari, extended attributes (inclusi gli ACL esposti come attributi), ACL
-DACL e alternate data streams su Windows, e i hardlink interni a ciascun albero
-copiato. Se un metadato richiesto non è copiabile, la copia fallisce prima della
-pubblicazione. Le caratteristiche non esposte dal sistema operativo o non
-supportate dal filesystem di destinazione non sono garantibili; hardlink che
-collegano associazioni diverse non vengono preservati perché le associazioni
-sono copiate separatamente. Symlink e junction restano rifiutati in entrambe le
-modalità. La modalità vale per le copie directory: i backup e gli export ZIP
-non trasportano owner, ACL, extended attributes, ADS o topologia dei hardlink.
+wraps the configured strategy and also preserves root attributes, owner and
+group when the process has the required permissions, extended attributes
+(including ACLs exposed as attributes), DACLs and alternate data streams
+on Windows, and hard links within each copied tree. If required metadata cannot
+be copied, copying fails before publication. Features not exposed by the
+operating system or not supported by the destination filesystem cannot be
+guaranteed; hard links between different associations are not preserved
+because associations are copied separately. Symlinks and junctions remain
+rejected in both modes. This mode applies to directory copies: ZIP backups and
+exports do not carry owners, ACLs, extended attributes, ADS, or hard-link
+topology.
 
-I record `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement` e
-`RestoreReplacement` danno nomi espliciti ai dati prima conservati in tuple o
-dizionari. I modelli contenuti restano mutabili: un record frozen non congela
-lo snapshot e non ne introduce una copia.
+The `EditMove`, `EditPlan`, `InstallReplacement`, `SyncReplacement`, and
+`RestoreReplacement` records give explicit names to data previously stored in
+tuples or dictionaries. Their contained models remain mutable: a frozen record
+does not freeze the snapshot or introduce a copy of it.
 
-`SnapDirAssociation.copy_install_to()` copia prima in uno staging privato e
-pubblica soltanto il risultato completo. Una destinazione già presente, anche
-comparsa durante la copia, causa un errore e non viene eliminata dal cleanup.
-La pulizia gestisce esclusivamente lo staging posseduto dalla chiamata; manifest
-in uscita e metadati dell'associazione vengono aggiornati dopo la pubblicazione.
+`SnapDirAssociation.copy_install_to()` first copies into private staging and
+publishes only the complete result. If the destination already exists, even if
+it appears during copying, the operation fails and cleanup does not remove it.
+Cleanup handles only staging owned by the call; the outgoing manifest and
+association metadata are updated after publication.
 
-## Journal e recupero dopo un arresto
+## Journals and crash recovery
 
-Le sostituzioni di snapshot, le modifiche delle associazioni, la sincronizzazione,
-l'installazione e il ripristino delle associazioni registrano le fasi in
-`.pyliz_transactions` sullo stesso storage dei dati coinvolti. Il journal viene
-pubblicato atomicamente tramite `SnapshotSerializer`; gli aggiornamenti del suo
-stato precedono le azioni che la recovery deve completare o annullare. Le rinomine
-sincronizzano le directory coinvolte quando il filesystem lo supporta. Su SMB,
-NFS e piattaforme che non offrono questa conferma, la libreria può rilevare e
-recuperare stati lasciati da un arresto del processo, ma non può attestare la
-persistenza fisica sul server.
+Snapshot replacements, association edits, synchronization, installation, and
+association restore record their phases in `.pyliz_transactions` on the same
+storage as the affected data. The journal is published atomically through
+`SnapshotSerializer`; its state updates precede actions that recovery must
+complete or undo. Renames sync the affected directories when the filesystem
+supports it. On SMB, NFS, and platforms that do not provide this confirmation,
+the library can detect and recover states left by a process crash, but cannot
+attest that the server physically persisted the data.
 
-La recovery viene eseguita quando il catalogo carica gli snapshot e prima delle
-successive operazioni che modificano o copiano i relativi alberi. Lo stato
-`prepared` viene annullato; `commit_decided` viene completato; `committed` ripete
-soltanto la pulizia. Se un journal è illeggibile o una copia attesa manca, la
-recovery si ferma e conserva journal e copie disponibili invece di proseguire
-sopra dati ambigui. Le copie precedenti vengono eliminate soltanto dopo che il
-journal registra il commit.
+Recovery runs when the catalogue loads snapshots and before later operations
+that modify or copy their trees. `prepared` is rolled back;
+`commit_decided` is completed; `committed` repeats cleanup only. If a journal
+cannot be read or an expected copy is missing, recovery stops and preserves
+the journal and available copies rather than proceeding with ambiguous data.
+Previous copies are deleted only after the journal records the commit.
 
-I journal delle modifiche (`edit`) usano il formato v2: il rollback registra
-separatamente il parcheggio dei nuovi nomi, il ripristino degli originali e il
-completamento prima della pulizia. Un secondo arresto riprende la fase registrata
-senza scambiare gli originali già ripristinati per nuove directory da rimuovere.
-Gli altri journal restano v1. I journal edit v1 vengono recuperati quando lo stato
-è determinabile; se nomi vecchi e nuovi si sovrappongono e una copia originale
-non è più nello staging, il recupero si ferma conservando ogni copia disponibile.
-Non usare una versione precedente della libreria con journal v2 ancora pendenti:
-il lettore precedente li rifiuta perché non conosce le nuove fasi di rollback.
+Edit journals use format v2: rollback records parking the new names, restoring
+the originals, and completion as separate phases before cleanup. A second crash
+resumes from the recorded phase without mistaking already-restored originals
+for new directories to remove. Other journals remain v1. Edit v1 journals are
+recovered when their state can be determined; if old and new names overlap and
+an original copy is no longer in staging, recovery stops and preserves every
+available copy. Do not use an older library version while v2 journals are
+pending: the older reader rejects them because it does not know the new
+rollback phases.
 
-Ogni operazione mantiene un accesso esclusivo al catalogo dalla recovery iniziale
-fino al completamento della pulizia. Il coordinamento usa un gate per i thread e
-un lock nativo sul file stabile `.pyliz_snapshot.lock` nella radice del catalogo.
-Il file resta presente a operazione terminata: non eliminarlo o sostituirlo mentre
-la libreria è in uso, perché i processi devono riferirsi allo stesso file. Gli
-archivi non possono introdurre questo nome operativo, comprese le sue varianti
-Windows; un file omonimo dentro un'associazione resta normale contenuto utente.
+Each operation holds exclusive access to the catalogue from initial recovery
+through cleanup. Coordination uses a thread gate and a native lock on the
+stable `.pyliz_snapshot.lock` file in the catalogue root. The file remains
+after an operation finishes: do not remove or replace it while the library is
+in use, because processes must refer to the same file. Archives cannot
+introduce this operational name, including its Windows variants; a file with
+the same name inside an association remains ordinary user content.
 
-I callback di avanzamento e messaggio possono eseguire `get_all()`, `get_by_id()`
-ed `exists()` sul catalogo corrente. La recovery implicita salta i journal creati
-dall'operazione attiva. I callback non possono avviare modifiche, backup o export;
-questi tentativi, e l'accesso di altri thread o processi durante un'operazione,
-sollevano `SnapshotBusyError`, esportato da `pylizlib.core.os.snap`, prima di
-modificare dati. Dopo la conclusione dell'operazione il chiamante può riprovare.
-Un'eccezione o un arresto del processo rilascia il lock; la chiamata successiva
-può recuperare i journal lasciati pendenti. I worker creati con `fork` scartano
-lease e descrittori ereditati e devono acquisire autonomamente il lock.
+Progress and message callbacks can call `get_all()`, `get_by_id()`, and
+`exists()` on the current catalogue. Implicit recovery skips journals created
+by the active operation. Callbacks cannot start edits, backups, or exports;
+these attempts, as well as access from other threads or processes during an
+operation, raise `SnapshotBusyError` (exported from `pylizlib.core.os.snap`)
+before changing data. The caller can retry after the operation finishes. An
+exception or process crash releases the lock; the next call can recover
+pending journals. Workers created with `fork` discard inherited leases and
+descriptors and must acquire the lock themselves.
 
-I lock coordinano i chiamanti della libreria che condividono lo stesso catalogo.
-Le applicazioni devono inoltre serializzare operazioni su cataloghi differenti
-che installano nelle stesse destinazioni. Su filesystem remoti il server deve
-supportare i lock nativi: un errore di acquisizione viene propagato e l'operazione
-non continua senza protezione. Questo coordinamento non attesta il supporto dei
-lock tra macchine o la durabilità fisica di una specifica condivisione SMB/NFS.
+Locks coordinate library callers that share the same catalogue. Applications
+must also serialize operations on different catalogues that install into the
+same destinations. On remote filesystems, the server must support native locks:
+an acquisition error is propagated and the operation does not continue without
+protection. This coordination does not attest to cross-machine lock support or
+physical durability on a particular SMB/NFS share.
 
-| Flusso | Ordine e limite da conservare |
+| Workflow | Ordering and limit to preserve |
 |---|---|
-| Creazione | Preparare associazioni e JSON nello staging, poi pubblicare la radice. La recovery completa la pubblicazione se il commit era già deciso. |
-| Edit | Pianificare sulle identità persistite, spostare gli originali, pubblicare e salvare; se la pubblicazione JSON non avviene, ripristinare directory, byte e modello. Se avviene ma il flush fallisce, mantenere il nuovo stato e conservare le directory rimosse ancora nello staging. |
-| Sincronizzazione | Preparare tutte le copie, sostituire, aggiornare dimensioni/manifest e salvare; ripristinare copie e metadati in memoria secondo il protocollo esistente. |
-| Installazione | Rifiutare prima dello staging destinazioni coincidenti o annidate; verificare e preparare tutte le copie prima di modificare i target; salvare `date_last_used` dopo il commit dei contenuti. |
-| Merge di installazione | Sostituire le collisioni di primo livello; non introdurre un merge ricorsivo. |
-| Restore `_ad` | Ripristinare le associazioni riconosciute con staging e journal; il recupero completa o annulla lo swap dopo un arresto. |
-| Pulizia dopo commit | Registrare gli errori e proseguire, senza riattivare il rollback di dati già pubblicati. |
+| Creation | Prepare associations and JSON in staging, then publish the root. Recovery completes publication if the commit was already decided. |
+| Edit | Plan using persisted identities, move the originals, publish, and save; if JSON publication does not happen, restore directories, bytes, and model. If publication happens but flush fails, keep the new state and retain removed directories still in staging. |
+| Synchronization | Prepare all copies, replace them, update sizes/manifests, and save; restore copies and in-memory metadata according to the existing protocol. |
+| Installation | Reject coincident or nested destinations before staging; verify and prepare all copies before changing targets; save `date_last_used` after the content commit. |
+| Installation merge | Replace top-level collisions; do not introduce a recursive merge. |
+| `_ad` restore | Restore recognized associations using staging and a journal; recovery completes or rolls back the swap after a crash. |
+| Post-commit cleanup | Record errors and continue without reactivating rollback of data already published. |
 
-Una correzione che modifica questi limiti richiede una decisione funzionale e
-propri test: non va inserita in uno spostamento di codice.
+A fix that changes these boundaries requires a product decision and its own
+tests; it should not be bundled into a code move.
 
-## Altri vincoli di compatibilità
+## Other compatibility constraints
 
-- Le associazioni mantengono `mb_size=None` finché il contenuto non è acquisito;
-  le misure salvate derivano dai manifest della copia. `validate()` normalizza
-  `original_path` in un percorso assoluto ancorato alla
-  directory corrente al momento della costruzione e viene chiamato dalle
-  proprietà che già lo facevano. La normalizzazione è lessicale e non segue i
-  link simbolici. Il JSON rifiuta percorsi relativi; su Windows i drive di rete
-  mappati vengono convertiti nel percorso UNC quando la mappatura è disponibile.
-- I default `SnapshotSettings()` dei due costruttori pubblici mantengono la
-  condivisione storica. Non aggiungere copie o ricostruzioni implicite.
-- Il diff usa `folder_id` come identità stabile e conserva l'ordine di aggiunte,
-  rimozioni e rinomine. Le azioni legacy vengono risolte prima delle modifiche.
-- Il JSON conserva UTF-8, indentazione, date ISO e fallback legacy. Gli
-  aggiornamenti parziali preservano campi extra senza costruire un modello;
-  tutte le scritture predefinite sono pubblicate atomicamente e conservano la
-  versione precedente nel sidecar `.previous`.
-- Il serializer risolve i propri hook nell'ordine storico: leggere/validare,
-  preparare i dati, selezionare il converter, codificare, risolvere il writer.
-- I controlli sui link prima e dopo I/O non sono duplicazioni da eliminare.
-  Traversal per backup, storage e ricerca mantengono politiche distinte.
-- Il manifest persistito e il fingerprint interno della copia verificata
-  restano rappresentazioni differenti. La verifica per tentativi non equivale
-  a una sorgente congelata dal filesystem/provider.
-- Una callback attiva la stima dei byte e riceve il completamento dei percorsi
-  vuoti. Create passa `None` quando non c'è un osservatore, evitando la scansione
-  preliminare; install passa `None` allo stesso modo.
-- Nella ricerca soltanto `False` interrompe lo snapshot corrente; la callback
-  viene chiamata prima di ciascun file e durante le letture a blocchi.
-- L'import del catalogo gestisce gli errori per voce e legge inizialmente solo
-  l'ID; l'import singolo valida invece l'intero modello.
+- Associations keep `mb_size=None` until content is captured; saved sizes come
+  from the copy manifests. `validate()` normalizes `original_path` to an
+  absolute path anchored at the current working directory at construction time
+  and is called by the properties that already called it. Normalization is
+  lexical and does not follow symlinks. JSON rejects relative paths; on Windows,
+  mapped network drives are converted to UNC paths when the mapping is
+  available.
+- The `SnapshotSettings()` defaults of the two public constructors retain their
+  historical sharing behavior. Do not add implicit copies or reconstructions.
+- Diff uses `folder_id` as a stable identity and preserves the order of adds,
+  removals, and renames. Legacy actions are resolved before edits.
+- JSON retains UTF-8, indentation, ISO dates, and legacy fallback. Partial
+  updates preserve extra fields without constructing a model; all default
+  writes are published atomically and retain the previous version in the
+  `.previous` sidecar.
+- The serializer resolves its hooks in the historical order: read/validate,
+  prepare data, select the converter, encode, then resolve the writer.
+- Symlink checks before and after I/O are not redundant and should not be
+  removed. Backup, storage, and search traversal retain distinct policies.
+- The persisted manifest and the internal fingerprint of the verified copy
+  remain different representations. Verification by retry does not mean the
+  filesystem/provider source was frozen.
+- A callback enables byte estimation and receives completion for empty paths.
+  Create passes `None` when there is no observer, avoiding the preliminary
+  scan; install does the same.
+- In search, only `False` stops the current snapshot; the callback is called
+  before each file and during chunked reads.
+- Catalogue import handles errors per entry and initially reads only the ID;
+  single import instead validates the entire model.
 
-## Verifiche prima di modificare
+## Checks before making changes
 
-Dalla root del repository:
+From the repository root:
 
 ```sh
 .venv/bin/python -m pytest test/unit/core/test_documentation_contracts.py \
@@ -369,37 +400,38 @@ Dalla root del repository:
 make docs-snap
 ```
 
-I test di caratterizzazione sono in `test_refactor_contracts.py`; quelli dei
-moduli estratti e delle strategie sono in `test_refactor_modules.py`.
-`test_public_api.py` e `test_second_refactor_contracts.py` confrontano firme,
-default, identità e campi pubblici con le fixture precedenti ai due refactor.
-`test/unit/core/test_documentation_contracts.py` richiede sezioni Google tipizzate
-per parametri, ritorni/yield e campi dichiarati, oltre alla riga vuota prima
-dei blocchi di commento. Questi controlli strutturali affiancano la review del
-significato e i test comportamentali; non provano da soli la correttezza del testo.
+Characterization tests are in `test_refactor_contracts.py`; tests for the
+extracted modules and strategies are in `test_refactor_modules.py`.
+`test_public_api.py` and `test_second_refactor_contracts.py` compare signatures,
+defaults, identity, and public fields against fixtures from before the two
+refactors. `test/unit/core/test_documentation_contracts.py` requires typed
+Google-style sections for parameters, returns/yields, and declared fields, as
+well as a blank line before comment blocks. These structural checks supplement
+semantic review and behavioral tests; they do not by themselves prove that the
+text is correct.
 
-La preview HTML è in `temp_local/docs_snap_preview/index.html` e viene generata
-con il gruppo `dev` già dichiarato nel progetto. L'HTML storico sotto `docs/`
-va rigenerato esplicitamente prima di pubblicare la documentazione aggiornata.
+The HTML preview is at `temp_local/docs_snap_preview/index.html` and is
+generated with the `dev` group already declared in the project. The historical
+HTML under `docs/` must be regenerated explicitly before publishing the updated
+documentation.
 
-Per modifiche ai flussi filesystem verificare sia il successo sia errori di
-copia, rinomina, salvataggio e cleanup. Confrontare contenuti, JSON e stato in
-memoria. Usare copie locali isolate: gran parte dei vecchi test condivide una
-root di fixture e non è predisposta per esecuzione parallela. I test nativi Windows
-richiedono un runner Windows e dichiarano gli skip per capacità non disponibili;
-i mock di drive, ACL e ADS verificano separatamente errori e ordine delle chiamate.
-Una suite locale su un altro OS non dimostra l'equivalenza delle chiamate Win32.
-I backend drive/ADS conservano quindi i binding esistenti dietro il nuovo confine:
-una loro sostituzione richiede prima prove native di conformità. Anche SMB/NFS
-richiedono un ambiente reale per dichiarare garanzie aggiuntive di persistenza.
+For filesystem workflow changes, check both success and copy, rename, save, and
+cleanup errors. Compare contents, JSON, and in-memory state. Use isolated local
+copies: many older tests share a fixture root and are not designed for parallel
+execution. Native Windows tests require a Windows runner and declare skips for
+unavailable capabilities; drive, ACL, and ADS mocks separately verify errors
+and call order. A local suite on another OS does not prove equivalence with
+Win32 calls. The drive/ADS backends therefore retain the existing bindings
+behind the new boundary; replacing them first requires native conformance
+tests. SMB/NFS also require a real environment to claim additional persistence
+guarantees.
 
-## Log nell'applicazione
+## Logging in applications
 
-Il logger condiviso `PylizLib` mantiene il proprio `NullHandler`: la libreria non
-installa handler e non cambia il livello globale. L'applicazione configura il
-logging secondo le proprie esigenze. Gli eventi INFO descrivono le operazioni
-e il recupero effettivo; DEBUG espone fasi, decisioni del journal già persistite,
-formato dei backup e conteggi della ricerca. Query, contenuti dei file, preview
-e JSON completi non vengono aggiunti ai log. Alcuni messaggi contengono ID e
-percorsi necessari a identificare la fase; l'applicazione gestisce la loro
-visibilità.
+The shared `PylizLib` logger retains its `NullHandler`: the library does not
+install handlers or change the global level. The application configures
+logging as needed. INFO events describe operations and actual recovery; DEBUG
+exposes phases, persisted journal decisions, backup formats, and search counts.
+Queries, file contents, previews, and complete JSON documents are not added to
+logs. Some messages contain IDs and paths needed to identify a phase; the
+application controls their visibility.

@@ -1,32 +1,38 @@
 # Qt
 
-`pylizlib.qt` contiene componenti basati su PySide6 per interfacce desktop: configurazione e preferenze, menu e toolbar, risorse grafiche, widget e task in background.
+`pylizlib.qt` contains PySide6-based components for desktop interfaces:
+configuration and preferences, menus and toolbars, graphical resources,
+widgets, and background tasks.
 
-## Aree principali
+## Main areas
 
-| Package o modulo | Contenuto |
+| Package or module | Contents |
 | --- | --- |
-| `domain/` | Tipi per configurazione, preferenze, temi, risorse e menu |
-| `handler/` | Gestione di configurazione, azioni, toolbar e operazioni concorrenti |
-| `util/` | Creazione di azioni e helper per layout e preferenze |
-| `widget/` | Widget riutilizzabili, come selettori di percorso e status bar |
-| `scripts.py` | Generazione di risorse Qt e moduli Python da file `.qrc` e CSS |
-| `debug/` | Supporto per ispezionare operazioni durante lo sviluppo |
+| `domain/` | Types for configuration, preferences, themes, resources, and menus |
+| `handler/` | Configuration, action, toolbar, and concurrent-operation handling |
+| `util/` | Action creation and helpers for layouts and preferences |
+| `widget/` | Reusable widgets such as path selectors and status bars |
+| `scripts.py` | Generation of Qt resources and Python modules from `.qrc` and CSS files |
+| `debug/` | Support for inspecting operations during development |
 
-`Operation` e `OperationRunner` organizzano task, segnali, progresso, cancellazione ed esecuzione concorrente. `ResHandler` e i tipi in `domain/` gestiscono risorse grafiche e temi.
+`Operation` and `OperationRunner` organize tasks, signals, progress, cancellation,
+and concurrent execution. `ResHandler` and the types in `domain/` handle
+graphical resources and themes.
 
-Per mostrare l’ETA all’avvio, puoi passare una durata iniziale in secondi con
-`OperationInfo("Ricerca", "Cerca nei file", estimated_duration=8.0)`.
-La stima si ricalibra man mano che i task avanzano. Senza una durata iniziale, l’ETA appare dopo due avanzamenti distinti,
-così la fase di preparazione prima del primo aggiornamento resta fuori dal calcolo del ritmo di lavoro.
-Il segnale `op_eta_update` viene emesso quando cambia il valore visualizzato.
+To show the ETA at startup, pass an initial duration in seconds with
+`OperationInfo("Search", "Search files", estimated_duration=8.0)`. The estimate
+is recalibrated as tasks progress. Without an initial duration, the ETA appears
+after two distinct progress updates, so preparation before the first update is
+excluded from the work-rate calculation. The `op_eta_update` signal is emitted
+whenever the displayed value changes.
 
-## Dipendenze e test
+## Dependencies and tests
 
-Installare l'extra `qt` per usare questi componenti:
+Install the `qt` extra to use these components:
 
 ```bash
 uv sync --extra qt
 ```
 
-I test unitari sono in `test/unit/qt/`; i flussi con widget reali sono in `test/integration/qt/`.
+Unit tests are under `test/unit/qt/`; workflows using real widgets are under
+`test/integration/qt/`.

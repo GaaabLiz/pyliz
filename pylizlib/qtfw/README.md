@@ -1,23 +1,26 @@
 # Qt Fluent Widgets
 
-`pylizlib.qtfw` raccoglie componenti basati su PySide6-Fluent-Widgets per impostazioni e interfacce desktop. Include modelli di configurazione, validatori, widget riutilizzabili e helper per la composizione delle UI.
+`pylizlib.qtfw` provides components based on PySide6-Fluent-Widgets for settings
+and desktop interfaces. It includes configuration models, validators,
+reusable widgets, and helpers for composing UIs.
 
-## Aree principali
+## Main areas
 
-| Package | Contenuto |
+| Package | Contents |
 | --- | --- |
-| `domain/` | Modelli per impostazioni e dati software |
-| `model/` | Validatori e helper per la configurazione Fluent |
-| `widgets/` | Card, dialog, input, indicatori di progresso ed elementi testuali |
-| `util/` | Helper per layout e operazioni UI |
-| `ui/` | Demo dei componenti |
+| `domain/` | Models for settings and software data |
+| `model/` | Validators and helpers for Fluent configuration |
+| `widgets/` | Cards, dialogs, inputs, progress indicators, and text elements |
+| `util/` | Helpers for layouts and UI operations |
+| `ui/` | Component demos |
 
-## Dipendenze e test
+## Dependencies and tests
 
-L'extra `qtfw` installa PySide6 e PySide6-Fluent-Widgets:
+The `qtfw` extra installs PySide6 and PySide6-Fluent-Widgets:
 
 ```bash
 uv sync --extra qtfw
 ```
 
-I test unitari si trovano in `test/unit/qtfw/`; i test dei flussi composti sono in `test/integration/qtfw/`. Per i componenti Qt generici, consultare [qt/README.md](../qt/README.md).
+Unit tests are under `test/unit/qtfw/`; tests for composed workflows are under
+`test/integration/qtfw/`. For general Qt components, see [qt/README.md](../qt/README.md).
