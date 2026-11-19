@@ -14,12 +14,14 @@ from pylizlib.core.os.snap.domain import (
     SnapEditAction,
     Snapshot,
     SnapshotBackupInfo,
+    SnapshotCatalogueStatistics,
     SnapshotSettings,
     validate_directory_component,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+from pylizlib.core.os.snap.operations.statistics import collect_catalogue_statistics
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
 from pylizlib.core.os.snap.storage.coordination import catalogue_access
@@ -90,6 +92,19 @@ class SnapshotCatalogue:
         """
         with catalogue_access(self.path_catalogue, write=False):
             return self._backups().list_backups(backup_dir)
+
+    def get_backup_count(self) -> int:
+        """Count ZIP archives recognized by the backup listing without inspecting archive members.
+
+        Returns:
+            int: Archive count in the configured backup directory, or zero when it is unset or missing.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue.
+            OSError: The configured backup directory cannot be enumerated.
+        """
+        with catalogue_access(self.path_catalogue, write=False):
+            return self._backups().count_backups()
 
     def restore_backup(self, backup_zip_path: Path):
         """Restores a backup using embedded archive metadata, with filename fallback
@@ -241,6 +256,49 @@ class SnapshotCatalogue:
             for snapshot in snapshots:
                 recover_storage_transactions(self._manager(snapshot)._storage())
             return snapshots
+
+    def get_snapshot_count(self, *, strict: bool = False) -> int:
+        """Count published snapshots using the same metadata and recovery rules as get_all().
+
+        Args:
+            strict (bool): Propagate filesystem errors when reading catalogue metadata.
+
+        Returns:
+            int: Number of snapshots with valid metadata, without scanning association trees or backups.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue.
+            OSError: Catalogue storage cannot be read during recovery or strict metadata loading.
+        """
+        return len(self.get_all(strict=strict))
+
+    def get_statistics(self, *, include_backups: bool = True, strict: bool = False) -> SnapshotCatalogueStatistics:
+        """Summarize the published contents of this catalogue after normal snapshot recovery.
+
+        Args:
+            include_backups (bool): Count recognized ZIP archives in the configured backup directory. False skips
+                all backup I/O and sets backup_count to None.
+            strict (bool): Propagate filesystem errors when reading catalogue metadata, as in get_all().
+
+        Returns:
+            SnapshotCatalogueStatistics: Counts, logical byte sizes, largest file and creation date range.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue.
+            OSError: Catalogue metadata cannot be read in strict mode, a legacy association or the configured backup
+                directory cannot be enumerated, or recovery cannot access catalogue storage.
+            ValueError: A legacy association contains an unsafe path or a link.
+
+        Notes:
+            Counts and byte sizes describe captured association data. Metadata files, backup archives and
+            operational directories are outside those totals. Validated manifests supply captured sizes without
+            inspecting the stored files. For legacy associations without a manifest, the stored copy is measured
+            using file metadata. Legacy scanning errors propagate even in tolerant catalogue mode.
+        """
+        with catalogue_access(self.path_catalogue, write=False):
+            snapshots = self.get_all(strict=strict)
+            backup_count = self._backups().count_backups() if include_backups else None
+            return collect_catalogue_statistics(self.path_catalogue, snapshots, backup_count)
 
     def get_by_id(self, snap_id: str) -> Optional[Snapshot]:
         """Retrieves a single snapshot from the catalogue by its ID.

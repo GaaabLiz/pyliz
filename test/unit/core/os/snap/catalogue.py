@@ -1,15 +1,21 @@
 """Tests for catalogue discovery, metadata, and manager operations."""
 
+import json
 import unittest
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from pylizlib.core.data.gen import gen_random_string
+from pylizlib.core.os.snap import SnapshotCatalogueStatistics, SnapshotFileInfo
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
     Snapshot,
+    SnapshotSettings,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from test.support.snapshot import (
@@ -30,6 +36,118 @@ from test.support.snapshot import (
 from test.support.snapshot import (
     make_catalogue_with_backup as _cat_with_backup,
 )
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_empty_catalogue_statistics(tmp_path, configured):
+    """An unset or not-yet-created backup directory has no backups."""
+    settings = SnapshotSettings(backup_path=tmp_path / "missing-backups" if configured else None)
+    catalogue = SnapshotCatalogue(tmp_path / "catalogue", settings)
+
+    stats = catalogue.get_statistics()
+
+    assert stats == SnapshotCatalogueStatistics(
+        catalogue_path=catalogue.path_catalogue,
+        snapshot_count=0,
+        total_size_bytes=0,
+        file_count=0,
+        directory_count=0,
+        largest_file=None,
+        oldest_snapshot_date=None,
+        newest_snapshot_date=None,
+        backup_count=0,
+    )
+    assert stats.average_snapshot_size_bytes == 0.0
+    assert catalogue.get_snapshot_count() == catalogue.get_backup_count() == 0
+
+
+def test_backup_count_shares_zip_detection_with_listing(tmp_path):
+    """Count immediate recognized ZIPs without loading snapshots or archive metadata."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    (backup_dir / "subfolder").mkdir()
+    for path in (backup_dir / "renamed.backup", backup_dir / "subfolder" / "nested.zip"):
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("file.txt", "content")
+    (backup_dir / "invalid.zip").write_text("not a ZIP", encoding="utf-8")
+    catalogue = SnapshotCatalogue(tmp_path / "catalogue", SnapshotSettings(backup_path=backup_dir))
+    assert len(catalogue.list_backups(backup_dir)) == 1
+
+    with (
+        patch.object(catalogue, "get_all", side_effect=AssertionError("snapshot metadata read")),
+        patch("pylizlib.core.os.snap.operations.archives.validate_zip_archive") as validate_zip,
+        patch("pylizlib.core.os.snap.operations.archives.CatalogueBackupService._read_archive_metadata") as read_archive_metadata,
+    ):
+        assert catalogue.get_backup_count() == 1
+        validate_zip.assert_not_called()
+        read_archive_metadata.assert_not_called()
+
+
+def _write_legacy_snapshot(catalogue: SnapshotCatalogue, source: Path) -> Path:
+    """Write pre-manifest metadata with a legacy index-and-basename storage name."""
+    path = catalogue.path_catalogue / "legacy"
+    path.mkdir()
+    data = {
+        "id": "legacy",
+        "name": "Legacy",
+        "desc": "",
+        "date_created": "2023-04-01T09:00:00",
+        "directories": [{"index": 0, "original_path": str(source), "folder_id": "legacy-folder", "mb_size": 123}],
+    }
+    (path / catalogue.settings.json_filename).write_text(json.dumps(data), encoding="utf-8")
+    return path / f"0-{source.name}"
+
+
+def test_statistics_read_legacy_copy_metadata_and_can_skip_backups(tmp_path):
+    """Legacy copies supply exact sizes even when the origin and backup path are unavailable."""
+    backup_file = tmp_path / "invalid-backup-dir"
+    backup_file.touch()
+    catalogue = SnapshotCatalogue(tmp_path / "catalogue", SnapshotSettings(json_filename="meta.json", backup_path=backup_file))
+    stored = _write_legacy_snapshot(catalogue, tmp_path / "absent-origin")
+    (stored / "subdir").mkdir(parents=True)
+    (stored / "subdir" / "empty.txt").touch()
+    (stored.parent / "unrelated").write_bytes(b"ignored")
+
+    stats = catalogue.get_statistics(include_backups=False)
+
+    assert stats.snapshot_count == catalogue.get_snapshot_count() == 1
+    assert stats.directory_count == 2
+    assert stats.file_count == 1
+    assert stats.total_size_bytes == stats.average_snapshot_size_bytes == 0
+    assert stats.largest_file == SnapshotFileInfo("legacy", "legacy-folder", "subdir/empty.txt", 0)
+    assert stats.oldest_snapshot_date == stats.newest_snapshot_date == datetime(2023, 4, 1, 9)
+    assert stats.backup_count is None
+    with pytest.raises(NotADirectoryError):
+        catalogue.get_backup_count()
+
+
+def test_snapshot_count_is_available_when_a_legacy_copy_is_missing(tmp_path):
+    """A missing legacy copy makes its content statistics unavailable without changing the snapshot count."""
+    catalogue = SnapshotCatalogue(tmp_path / "catalogue", SnapshotSettings())
+    _write_legacy_snapshot(catalogue, tmp_path / "origin")
+
+    assert catalogue.get_snapshot_count() == 1
+    with pytest.raises(FileNotFoundError):
+        catalogue.get_statistics()
+
+
+@pytest.mark.parametrize("root_link", [False, True])
+def test_legacy_statistics_reject_links(tmp_path, root_link):
+    """Statistics must reject links at and below the legacy association root."""
+    catalogue = SnapshotCatalogue(tmp_path / "catalogue", SnapshotSettings())
+    stored = _write_legacy_snapshot(catalogue, tmp_path / "origin")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if not root_link:
+        stored.mkdir()
+    link = stored if root_link else stored / "link"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"symlink creation is unavailable: {error}")
+
+    with pytest.raises(ValueError, match="symbolic link"):
+        catalogue.get_statistics()
 
 
 class TestSnapshotCatalogueInit(unittest.TestCase):

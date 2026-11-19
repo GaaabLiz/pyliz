@@ -42,7 +42,8 @@ def iter_files_strict(root: Path) -> Iterator[Path]:
         ValueError: If a link or junction is encountered.
         OSError: If stat or enumeration fails, including a missing root.
     """
-    yield from _iter_entries_strict(root, include_directories=False)
+    for path, _ in _iter_entries_strict(root, include_directories=False):
+        yield path
 
 
 def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
@@ -59,6 +60,25 @@ def iter_tree_entries_strict(root: Path) -> Iterator[Path]:
     Yields:
         Path: Regular files and child directories in filesystem enumeration order. The root is excluded; empty
             child directories are retained.
+
+    Raises:
+        NotADirectoryError: If root is not a real directory.
+        ValueError: If a link or junction is encountered.
+        OSError: If stat or enumeration fails, including a missing root.
+    """
+    for path, _ in iter_tree_entry_stats_strict(root):
+        yield path
+
+
+def iter_tree_entry_stats_strict(root: Path) -> Iterator[tuple[Path, os.stat_result]]:
+    """Yield child entries with the metadata already collected by the strict scan.
+
+    Args:
+        root (Path): Existing real directory to traverse without following links.
+
+    Yields:
+        tuple[Path, os.stat_result]: Regular files and child directories with their non-following stat data. The
+            root is excluded and the traversal order matches iter_tree_entries_strict().
 
     Raises:
         NotADirectoryError: If root is not a real directory.
@@ -108,7 +128,7 @@ def assert_no_symlinks(root: Path) -> None:
                     pending.append(Path(entry.path))
 
 
-def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[Path]:
+def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[tuple[Path, os.stat_result]]:
     """Apply one traversal/link policy for both public entry enumerators.
 
     Args:
@@ -117,7 +137,7 @@ def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[P
             regular files. Special entries remain omitted.
 
     Yields:
-        Path: Accepted entries in the original filesystem/stack traversal order.
+        tuple[Path, os.stat_result]: Accepted entries and their stat data in filesystem/stack traversal order.
 
     Raises:
         NotADirectoryError: If root is not a real directory.
@@ -132,13 +152,14 @@ def _iter_entries_strict(root: Path, *, include_directories: bool) -> Iterator[P
     while pending:
         with os.scandir(pending.pop()) as entries:
             for entry in entries:
-                mode = entry.stat(follow_symlinks=False).st_mode
+                entry_stat = entry.stat(follow_symlinks=False)
+                mode = entry_stat.st_mode
                 path = Path(entry.path)
                 if stat.S_ISLNK(mode) or is_link_or_junction(path):
                     raise ValueError(f"Directory tree contains symbolic link '{path}'.")
                 if stat.S_ISDIR(mode):
                     if include_directories:
-                        yield path
+                        yield path, entry_stat
                     pending.append(path)
                 elif stat.S_ISREG(mode):
-                    yield path
+                    yield path, entry_stat

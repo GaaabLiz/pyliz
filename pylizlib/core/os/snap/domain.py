@@ -216,6 +216,60 @@ class SnapshotBackupInfo:
     is_export: bool
 
 
+@dataclass(frozen=True)
+class SnapshotFileInfo:
+    """Identify a file within a captured association.
+
+    Attributes:
+        snapshot_id (str): ID of the snapshot containing the file.
+        folder_id (str): Persistent ID of the association containing the file.
+        relative_path (str): POSIX path relative to the association root.
+        size_bytes (int): Logical file size in bytes.
+    """
+
+    snapshot_id: str
+    folder_id: str
+    relative_path: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
+class SnapshotCatalogueStatistics:
+    """Counts and logical sizes for the published contents of a snapshot catalogue.
+
+    Attributes:
+        catalogue_path (Path): Catalogue root supplied to the query.
+        snapshot_count (int): Number of published snapshots with valid metadata.
+        total_size_bytes (int): Sum of captured file sizes in bytes, counting each stored path.
+        file_count (int): Number of captured file paths across all snapshots.
+        directory_count (int): Number of captured directories, including each association root and empty folders.
+        largest_file (SnapshotFileInfo | None): Largest captured file, or None when there are no files. Ties use
+            the lexicographically greatest snapshot ID, folder ID, then relative path.
+        oldest_snapshot_date (datetime | None): Earliest recorded creation datetime, or None for an empty catalogue.
+        newest_snapshot_date (datetime | None): Latest recorded creation datetime, or None for an empty catalogue.
+        backup_count (int | None): Recognized ZIP archives in the configured backup directory, or None if skipped.
+    """
+
+    catalogue_path: Path
+    snapshot_count: int
+    total_size_bytes: int
+    file_count: int
+    directory_count: int
+    largest_file: SnapshotFileInfo | None
+    oldest_snapshot_date: datetime | None
+    newest_snapshot_date: datetime | None
+    backup_count: int | None
+
+    @property
+    def average_snapshot_size_bytes(self) -> float:
+        """Return the mean logical size across all snapshots.
+
+        Returns:
+            float: Total bytes divided by the snapshot count, or 0.0 for an empty catalogue.
+        """
+        return self.total_size_bytes / self.snapshot_count if self.snapshot_count else 0.0
+
+
 class SnapshotSortKey(Enum):
     """Snapshot attribute names accepted by the stable sorting helper."""
 
