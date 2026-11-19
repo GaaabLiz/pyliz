@@ -15,6 +15,12 @@
 
 `Operation` e `OperationRunner` organizzano task, segnali, progresso, cancellazione ed esecuzione concorrente. `ResHandler` e i tipi in `domain/` gestiscono risorse grafiche e temi.
 
+Per mostrare l’ETA all’avvio, puoi passare una durata iniziale in secondi con
+`OperationInfo("Ricerca", "Cerca nei file", estimated_duration=8.0)`.
+La stima si ricalibra man mano che i task avanzano. Senza una durata iniziale, l’ETA appare dopo due avanzamenti distinti,
+così la fase di preparazione prima del primo aggiornamento resta fuori dal calcolo del ritmo di lavoro.
+Il segnale `op_eta_update` viene emesso quando cambia il valore visualizzato.
+
 ## Dipendenze e test
 
 Installare l'extra `qt` per usare questi componenti:

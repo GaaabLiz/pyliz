@@ -215,7 +215,7 @@ class OperationRunnerTestCase(unittest.TestCase):
 
         t1 = GenericTask("T1", lambda: "done1")
         t2 = GenericTask("T2", lambda: "done2")
-        op1 = Operation([t1], OperationInfo("Op1", ""))
+        op1 = Operation([t1], OperationInfo("Op1", "", estimated_duration=5.0))
         op2 = Operation([t2], OperationInfo("Op2", ""))
 
         runner.adds([op1, op2])
@@ -224,9 +224,11 @@ class OperationRunnerTestCase(unittest.TestCase):
         started = []
         finished_stats = []
         progress_values = []
+        eta_values = []
         runner.runner_start.connect(lambda: started.append(True))
         runner.runner_finish.connect(lambda stats: finished_stats.append(stats))
         runner.runner_update_progress.connect(lambda val: progress_values.append(val))
+        runner.op_eta_update.connect(lambda op_id, eta: eta_values.append((op_id, eta)))
 
         runner.start()
         # Wait for thread pool to finish and process queued Qt signals
@@ -240,6 +242,7 @@ class OperationRunnerTestCase(unittest.TestCase):
         self.assertEqual(len(finished_stats), 1)
         self.assertEqual(finished_stats[0].completed_operations, 2)
         self.assertEqual(runner_finished_calls, [True])
+        self.assertEqual([eta for op_id, eta in eta_values if op_id == op1.id], ["00:05", "00:00"])
 
     def test_runner_stop(self):
         runner = OperationRunner(max_threads=1)

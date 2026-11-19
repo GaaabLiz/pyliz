@@ -1,5 +1,5 @@
-import time
-from time import sleep
+from math import ceil
+from time import perf_counter, sleep
 from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QRunnable, Signal
@@ -112,6 +112,9 @@ class Operation(QRunnable):
         self.time_finished = None
         self.time_estimated_total = 0
         self.time_estimated_remaining = 0
+        self._eta_first_sample: tuple[int, float] | None = None
+        self._eta_progress = 0
+        self._eta_seconds: int | None = None
 
         for task in tasks:
             self.progress_obj.add_single(task.name)
@@ -211,6 +214,8 @@ class Operation(QRunnable):
         logger.debug("Updating operation progress: %s", progress)
         self.progress = progress
         self.__update_times()
+        if self.running:
+            self.__update_eta()
         self.signals.op_update_progress.emit(self.id, progress)
         if self.op_progress_update_callback:
             self.op_progress_update_callback(self.id, self.progress)
@@ -218,14 +223,46 @@ class Operation(QRunnable):
 
     def __update_times(self):
         if self.running:
-            self.time_elapsed = time.perf_counter() - self.time_started
-            if self.progress > 0:
-                self.time_estimated_total = self.time_elapsed / (self.progress / 100)
-                self.time_estimated_remaining = max(0, self.time_estimated_total - self.time_elapsed)
-                self.signals.op_eta_update.emit(self.id, self.get_eta_formatted())
-        else:
-            if self.time_started and self.time_finished:
-                self.time_elapsed = self.time_finished - self.time_started
+            self.time_elapsed = perf_counter() - self.time_started
+        elif self.time_started is not None and self.time_finished is not None:
+            self.time_elapsed = self.time_finished - self.time_started
+
+    def __update_eta(self) -> None:
+        if self.progress >= 100:
+            self.time_estimated_remaining = max(0.0, self.info.delay_each_task)
+            self.time_estimated_total = self.time_elapsed + self.time_estimated_remaining
+            self.__set_eta_seconds(ceil(self.time_estimated_remaining))
+            return
+
+        if self.progress > self._eta_progress:
+            self._eta_progress = self.progress
+            if self._eta_first_sample is None:
+                # Start measuring throughput after the first report to exclude startup work.
+                self._eta_first_sample = (self.progress, self.time_elapsed)
+            else:
+                first_progress, first_elapsed = self._eta_first_sample
+                observed_progress = self.progress - first_progress
+                observed_duration = self.time_elapsed - first_elapsed
+                if self.info.estimated_duration is not None:
+                    initial_weight = 10  # Percentage points of work.
+                    observed_progress += initial_weight
+                    observed_duration += (self.info.estimated_duration / 100) * initial_weight
+                seconds_per_percent = observed_duration / observed_progress
+                self.time_estimated_total = self.time_elapsed + seconds_per_percent * (100 - self.progress)
+
+        if self.time_estimated_total > 0:
+            remaining = max(0, self.time_estimated_total - self.time_elapsed)
+            self.time_estimated_remaining = remaining
+            seconds = max(1, ceil(remaining))
+            # Require a quarter-second margin to move the displayed countdown up.
+            if self._eta_seconds and seconds > self._eta_seconds and remaining <= self._eta_seconds + 0.25:
+                seconds = self._eta_seconds
+            self.__set_eta_seconds(seconds)
+
+    def __set_eta_seconds(self, seconds: int | None) -> None:
+        if seconds != self._eta_seconds:
+            self._eta_seconds = seconds
+            self.signals.op_eta_update.emit(self.id, self.get_eta_formatted())
 
     def set_finished_callback(self, callback: Callable):
         self.finished_callback = callback
@@ -235,16 +272,27 @@ class Operation(QRunnable):
 
     def set_operation_started(self):
         logger.info("Starting operation %s", self.id)
+        self.time_started = perf_counter()
+        self.time_finished = None
+        self.time_elapsed = 0
+        self.time_estimated_total = self.info.estimated_duration or 0
+        self.time_estimated_remaining = self.time_estimated_total
+        self._eta_progress = 0
+        self._eta_first_sample = None
+        self._eta_seconds = ceil(self.time_estimated_total) if self.time_estimated_total else None
         self.running = True
         self.signals.op_start.emit()
-        self.time_started = time.perf_counter()
-        self.__update_times()
+        if self._eta_seconds is not None:
+            self.signals.op_eta_update.emit(self.id, self.get_eta_formatted())
 
     def set_operation_finished(self):
         logger.info("Finishing operation %s", self.id)
         self.running = False
-        self.time_finished = time.perf_counter()
+        self.time_finished = perf_counter()
         self.__update_times()
+        self.time_estimated_total = self.time_elapsed
+        self.time_estimated_remaining = 0
+        self.__set_eta_seconds(0 if self.is_completed() else None)
         if self.finished_callback:
             self.finished_callback()
         self.signals.op_finished.emit(self)
@@ -256,14 +304,11 @@ class Operation(QRunnable):
         return f"{minutes:02.0f}:{seconds:02.0f}"
 
     def get_eta_formatted(self) -> str:
-        """
-        Restituisce il tempo stimato rimanente nel formato mm:ss.
-        """
-        if self.progress <= 0:
+        """Return the remaining time as mm:ss, or --:-- when unavailable."""
+        if self._eta_seconds is None:
             return "--:--"
 
-        minutes = int(self.time_estimated_remaining) // 60
-        seconds = int(self.time_estimated_remaining) % 60
+        minutes, seconds = divmod(self._eta_seconds, 60)
         return f"{minutes:02}:{seconds:02}"
 
     def is_failed(self):
