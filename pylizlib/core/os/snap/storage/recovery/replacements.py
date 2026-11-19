@@ -9,6 +9,7 @@ from pylizlib.core.os.filesystem.durability import rename_and_sync
 from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.paths.safety import assert_no_link_components
+from pylizlib.core.os.snap.storage.install_registry import InstalledCopy, InstalledCopyRegistry
 from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _restore_old_metadata, _validate_metadata_paths
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
 from pylizlib.core.os.snap.storage.tree import is_link_or_junction
@@ -162,6 +163,22 @@ def _validate_replacement_entries(operation: str, data: dict, storage, workspace
     validator = ReplacementValidator(operation, storage, workspace)
     for entry in data["entries"]:
         validator.validate_entry(entry)
+    if operation == "install" and "installed_destinations" in data:
+        installed_destinations = data["installed_destinations"]
+        if not isinstance(installed_destinations, list):
+            raise TransactionRecoveryError("Install journal has an invalid installed destination list.")
+        expected = {association.folder_id: Path(association.original_path).absolute() for association in storage.snapshot.directories}
+        seen = set()
+        for record in installed_destinations:
+            if not isinstance(record, dict) or not isinstance(record.get("folder_id"), str) or not isinstance(record.get("path"), str):
+                raise TransactionRecoveryError("Install journal has an invalid installed destination entry.")
+            folder_id = record["folder_id"]
+            path = Path(record["path"])
+            if folder_id not in expected or not path.is_absolute() or path != expected[folder_id] or folder_id in seen:
+                raise TransactionRecoveryError("Install journal destination does not match its association.")
+            seen.add(folder_id)
+        if seen != set(expected):
+            raise TransactionRecoveryError("Install journal installed destination list is incomplete.")
     validator.validate_staging_roots(data.get("staging_roots", []))
     _validate_metadata_paths(data, storage, workspace)
 
@@ -474,6 +491,9 @@ def recover_replacements(journal: SnapshotTransactionJournal, state: str, data: 
         _complete_replacements(data)
         if state == "commit_decided":
             _publish_new_metadata(journal, data, storage)
+            if operation == "install" and "installed_destinations" in data:
+                records = [InstalledCopy(item["folder_id"], Path(item["path"])) for item in data["installed_destinations"]]
+                InstalledCopyRegistry(storage.path_catalogue).register(storage.snapshot.id, records)
             journal.set_state("committed")
         _cleanup_replacements(data)
         journal.cleanup()

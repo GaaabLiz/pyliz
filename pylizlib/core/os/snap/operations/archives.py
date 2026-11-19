@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotBackupInfo, SnapshotSettings
+from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation, Snapshot, SnapshotBackupInfo, SnapshotSettings
 from pylizlib.core.os.snap.operations.backup_manifest import (
     LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST,
     ArchivedAssociation,
@@ -135,6 +135,50 @@ class SnapshotArchiveService:
         from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
 
         return BackupCreator(self.storage, now=datetime.now).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
+
+    @coordinated("storage.path_catalogue")
+    def create_backup_for_existing_associations(self, backup_path: Path, prefix: str, message_callback=None) -> Path | None:
+        """Create an AD archive for existing install destinations, or skip when all are absent.
+
+        Args:
+            backup_path (Path): Directory receiving completed backups.
+            prefix (str): Prefix for the backup filename.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            Path | None: Published archive, or None when no association destination exists to protect.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+        """
+        from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
+
+        return BackupCreator(self.storage, now=datetime.now).create_backup_for_existing_associations(backup_path, prefix, message_callback)
+
+    @coordinated("storage.path_catalogue")
+    def create_backup_for_associations(
+        self,
+        backup_path: Path,
+        prefix: str,
+        associations: list[SnapDirAssociation],
+        message_callback=None,
+    ) -> Path:
+        """Create an associated-directory archive for an exact, caller-selected destination set.
+
+        Args:
+            backup_path (Path): Directory receiving the completed archive.
+            prefix (str): Prefix for the backup filename.
+            associations (list[SnapDirAssociation]): Exact roots to archive and record in the manifest.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            Path: Published archive path after exclusive publication.
+        """
+        from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
+
+        return BackupCreator(self.storage, now=datetime.now).create_backup_for_associations(backup_path, prefix, associations, message_callback)
 
 
 class SnapshotLookup(Protocol):

@@ -303,10 +303,7 @@ class SnapshotManager:
             SnapshotSynchronizer(self._storage()).update_associated_dirs_from_system(message_callback=message_callback)
 
     def remove_installed_copies(self, message_callback=None):
-        """Removes all directories on the system that this snapshot is managing.
-        This is effectively an 'uninstall' operation for the snapshot's associated directories.
-        It only removes the copies at the 'original_path' locations, not the snapshot's
-        internal backup.
+        """Back up and remove only directories recorded by a completed installation.
 
         Args:
             message_callback (MessageCallback | None): Optional status observer receiving one message string; its
@@ -317,11 +314,30 @@ class SnapshotManager:
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
-            ExceptionGroup: If any target could not be removed. Other targets are still attempted, and metadata is
-                left unchanged.
+            RuntimeError: Legacy installation history is unknown or a previous removal needs review.
+            ExceptionGroup: One or more removals or registration updates failed; successful removals remain unregistered.
+            NotADirectoryError: A registered destination is no longer a real directory.
+            SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
+            ValueError: Backup storage is not configured or a registered target is unsafe.
         """
         with catalogue_access(self.path_catalogue):
             SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
+
+    def get_removable_paths(self) -> list[Path] | None:
+        """Return registered, present install directories; None means the history is unknown.
+
+        Returns:
+            list[Path] | None: Existing registered real directories, an empty list when none are installed, or None
+                when installation history is unknown.
+
+        Raises:
+            NotADirectoryError: A registered destination is no longer a real directory.
+            RuntimeError: A previous removal needs review before retrying.
+            ValueError: A registered destination fails path-safety validation.
+            SnapshotBusyError: Another operation owns the catalogue.
+        """
+        with catalogue_access(self.path_catalogue):
+            return SnapshotInstaller(self._storage()).get_removable_paths()
 
     def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """Installs the snapshot's contents to their original locations on the filesystem.
@@ -344,14 +360,15 @@ class SnapshotManager:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: If two associated install paths are the same or nested.
-            SnapshotInstallMetadataError: The directory contents were installed, but updating ``date_last_used``
-                failed. Inspect ``metadata_published`` to determine whether the JSON update became visible.
+            SnapshotInstallMetadataError: The directory contents were installed, but completion metadata or the
+                installed-destination registry could not be confirmed. Inspect ``metadata_field`` and
+                ``metadata_published`` before retrying.
 
         Notes:
             Every association is staged before live publication. clear_destination=False performs top-level
             replacement/merge, retaining unrelated live children. SnapshotInstallMetadataError means contents are
-            installed even though date_last_used or final journal persistence failed; inspect metadata_published and
-            durability_confirmed before retrying.
+            installed even though completion metadata or final journal persistence failed; inspect metadata_field,
+            metadata_published and durability_confirmed before retrying.
         """
         with catalogue_access(self.path_catalogue):
             SnapshotInstaller(self._storage()).install(enable_everyone_full_control, clear_destination, progress_callback, message_callback)
@@ -378,6 +395,11 @@ class SnapshotManager:
         """
         with catalogue_access(self.path_catalogue):
             return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
+
+    def _create_backup_for_existing_associations(self, backup_path: Path, prefix: str, message_callback=None) -> Path | None:
+        """Create a partial AD backup for existing install destinations before installation."""
+        with catalogue_access(self.path_catalogue):
+            return SnapshotArchiveService(self._storage()).create_backup_for_existing_associations(backup_path, prefix, message_callback)
 
     def _storage(self) -> SnapshotStorage:
         """Build operation dependencies from the facade's current public state.

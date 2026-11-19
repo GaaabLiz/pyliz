@@ -36,6 +36,7 @@ preserving formats, signatures, return values, and error behavior.
 | Journal persistence and facade | `storage/transactions.py` |
 | Operation coordination and recovery | `storage/coordination.py`; reusable native locks in `core/os/filesystem/locking.py` |
 | Recovery codecs, dispatch, and handlers | `storage/recovery/` |
+| Persistent installed-destination registry | `storage/install_registry.py` |
 | Copying an association into its storage | `storage/association.py` |
 | Public strategy contracts and classes | `copy_strategy.py` |
 | Sequential and verified implementations | `copying/file_strategies.py` |
@@ -74,22 +75,40 @@ from a write that was not published. On SMB/NFS, a completed `fsync` is still
 only confirmation from the system or server: the library cannot attest that the
 server persisted the bytes to stable storage.
 
-`SnapshotManager.install()` reports a `date_last_used` error after the data has
-been committed by raising `SnapshotInstallMetadataError`. The exception
-indicates that the directories have already been installed and exposes
-`metadata_published` (True, False, or None if the adapter cannot determine it).
-In replacement mode, the previous copies are left temporarily available for
-recovery. Merge mode instead records top-level entry replacements and their
-rollback copies; it does not create a recursive backup of the entire
-destination. An alternative adapter should expose `published` and
-`durability_confirmed` on post-publication write exceptions.
+`SnapshotManager.install()` raises `SnapshotInstallMetadataError` if the content
+commit succeeds but updating `date_last_used` or registering installed
+destinations cannot be confirmed. The exception indicates that the directories
+are already installed and exposes `metadata_field` and `metadata_published`
+(`True`, `False`, or `None` if the adapter cannot determine the outcome). In
+replacement mode, previous copies remain staged for recovery. Merge mode records
+top-level entry replacements and their rollback copies; it does not create a
+recursive backup of the entire destination. An alternate adapter should expose
+`published` and `durability_confirmed` on post-publication write exceptions.
 
-Backing up and restoring associated directories requires every association to
-be present. If a source or an archive folder is missing,
+Explicit backups and restores of associated directories require every expected
+association to be present. If a source or an archive folder is missing,
 `SnapshotIncompleteError` is raised; `missing_folders` contains the missing
 original paths and `unexpected_entries` contains archive entries with no
 matching association. Restore checks the complete set before changing any
-destinations.
+destination. The automatic pre-install backup is partial: it archives existing
+destinations and lists them in the manifest, so missing destinations can be
+recreated while the others remain protected. If no destination exists, the
+archive is skipped and installation continues.
+
+Completed installations record their published destinations in
+`.pyliz_installed_copies.json` at the catalogue root. This local file is not
+included in exports. `SnapshotCatalogue.get_removable_paths(id)` returns
+registered paths that still exist as real directories; `None` indicates a
+legacy snapshot with no verifiable installation history. Automatic removal
+refuses to proceed in that case because `date_last_used` does not identify
+which paths were installed.
+
+Removal of registered copies first creates an AD backup of their current local
+state. It requires `SnapshotSettings.backup_path`; if it is unset or backup
+creation fails, no directory is deleted. After each successful removal, that
+path is removed from the registry; errors leave paths that still exist
+registered. An interruption during removal leaves the entry marked as pending
+and requires review before retrying.
 
 ## Content search
 
@@ -347,6 +366,7 @@ physical durability on a particular SMB/NFS share.
 | Edit | Plan using persisted identities, move the originals, publish, and save; if JSON publication does not happen, restore directories, bytes, and model. If publication happens but flush fails, keep the new state and retain removed directories still in staging. |
 | Synchronization | Prepare all copies, replace them, update sizes/manifests, and save; restore copies and in-memory metadata according to the existing protocol. |
 | Installation | Reject coincident or nested destinations before staging; verify and prepare all copies before changing targets; save `date_last_used` after the content commit. |
+| Installed-copy removal | Use only registered paths, back up their current local state before the first deletion, and update the registry after each outcome. |
 | Installation merge | Replace top-level collisions; do not introduce a recursive merge. |
 | `_ad` restore | Restore recognized associations using staging and a journal; recovery completes or rolls back the swap after a crash. |
 | Post-commit cleanup | Record errors and continue without reactivating rollback of data already published. |

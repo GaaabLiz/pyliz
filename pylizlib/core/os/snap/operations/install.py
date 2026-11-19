@@ -1,5 +1,6 @@
 """Staged snapshot installation, legacy merge and installed-copy removal."""
 
+import hashlib
 import shutil
 import stat
 from dataclasses import dataclass
@@ -9,11 +10,15 @@ from pathlib import Path
 from pylizlib.core.data.gen import gen_random_string
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_temp
+from pylizlib.core.os.filesystem.tree import is_link_or_junction
 from pylizlib.core.os.snap.callbacks import report_directory_progress
+from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
+from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
+from pylizlib.core.os.snap.storage.install_registry import InstalledCopy, InstalledCopyRegistry
 from pylizlib.core.os.snap.storage.transactions import (
     SnapshotTransactionJournal,
     prepare_snapshot_metadata,
@@ -25,7 +30,7 @@ from pylizlib.core.os.windows.security import grant_everyone_full_control
 
 
 class SnapshotInstallMetadataError(RuntimeError):
-    """Report that installation committed but its last-used metadata update failed.
+    """Report that installation committed but completion metadata could not be confirmed.
 
     ``metadata_published`` is True when the metadata adapter confirms that the
     new JSON was published, False when it confirms publication did not happen,
@@ -33,7 +38,7 @@ class SnapshotInstallMetadataError(RuntimeError):
 
     Attributes:
         installation_completed (bool): Always True; installed content is not rolled back.
-        metadata_field (str): Always date_last_used, the completion field being saved.
+        metadata_field (str): Metadata item whose publication could not be confirmed.
         metadata_published (bool | None): Confirmed publication, confirmed absence of publication, or unknown
             outcome. The journal may complete it on recovery.
         durability_confirmed (bool | None): Adapter's directory-flush outcome, if known.
@@ -45,11 +50,10 @@ class SnapshotInstallMetadataError(RuntimeError):
         Args:
             metadata_published (bool | None): Publication state reported by the adapter.
             durability_confirmed (bool | None): Durability state reported by the adapter.
-
         Returns:
             None: The exception retains both flags and identifies the installed content.
         """
-        super().__init__("Snapshot contents were installed, but completion of the date_last_used update could not be confirmed.")
+        super().__init__("Snapshot contents were installed, but completion metadata could not be confirmed.")
         self.installation_completed = True
         self.metadata_field = "date_last_used"
         self.metadata_published = metadata_published
@@ -125,13 +129,14 @@ class SnapshotInstaller:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             SnapshotInstallMetadataError: If the directory installation committed but updating ``date_last_used``
-                failed. Temporary old copies are retained for recovery when replacement mode staged them, and
-                ``metadata_published`` describes the JSON outcome when the metadata adapter can report it.
+                or the installed-destination registry failed. Temporary old copies are retained for recovery when
+                replacement mode staged them, and ``metadata_field`` identifies the failed update.
 
         Notes:
             All copies are staged before any live replacement. Whole-root replacement and top-level merge retain
-            distinct journal plans. The date_last_used write follows the content commit; SnapshotInstallMetadataError
-            means contents remain installed and the journal may complete metadata on recovery.
+            distinct journal plans. Metadata and destination registration follow the content commit;
+            SnapshotInstallMetadataError means contents remain installed and the journal may complete the updates on
+            recovery.
         """
         self.storage.snapshot.validate()
         self.storage.root_path()
@@ -141,6 +146,7 @@ class SnapshotInstaller:
             origin_os=self.storage.snapshot.os_created,
             operation="install snapshot",
         )
+        self._validate_existing_targets()
         recover_storage_transactions(self.storage)
 
         win32security, con = self._permission_backend(enable_everyone_full_control)
@@ -189,51 +195,177 @@ class SnapshotInstaller:
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
 
     @coordinated("storage.path_catalogue")
+    def get_removable_paths(self) -> list[Path] | None:
+        """Return registered, present real directories; None means legacy state is unknown."""
+        recover_storage_transactions(self.storage)
+        records = InstalledCopyRegistry(self.storage.path_catalogue).get(self.storage.snapshot.id)
+        if records is None:
+            return None
+        if any(record.state == "removing" for record in records):
+            raise RuntimeError("A previous removal was interrupted; review the local backup before retrying.")
+        targets = self._existing_registered_targets(records, reject_invalid=True)
+        if targets:
+            validate_destructive_destinations(
+                [(record.folder_id, path) for record, path in targets],
+                catalogue_path=self.storage.path_catalogue,
+                origin_os=self.storage.snapshot.os_created,
+                operation="remove installed copies",
+            )
+        return [path for _, path in targets]
+
+    @coordinated("storage.path_catalogue")
     def remove_installed_copies(self, message_callback=None):
-        """Removes all directories on the system that this snapshot is managing.
-        This is effectively an 'uninstall' operation for the snapshot's associated directories.
-        It only removes the copies at the 'original_path' locations, not the snapshot's
-        internal backup.
+        """Back up and remove only destinations recorded by a completed installation.
 
         Args:
             message_callback (MessageCallback | None): Optional status observer receiving one message string; its
                 exceptions propagate according to the calling operation.
 
         Returns:
-            None: No return value.
+            None: Registered local copies are removed, with successful removals persisted individually.
 
         Raises:
-            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
-            ExceptionGroup: If any target could not be removed. Other targets are still attempted, and metadata is
-                left unchanged.
-            NotADirectoryError: A required real directory is missing, is a link, or has another entry type.
+            RuntimeError: Legacy installation history is unknown or a previous removal needs review.
+            ExceptionGroup: One or more directories or registration updates failed; successful removals remain
+                unregistered while failed targets remain recorded.
+            NotADirectoryError: A registered destination is no longer a real directory.
+            SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
+            ValueError: Backup storage is not configured or a registered target is unsafe.
         """
+        recover_storage_transactions(self.storage)
+        registry = InstalledCopyRegistry(self.storage.path_catalogue)
+        records = registry.get(self.storage.snapshot.id)
+        if records is None:
+            raise RuntimeError(
+                "Installed destinations are unknown for this legacy snapshot. Install it once with this version before automatic removal."
+            )
+        if any(record.state == "removing" for record in records):
+            raise RuntimeError("A previous removal was interrupted; review the local backup before retrying.")
+
+        targets = self._existing_registered_targets(records, reject_invalid=True)
+        if not targets:
+            registry.set(self.storage.snapshot.id, [])
+            return
+
         validate_destructive_destinations(
-            [(association.folder_id, association.original_path) for association in self.storage.snapshot.directories],
+            [(record.folder_id, path) for record, path in targets],
             catalogue_path=self.storage.path_catalogue,
-            origin_os=self.storage.snapshot.os_created if self.storage.snapshot.directories else None,
+            origin_os=self.storage.snapshot.os_created,
             operation="remove installed copies",
         )
+        backup_path = self.storage.settings.backup_path
+        if backup_path is None:
+            raise ValueError("Cannot remove installed copies without a configured backup_path.")
+
+        backup_associations = self._backup_associations(targets)
+        SnapshotArchiveService(self.storage).create_backup_for_associations(backup_path, "beforeRemove", backup_associations, message_callback)
+
+        # Prune destinations that were already absent only after the full backup succeeds.
+        remaining = [record for record, _ in targets]
+        registry.set(self.storage.snapshot.id, remaining)
         failures = []
-        for dir_assoc in self.storage.snapshot.directories:
-            install_path = Path(dir_assoc.original_path)
+        for record, path in targets:
+            pending = [
+                InstalledCopy(current.folder_id, current.path, "removing")
+                if (current.folder_id, current.path) == (record.folder_id, record.path)
+                else current
+                for current in remaining
+            ]
+            try:
+                registry.set(self.storage.snapshot.id, pending)
+            except Exception as error:
+                error.add_note(f"Could not mark '{path}' as pending removal; no directory was removed.")
+                failures.append(error)
+                break
+            remaining = pending
 
             try:
+                logger.info("Removing registered installed copy at '%s'", path)
+                remove_directory_or_move_to_temp(path, message_callback=message_callback)
+            except Exception as error:
                 try:
-                    mode = install_path.lstat().st_mode
+                    path.lstat()
+                    path_was_removed = False
                 except FileNotFoundError:
-                    logger.debug(f"Install path '{install_path}' does not exist. Skipping.")
+                    path_was_removed = True
+                except OSError as inspect_error:
+                    error.add_note(f"Could not inspect '{path}' after the removal error; its record remains pending: {inspect_error}")
+                    failures.append(error)
+                    break
+
+                if path_was_removed:
+                    remaining = [current for current in remaining if (current.folder_id, current.path) != (record.folder_id, record.path)]
+                    try:
+                        registry.set(self.storage.snapshot.id, remaining)
+                    except Exception as registry_error:
+                        error.add_note(f"The directory is absent, but its installation record could not be updated: {registry_error}")
+                        failures.append(error)
+                        break
+                    error.add_note(f"The directory is absent and was unregistered: {path}")
+                    failures.append(error)
                     continue
-                if not (stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
-                    raise NotADirectoryError(f"Install path '{install_path}' is not a directory.")
-                logger.info(f"Removing installed copy at '{install_path}'")
-                remove_directory_or_move_to_temp(install_path, message_callback=message_callback)
-            except Exception as e:
-                logger.error(f"Failed to remove directory '{install_path}': {e}")
-                e.add_note(f"Installed copy: {install_path}")
-                failures.append(e)
+
+                restored = [
+                    InstalledCopy(current.folder_id, current.path, "installed")
+                    if (current.folder_id, current.path) == (record.folder_id, record.path)
+                    else current
+                    for current in remaining
+                ]
+                try:
+                    registry.set(self.storage.snapshot.id, restored)
+                    remaining = restored
+                except Exception as restore_error:
+                    error.add_note(f"Removal state remains pending for '{path}': {restore_error}")
+                    failures.append(error)
+                    break
+                logger.error("Failed to remove installed directory '%s': %s", path, error)
+                error.add_note(f"Installed copy: {path}")
+                failures.append(error)
+                continue
+
+            remaining = [current for current in remaining if (current.folder_id, current.path) != (record.folder_id, record.path)]
+            try:
+                registry.set(self.storage.snapshot.id, remaining)
+            except Exception as error:
+                error.add_note(f"The directory was removed, but its installation record could not be updated: {path}")
+                failures.append(error)
+                break
+
         if failures:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
+
+    def _existing_registered_targets(self, records: list[InstalledCopy], *, reject_invalid: bool) -> list[tuple[InstalledCopy, Path]]:
+        """Select currently present real directories from a persisted install record."""
+        targets = []
+        for record in records:
+            if record.state != "installed":
+                continue
+            path = record.path
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                continue
+            if is_link_or_junction(path) or not stat.S_ISDIR(mode):
+                if reject_invalid:
+                    raise NotADirectoryError(f"Registered install destination '{path}' is not a real directory.")
+                continue
+            targets.append((record, path))
+        return targets
+
+    @staticmethod
+    def _backup_associations(targets: list[tuple[InstalledCopy, Path]]) -> list[SnapDirAssociation]:
+        """Build an archive-only association list for the recorded local destinations."""
+        associations = []
+        used_ids = set()
+        for index, (record, path) in enumerate(targets):
+            folder_id = record.folder_id
+            if folder_id in used_ids:
+                folder_id = f"{folder_id}_{hashlib.sha256(path.as_posix().encode('utf-8')).hexdigest()[:12]}"
+            while folder_id in used_ids:
+                folder_id += "_copy"
+            used_ids.add(folder_id)
+            associations.append(SnapDirAssociation(index=index, original_path=path.as_posix(), folder_id=folder_id))
+        return associations
 
     def _preflight(self) -> None:
         """Validate stored sources and manifests before copying.
@@ -485,6 +617,9 @@ class SnapshotInstaller:
             "entries": [],
             "staging_roots": [path.as_posix() for path in staging_roots],
             "clear_destination": clear_destination,
+            "installed_destinations": [
+                {"folder_id": replacement.folder_id, "path": replacement.install_loc.as_posix()} for replacement in replacements
+            ],
         }
         if clear_destination:
             journal_payload["entries"] = [
@@ -529,9 +664,32 @@ class SnapshotInstaller:
 
         self.storage.snapshot.date_last_used = last_used
         try:
+            registry_records = [
+                InstalledCopy(record["folder_id"], Path(record["path"]))
+                for record in journal.payload["payload"].get("installed_destinations", [])
+            ]
+            InstalledCopyRegistry(self.storage.path_catalogue).register(self.storage.snapshot.id, registry_records)
+        except Exception as error:
+            durability_confirmed = getattr(error, "durability_confirmed", None)
+            durability_confirmed = durability_confirmed if type(durability_confirmed) is bool else None
+            metadata_error = SnapshotInstallMetadataError(True, durability_confirmed)
+            metadata_error.metadata_field = "installed_destinations"
+            raise metadata_error from error
+        try:
             journal.set_state("committed")
         except Exception as error:
             raise SnapshotInstallMetadataError(True, getattr(error, "durability_confirmed", None)) from error
+
+    def _validate_existing_targets(self) -> None:
+        """Reject existing non-directory targets before installation can replace their entries."""
+        for association in self.storage.snapshot.directories:
+            path = Path(association.original_path)
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISDIR(mode):
+                raise NotADirectoryError(f"Install destination '{path}' exists but is not a real directory.")
 
     @staticmethod
     def _permission_backend(enable_everyone_full_control: bool):
