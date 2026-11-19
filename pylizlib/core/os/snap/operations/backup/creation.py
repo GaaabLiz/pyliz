@@ -9,7 +9,9 @@ from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.archives.zip.publication import write_verified_zip_exclusive as _write_verified_zip_exclusive
-from pylizlib.core.os.snap.domain import BackupType
+from pylizlib.core.os.filesystem.tree import is_link_or_junction
+from pylizlib.core.os.paths.safety import assert_no_link_components
+from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation
 from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, build_backup_manifest
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename
@@ -65,6 +67,70 @@ class BackupCreator:
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
             FileNotFoundError: A required source, stored association or metadata entry is absent.
         """
+        result = self._create_backup(backup_path, prefix, backup_type, is_export, message_callback)
+        assert result is not None
+        return result
+
+    @coordinated("storage.path_catalogue")
+    def create_backup_for_existing_associations(self, backup_path: Path, prefix: str, message_callback=None) -> Path | None:
+        """Back up real association destinations that currently exist, skipping absent destinations.
+
+        Args:
+            backup_path (Path): Directory receiving the completed archive.
+            prefix (str): Prefix for the backup filename.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            Path | None: Published archive, or None when no association destination exists to protect.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            SnapshotIncompleteError: An existing association root is not readable as a directory.
+            ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
+        """
+        return self._create_backup(backup_path, prefix, BackupType.ASSOCIATED_DIRECTORIES, False, message_callback, only_existing=True)
+
+    @coordinated("storage.path_catalogue")
+    def create_backup_for_associations(
+        self,
+        backup_path: Path,
+        prefix: str,
+        associations: list[SnapDirAssociation],
+        message_callback=None,
+    ) -> Path:
+        """Back up a caller-selected set of local roots without weakening complete AD backups.
+
+        Args:
+            backup_path (Path): Directory receiving the completed archive.
+            prefix (str): Prefix for the backup filename.
+            associations (list[SnapDirAssociation]): Exact roots to archive and record in the manifest.
+            message_callback (MessageCallback | None): Optional status observer receiving one message string; its
+                exceptions propagate according to the calling operation.
+
+        Returns:
+            Path: Published archive path after exclusive publication.
+
+        Raises:
+            SnapshotIncompleteError: A selected source root is missing or unreadable.
+            ValueError: A selected source is unsafe or archive publication violates path policy.
+        """
+        result = self._create_backup(backup_path, prefix, BackupType.ASSOCIATED_DIRECTORIES, False, message_callback, association_subset=associations)
+        assert result is not None
+        return result
+
+    def _create_backup(
+        self,
+        backup_path: Path,
+        prefix: str,
+        backup_type: BackupType,
+        is_export: bool,
+        message_callback,
+        *,
+        only_existing: bool = False,
+        association_subset: list[SnapDirAssociation] | None = None,
+    ) -> Path | None:
+        """Create and publish an archive, optionally selecting only existing AD roots."""
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
                 raise ValueError(f"Unsupported backup type: {backup_type}")
@@ -76,16 +142,32 @@ class BackupCreator:
                 raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
             timestamp = self.now().strftime("%Y%m%d_%H%M%S")
 
+            associations = self.storage.snapshot.directories if backup_type == BackupType.ASSOCIATED_DIRECTORIES else None
+            if association_subset is not None:
+                associations = association_subset
+            elif only_existing:
+                associations = [association for association in self.storage.snapshot.directories if self._association_target_exists(association)]
+                if not associations:
+                    logger.info("Skipped pre-install backup snapshot=%s because no associated destination exists", self.storage.snapshot.id)
+                    return None
+                if len(associations) < len(self.storage.snapshot.directories):
+                    logger.info(
+                        "Pre-install backup will cover %s of %s associated destinations snapshot=%s",
+                        len(associations),
+                        len(self.storage.snapshot.directories),
+                        self.storage.snapshot.id,
+                    )
+
             base_zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
-            archived_roots = [Path(association.original_path) for association in self.storage.snapshot.directories] if backup_type == BackupType.ASSOCIATED_DIRECTORIES else [self.storage.root_path()]
+            archived_roots = [Path(association.original_path) for association in (associations or [])] if backup_type == BackupType.ASSOCIATED_DIRECTORIES else [self.storage.root_path()]
             self._validate_archive_destination(backup_path / base_zip_name, archived_roots)
 
             backup_path.mkdir(parents=True, exist_ok=True)
 
-            entries = list(self._files_to_archive(backup_type))
+            entries = list(self._files_to_archive(backup_type, associations=associations))
             if any(archive_name == Path(BACKUP_MANIFEST_NAME) for _, archive_name in entries):
                 raise ValueError(f"Snapshot content conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
-            manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp)
+            manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp, associations=associations)
             entries.append((manifest_path, Path(BACKUP_MANIFEST_NAME)))
             try:
                 result = self._publish_unique_archive(backup_path, base_zip_name, entries, message_callback)
@@ -100,6 +182,26 @@ class BackupCreator:
         except Exception as e:
             logger.error(f"Failed to create backup for snapshot '{self.storage.snapshot.id}': {e}")
             raise
+
+    @staticmethod
+    def _association_target_exists(association: SnapDirAssociation) -> bool:
+        """Check path-entry presence without following a dangling symbolic link.
+
+        Args:
+            association (SnapDirAssociation): Association whose original destination is checked.
+
+        Returns:
+            bool: True only when the destination is a real directory; absent entries, files and links are excluded.
+        """
+        try:
+            path = Path(association.original_path)
+            mode = path.lstat().st_mode
+        except FileNotFoundError:
+            return False
+        if is_link_or_junction(path) or not stat.S_ISDIR(mode):
+            return False
+        assert_no_link_components(path)
+        return True
 
     @staticmethod
     def _validate_archive_destination(destination: Path, archived_roots: list[Path]) -> None:
@@ -126,7 +228,16 @@ class BackupCreator:
             if resolved_destination.is_relative_to(resolved_root):
                 raise ValueError(f"Backup destination '{destination}' is inside archived source '{source_root}'.")
 
-    def _write_backup_manifest(self, directory: Path, backup_type: BackupType, prefix: str, is_export: bool, timestamp: str) -> Path:
+    def _write_backup_manifest(
+        self,
+        directory: Path,
+        backup_type: BackupType,
+        prefix: str,
+        is_export: bool,
+        timestamp: str,
+        *,
+        associations: list[SnapDirAssociation] | None = None,
+    ) -> Path:
         """Write a temporary typed manifest with identity and associations for either backup type.
 
         Args:
@@ -141,7 +252,7 @@ class BackupCreator:
         Returns:
             Path: Temporary UTF-8 JSON manifest path; the caller owns unlinking it after archive publication.
         """
-        data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp)
+        data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp, association_subset=associations)
         temporary_path = None
         try:
             temporary_file_context = tempfile.NamedTemporaryFile(
@@ -164,12 +275,14 @@ class BackupCreator:
                     logger.warning(f"Could not remove unfinished backup manifest '{temporary_path}': {error}")
             raise
 
-    def _files_to_archive(self, backup_type: BackupType):
+    def _files_to_archive(self, backup_type: BackupType, *, associations: list[SnapDirAssociation] | None = None):
         """Enumerate stored or live files using their distinct existing link policies.
 
         Args:
             backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
                 (SD).
+            associations (list[SnapDirAssociation] | None): Optional AD subset to enumerate; None selects every
+                association in the snapshot.
 
         Yields:
             tuple[Path, Path]: Source entry and relative archive name, including empty directories.
@@ -181,7 +294,8 @@ class BackupCreator:
         if backup_type == BackupType.ASSOCIATED_DIRECTORIES:
             sources = []
             missing_folders = []
-            for association in self.storage.snapshot.directories:
+            source_associations = self.storage.snapshot.directories if associations is None else associations
+            for association in source_associations:
                 folder = Path(association.original_path)
                 try:
                     mode = folder.stat().st_mode

@@ -1,9 +1,10 @@
 """Versioned metadata stored inside snapshot backup ZIP archives."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
-from pylizlib.core.os.snap.domain import BackupType, Snapshot, validate_directory_component
+from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation, Snapshot, validate_directory_component
 
 BACKUP_MANIFEST_NAME = ".pyliz_backup_manifest.json"
 BACKUP_MANIFEST_FORMAT = "pyliz-snapshot-backup"
@@ -67,6 +68,7 @@ def build_backup_manifest(
     prefix: str,
     is_export: bool,
     timestamp: str,
+    association_subset: Iterable[SnapDirAssociation] | None = None,
 ) -> dict:
     """Create the JSON-compatible manifest shared by AD and SD backups.
 
@@ -79,6 +81,8 @@ def build_backup_manifest(
         is_export (bool): Whether the backup uses the existing export naming convention.
         timestamp (str): Creation timestamp in YYYYMMDD_HHMMSS format using the existing naive/local naming
             convention.
+        association_subset (Iterable[SnapDirAssociation] | None): Optional subset of snapshot associations
+            represented by this archive. When omitted, every association is recorded as before.
 
     Returns:
         dict: JSON-compatible unified v1 manifest with snapshot identity, origin OS, timestamp and association
@@ -104,11 +108,12 @@ def build_backup_manifest(
         raise TypeError("Backup timestamp must be a string.")
     datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
 
-    associations = []
-    for association in snapshot.directories:
+    archived_associations = []
+    source_associations = snapshot.directories if association_subset is None else association_subset
+    for association in source_associations:
         if association.directory_name in {BACKUP_MANIFEST_NAME, LEGACY_ASSOCIATED_DIRECTORIES_MANIFEST}:
             raise ValueError(f"Association storage name conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
-        associations.append(
+        archived_associations.append(
             {
                 "folder_id": association.folder_id,
                 "index": association.index,
@@ -128,7 +133,7 @@ def build_backup_manifest(
         "prefix": prefix,
         "is_export": is_export,
         "created_at": timestamp,
-        "associations": associations,
+        "associations": archived_associations,
     }
 
 

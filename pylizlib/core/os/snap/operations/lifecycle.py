@@ -11,6 +11,7 @@ from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.model_state import CapturedContentState
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import catalogue_access, coordinated, observer_callback
+from pylizlib.core.os.snap.storage.install_registry import InstalledCopyRegistry
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_storage_transactions, rename_and_sync
 from pylizlib.core.os.snap.storage.tree import assert_destination_outside_source
@@ -77,6 +78,9 @@ class SnapshotLifecycle:
                 raise FileExistsError(f"Snapshot destination '{self.storage.path_snapshot}' already exists.")
 
             had_original = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
+            install_registry = InstalledCopyRegistry(self.storage.path_catalogue)
+            if not had_original and install_registry.get(self.storage.snapshot.id) is None:
+                install_registry.set(self.storage.snapshot.id, [])
             journal = SnapshotTransactionJournal.begin(
                 self.storage.path_catalogue,
                 "snapshot_tree",
@@ -141,8 +145,11 @@ class SnapshotLifecycle:
             raise FileNotFoundError(f"The snapshot path {self.storage.path_snapshot} does not exist.")
         new_snap = self.storage.snapshot.clone()
         new_snap.id = gen_random_string(self.storage.settings.snap_id_length)
+        install_registry = InstalledCopyRegistry(self.storage.path_catalogue)
         new_snap.name = self.storage.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
+        if install_registry.get(new_snap.id) is None:
+            install_registry.set(new_snap.id, [])
 
         def prepare_duplicate(staging_path: Path) -> None:
             """Write and validate cloned metadata before making the duplicate visible.

@@ -523,6 +523,11 @@ class SnapshotCatalogue:
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            RuntimeError: Legacy installation history is unknown or a previous removal needs review.
+            ExceptionGroup: One or more removals or registration updates failed; successful removals stay unregistered.
+            NotADirectoryError: A registered destination is no longer a real directory.
+            SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
+            ValueError: Backup storage is not configured or a registered destination is unsafe.
         """
         with catalogue_access(self.path_catalogue):
             snap = self.get_by_id(snap_id)
@@ -532,10 +537,33 @@ class SnapshotCatalogue:
             snap_manager = self._manager(snap)
             snap_manager.remove_installed_copies(message_callback=message_callback)
 
+    def get_removable_paths(self, snap_id: str) -> list[Path] | None:
+        """Return currently removable installed paths; None marks an untracked legacy snapshot.
+
+        Args:
+            snap_id (str): Snapshot ID identifying the catalogue entry.
+
+        Returns:
+            list[Path] | None: Existing registered real directories, an empty list when none are installed, or None
+                when installation history is unknown.
+
+        Raises:
+            NotADirectoryError: A registered destination is no longer a real directory.
+            ValueError: Snapshot does not exist or a registered destination fails safety validation.
+            RuntimeError: A removal was interrupted and its backup needs review before retrying.
+            SnapshotBusyError: Another operation owns the catalogue.
+        """
+        with catalogue_access(self.path_catalogue):
+            snap = self.get_by_id(snap_id)
+            if snap is None:
+                raise ValueError(f"No snapshot found with ID {snap_id}.")
+            return self._manager(snap).get_removable_paths()
+
     def install(self, snap: Snapshot, clear_destination: bool = True, progress_callback=None, message_callback=None):
         """Installs a snapshot's contents to their original target locations.
 
-        If backup settings are enabled, a backup of the target locations is created first.
+        If backup settings are enabled, existing target locations are backed up first. Missing destinations are
+        omitted from this preliminary archive and recreated by installation.
 
         Args:
             snap (Snapshot): The Snapshot object to install.
@@ -567,10 +595,9 @@ class SnapshotCatalogue:
             # Installation must use the persisted manifest that matches on-disk data.
             snap_manager = self._manager(stored_snapshot)
             if self.settings.bck_before_install_enabled:
-                snap_manager.create_backup(
+                snap_manager._create_backup_for_existing_associations(
                     self.settings.backup_path,
                     "preinstall",
-                    BackupType.ASSOCIATED_DIRECTORIES,
                 )
             snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
             snap.date_last_used = stored_snapshot.date_last_used
