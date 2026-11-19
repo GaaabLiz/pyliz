@@ -1,16 +1,17 @@
 # AI media scanner
 
-`AiMediaScanner` esegue una o più scansioni AI su un singolo media e restituisce un oggetto `LizMedia` arricchito.
+`AiMediaScanner` runs one or more AI scans on a single media file and returns an
+enriched `LizMedia` object.
 
-## Tool supportati
+## Supported tools
 
 - `TAGS` → JoyTag
 - `NSFW` → NudeNet
 - `OCR` → EasyOCR
 
-Sono accettati anche alias come `JOYTAG` e `TAG-JOYTAG`.
+Aliases such as `JOYTAG` and `TAG-JOYTAG` are also accepted.
 
-## Esempio rapido
+## Quick example
 
 ```python
 from pylizlib.ai import AiMediaScanner
@@ -26,7 +27,7 @@ print(media.ai_has_ocr_text)
 print(media.ai_nsfw)
 ```
 
-## Input base64
+## Base64 input
 
 ```python
 media = scanner.scan(
@@ -36,59 +37,64 @@ media = scanner.scan(
 )
 ```
 
-Per input base64 senza `file_name`, è supportato anche il formato data URI, ad esempio:
+For base64 input without `file_name`, data URI format is also supported, for
+example:
 
 ```text
 data:image/png;base64,...
 ```
 
-## Dipendenze opzionali
+## Optional dependencies
 
-Installare l'extra `ai` per abilitare gli scanner reali:
+Install the `ai` extra to enable the real scanners:
 
 ```bash
 pip install .[ai]
 ```
 
-### Setup consigliato per piattaforma
+### Recommended platform setup
 
 - **macOS (CPU/MPS)**
 
-  `ai-macos` resta disponibile come alias compatibile dell'extra `ai`.
+  `ai-macos` remains available as a compatibility alias for the `ai` extra.
 
 ```bash
 uv pip install -e '.[ai-macos]'
 ```
 
-- **Linux con GPU NVIDIA (CUDA)**
+- **Linux with an NVIDIA GPU (CUDA)**
 
 ```bash
 uv pip install -e '.[ai-linux-nvidia]'
 ```
 
-> Nota: per Linux NVIDIA servono driver CUDA compatibili lato host; `torch` usera `cuda` automaticamente quando disponibile.
+> Note: Linux with NVIDIA requires compatible CUDA drivers on the host; `torch`
+> automatically uses `cuda` when available.
 
-I test unitari in `test/unit/ai/ai_media_scanner.py` usano provider stub e non richiedono i modelli AI reali.
+Unit tests in `test/unit/ai/ai_media_scanner.py` use stub providers and do not
+require real AI models.
 
-## Test di integrazione reali
+## Real integration tests
 
-I test di integrazione sono raggruppati per feature in `test/integration/ai/test_media_scanner.py`.
+Integration tests are grouped by feature in
+`test/integration/ai/test_media_scanner.py`.
 
-Questo test:
+This test:
 
-- scarica immagini da internet;
-- usa `test_local/ai_media_scanner_integration` come cartella di lavoro temporanea/cache;
-- esercita davvero `TAGS`, `NSFW` e `OCR` tramite `AiMediaScanner`.
+- downloads images from the internet;
+- uses `test_local/ai_media_scanner_integration` as a temporary work/cache directory;
+- exercises `TAGS`, `NSFW`, and `OCR` through `AiMediaScanner` with real providers.
 
-Se l'ambiente non ha ancora le dipendenze AI richieste o non ha connettività internet, i test vengono marcati come `skipped` in modo esplicito.
+If the environment does not have the required AI dependencies or internet
+connectivity, the tests are explicitly marked as `skipped`.
 
-Esecuzione:
+Run them with:
 
 ```bash
 uv run pytest test/unit/ai/ai_media_scanner.py test/integration/ai/test_media_scanner.py test/unit/media/util/source.py -q
 ```
 
-Per salvare report persistenti in `test_local`:
+To save persistent reports under `test_local`:
 
 ```bash
 mkdir -p test_local/ai_media_scanner_reports
@@ -96,4 +102,3 @@ uv run pytest test/integration/ai/test_media_scanner.py -vv \
   --junitxml=test_local/ai_media_scanner_reports/integration_junit.xml \
   | tee test_local/ai_media_scanner_reports/integration_run.log
 ```
-

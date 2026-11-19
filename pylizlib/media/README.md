@@ -1,32 +1,32 @@
 # Media
 
-`pylizlib.media` fornisce modelli e strumenti per lavorare con immagini, video
-e audio. `LizMedia` raccoglie percorso, metadati, sidecar e informazioni di
-scansione; gli altri moduli gestiscono operazioni specifiche.
+`pylizlib.media` provides models and tools for working with images, video, and
+audio. `LizMedia` groups the path, metadata, sidecar files, and scan information;
+the other modules handle specific operations.
 
-## Aree principali
+## Main areas
 
-| Package o modulo | Contenuto |
+| Package or module | Contents |
 | --- | --- |
-| `lizmedia.py` | `LizMedia` e risultati di ricerca dei file multimediali |
-| `domain/` | Tipi per sorgenti, audio e video |
-| `compute/` | Selezione dei frame e campionamento dei video |
-| `util/` | Sorgenti, immagini, metadati e lettura dei video |
-| `view/` | Presentazione tabellare dei risultati |
+| `lizmedia.py` | `LizMedia` and media-file search results |
+| `domain/` | Types for sources, audio, and video |
+| `compute/` | Frame selection and video sampling |
+| `util/` | Sources, images, metadata, and video reading |
+| `view/` | Tabular presentation of results |
 
-Per sorgenti da file o base64, vedere `resolve_media_source` in
-`pylizlib.media.util.source`. `LizMedia` è anche il payload usato dalle
-scansioni AI, descritte in [ai/README.md](../ai/README.md).
+For file or base64 sources, see `resolve_media_source` in
+`pylizlib.media.util.source`. `LizMedia` is also the payload used by AI scans,
+documented in [ai/README.md](../ai/README.md).
 
-## Dipendenze
+## Dependencies
 
-Le funzioni di elaborazione multimediale richiedono l'extra `media`:
+Media processing features require the `media` extra:
 
 ```bash
 uv sync --extra media
 ```
 
-## Test
+## Tests
 
-I test unitari sono in `test/unit/media/`. Le integrazioni AI sono in
-`test/integration/ai/` e possono richiedere modelli e accesso a Internet.
+Unit tests are under `test/unit/media/`. AI integrations are under
+`test/integration/ai/` and may require models and internet access.

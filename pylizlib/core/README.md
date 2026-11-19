@@ -1,32 +1,32 @@
 # Core utilities
 
-`pylizlib.core` raccoglie servizi e modelli riutilizzabili dalle altre parti
-della libreria: configurazione, dati, rete, filesystem e operazioni di sistema.
-I moduli sono importabili dalle rispettive sotto-cartelle, ad esempio
-`pylizlib.core.os.paths` o `pylizlib.core.network`.
+`pylizlib.core` provides services and models reusable across the rest of the
+library: configuration, data, networking, filesystem, and operating-system
+operations. Modules can be imported from their respective subpackages, such as
+`pylizlib.core.os.paths` or `pylizlib.core.network`.
 
-## Aree principali
+## Main areas
 
-| Package | Contenuto |
+| Package | Contents |
 | --- | --- |
-| `app/` | Configurazione INI e TOML e percorsi applicativi |
-| `data/` | JSON, regex, conversioni, utilità e ricerca testuale a blocchi |
-| `domain/`, `handler/`, `log/` | Modelli condivisi, supporto al progresso e logging |
-| `network/` | Richieste HTTP, download e helper SSL |
-| `os/paths/` | Normalizzazione, identità, containment e sicurezza dei path |
-| `os/filesystem/` | File, directory, alberi, metadati, lock e scritture atomiche |
-| `os/archives/zip/` | Validazione, estrazione e pubblicazione di ZIP |
-| `os/windows/` | Adapter per funzionalità specifiche di Windows |
-| `os/snap/` | Snapshot, catalogo, backup, restore, ricerca e recovery |
+| `app/` | INI and TOML configuration and application paths |
+| `data/` | JSON, regular expressions, conversions, utilities, and streaming text search |
+| `domain/`, `handler/`, `log/` | Shared models, progress support, and logging |
+| `network/` | HTTP requests, downloads, and SSL helpers |
+| `os/paths/` | Path normalization, identity, containment, and safety |
+| `os/filesystem/` | Files, directories, trees, metadata, locks, and atomic writes |
+| `os/archives/zip/` | ZIP validation, extraction, and publication |
+| `os/windows/` | Adapters for Windows-specific features |
+| `os/snap/` | Snapshots, catalogues, backups, restore, search, and recovery |
 
-Le API snapshot pubbliche sono esposte da `pylizlib.core.os.snap`, tra cui
-`Snapshot`, `SnapshotManager` e `SnapshotCatalogue`. Per i flussi e le garanzie
-di sicurezza, consultare [la guida snapshot](os/snap/README.md).
+The public snapshot APIs are exposed by `pylizlib.core.os.snap`, including
+`Snapshot`, `SnapshotManager`, and `SnapshotCatalogue`. For workflows and safety
+guarantees, see the [snapshot guide](os/snap/README.md).
 
-I moduli `os/path.py`, `os/file.py` e `os/utils.py` mantengono gli import legacy;
-il nuovo codice dovrebbe preferire `os/paths/` e `os/filesystem/`.
+The `os/path.py`, `os/file.py`, and `os/utils.py` modules retain legacy imports;
+new code should prefer `os/paths/` and `os/filesystem/`.
 
-## Test
+## Tests
 
-I test unitari seguono la struttura del package in `test/unit/core/`. I flussi
-completi degli snapshot sono raccolti in `test/integration/snap/`.
+Unit tests mirror the package structure under `test/unit/core/`. Complete
+snapshot workflows are grouped under `test/integration/snap/`.
