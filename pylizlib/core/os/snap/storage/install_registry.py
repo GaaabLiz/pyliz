@@ -36,10 +36,28 @@ class InstalledCopyRegistry:
     """
 
     def __init__(self, path_catalogue: Path):
+        """Bind the registry to a catalogue directory.
+
+        Args:
+            path_catalogue (Path): Catalogue directory storing snapshot metadata and the local registry file.
+
+        Returns:
+            None: No return value.
+        """
         self.path = Path(path_catalogue) / INSTALL_REGISTRY_FILENAME
 
     def get(self, snapshot_id: str) -> list[InstalledCopy] | None:
-        """Read one snapshot's installed destinations, or None when untracked."""
+        """Read one snapshot's installed destinations, or None when untracked.
+
+        Args:
+            snapshot_id (str): Snapshot identity used as the registry key.
+
+        Returns:
+            list[InstalledCopy] | None: Known installed destinations, including an empty list, or None if untracked.
+
+        Raises:
+            ValueError: The persisted registry has an invalid format or destination entry.
+        """
         data = self._read()
         raw_records = data["snapshots"].get(snapshot_id)
         if raw_records is None:
@@ -47,7 +65,19 @@ class InstalledCopyRegistry:
         return [InstalledCopy(record["folder_id"], Path(record["path"]), record.get("state", "installed")) for record in raw_records]
 
     def set(self, snapshot_id: str, records: list[InstalledCopy]) -> None:
-        """Atomically replace one snapshot's installed destination list."""
+        """Atomically replace one snapshot's installed destination list.
+
+        Args:
+            snapshot_id (str): Snapshot identity used as the registry key.
+            records (list[InstalledCopy]): Complete new list of registered destinations.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            OSError: The registry cannot be atomically written.
+            ValueError: The existing registry has an invalid format or destination entry.
+        """
         data = self._read()
         data["snapshots"][snapshot_id] = [
             {"folder_id": record.folder_id, "path": record.path.as_posix(), "state": record.state} for record in records
@@ -55,7 +85,19 @@ class InstalledCopyRegistry:
         SnapshotSerializer.write_text(self.path, json.dumps(data, ensure_ascii=False, indent=2))
 
     def register(self, snapshot_id: str, records: list[InstalledCopy]) -> None:
-        """Add successfully installed paths while preserving earlier live targets."""
+        """Add successfully installed paths while preserving earlier live targets.
+
+        Args:
+            snapshot_id (str): Snapshot identity used as the registry key.
+            records (list[InstalledCopy]): Destinations confirmed by the completed installation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            OSError: The updated registry cannot be atomically written.
+            ValueError: The persisted registry has an invalid format or destination entry.
+        """
         current = self.get(snapshot_id) or []
         known = {(record.folder_id, record.path) for record in current}
         for record in records:
@@ -73,7 +115,15 @@ class InstalledCopyRegistry:
         self.set(snapshot_id, current)
 
     def _read(self) -> dict:
-        """Load and validate the complete registry; malformed state fails closed."""
+        """Load and validate the complete registry; malformed state fails closed.
+
+        Returns:
+            dict: Registry document with format, version and snapshot destination records.
+
+        Raises:
+            OSError: The registry cannot be read.
+            ValueError: The persisted registry has an invalid format or destination entry.
+        """
         try:
             contents = SnapshotSerializer.read_text(self.path)
         except FileNotFoundError:

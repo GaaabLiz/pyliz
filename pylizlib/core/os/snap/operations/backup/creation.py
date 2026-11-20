@@ -130,7 +130,26 @@ class BackupCreator:
         only_existing: bool = False,
         association_subset: list[SnapDirAssociation] | None = None,
     ) -> Path | None:
-        """Create and publish an archive, optionally selecting only existing AD roots."""
+        """Create and publish an archive, optionally selecting a subset of AD roots.
+
+        Args:
+            backup_path (Path): Directory receiving the completed archive and temporary manifest.
+            prefix (str): Prefix included in the generated archive filename and manifest.
+            backup_type (BackupType): Whether to archive associated directories or the stored snapshot directory.
+            is_export (bool): Whether the archive uses the export naming convention.
+            message_callback (MessageCallback | None): Optional per-entry status observer.
+            only_existing (bool): Skip absent association destinations and return None when none exist.
+            association_subset (list[SnapDirAssociation] | None): Exact AD roots to archive, or None to use the
+                snapshot's associations.
+
+        Returns:
+            Path | None: Published verified archive, or None when an only-existing backup has no targets.
+
+        Raises:
+            SnapshotIncompleteError: A selected association cannot be completely archived.
+            OSError: Archive creation or publication fails.
+            ValueError: A path, archive entry or metadata field violates backup validation.
+        """
         try:
             if backup_type not in (BackupType.ASSOCIATED_DIRECTORIES, BackupType.SNAPSHOT_DIRECTORY):
                 raise ValueError(f"Unsupported backup type: {backup_type}")
@@ -248,6 +267,8 @@ class BackupCreator:
             is_export (bool): Whether the backup uses the existing export naming convention.
             timestamp (str): Creation timestamp in YYYYMMDD_HHMMSS format using the existing naive/local naming
                 convention.
+            associations (list[SnapDirAssociation] | None): AD subset represented by the archive, or None to record
+                every snapshot association.
 
         Returns:
             Path: Temporary UTF-8 JSON manifest path; the caller owns unlinking it after archive publication.

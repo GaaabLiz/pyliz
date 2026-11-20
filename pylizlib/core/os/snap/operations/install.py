@@ -197,7 +197,16 @@ class SnapshotInstaller:
 
     @coordinated("storage.path_catalogue")
     def get_removable_paths(self) -> list[Path] | None:
-        """Return registered, present real directories; None means legacy state is unknown."""
+        """Return registered, present real directories; None means legacy state is unknown.
+
+        Returns:
+            list[Path] | None: Present registered directories, an empty list when none are present, or None when
+                installation history is unknown.
+
+        Raises:
+            RuntimeError: A previous removal is pending review.
+            ValueError: A registered target is unsafe for removal.
+        """
         recover_storage_transactions(self.storage)
         records = InstalledCopyRegistry(self.storage.path_catalogue).get(self.storage.snapshot.id)
         if records is None:
@@ -337,7 +346,18 @@ class SnapshotInstaller:
         return backup
 
     def _existing_registered_targets(self, records: list[InstalledCopy], *, reject_invalid: bool) -> list[tuple[InstalledCopy, Path]]:
-        """Select currently present real directories from a persisted install record."""
+        """Select currently present real directories from a persisted install record.
+
+        Args:
+            records (list[InstalledCopy]): Persisted destinations to inspect.
+            reject_invalid (bool): Raise when a present destination is not a real directory instead of skipping it.
+
+        Returns:
+            list[tuple[InstalledCopy, Path]]: Records paired with their present, non-link directory paths.
+
+        Raises:
+            NotADirectoryError: A present registered destination is not a real directory and reject_invalid is true.
+        """
         targets = []
         for record in records:
             if record.state != "installed":
@@ -356,7 +376,14 @@ class SnapshotInstaller:
 
     @staticmethod
     def _backup_associations(targets: list[tuple[InstalledCopy, Path]]) -> list[SnapDirAssociation]:
-        """Build an archive-only association list for the recorded local destinations."""
+        """Build an archive-only association list for the recorded local destinations.
+
+        Args:
+            targets (list[tuple[InstalledCopy, Path]]): Registered records paired with destinations selected for backup.
+
+        Returns:
+            list[SnapDirAssociation]: Archive associations using unique IDs and the selected absolute paths.
+        """
         associations = []
         used_ids = set()
         for index, (record, path) in enumerate(targets):
@@ -685,7 +712,14 @@ class SnapshotInstaller:
             raise SnapshotInstallMetadataError(True, getattr(error, "durability_confirmed", None)) from error
 
     def _validate_existing_targets(self) -> None:
-        """Reject existing non-directory targets before installation can replace their entries."""
+        """Reject existing non-directory targets before installation can replace their entries.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            NotADirectoryError: An existing install destination is not a real directory.
+        """
         for association in self.storage.snapshot.directories:
             path = Path(association.original_path)
             try:

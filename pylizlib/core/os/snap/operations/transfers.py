@@ -210,6 +210,7 @@ class CatalogueTransferService:
 
             install_registry = InstalledCopyRegistry(self.path_catalogue)
             install_registry.set(snapshot_to_import.id, [])
+
             # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 temp_dir_path,
@@ -257,6 +258,7 @@ class CatalogueTransferService:
 
             install_registry = InstalledCopyRegistry(self.path_catalogue)
             install_registry.set(snap_id, [])
+
             # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 potential_snap_dir,
