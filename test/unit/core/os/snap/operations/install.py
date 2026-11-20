@@ -48,7 +48,7 @@ def test_registry_failure_reports_its_own_publication_state(tmp_path, published)
     cause = OSError("registry failed")
     cause.published = published
     cause.durability_confirmed = False
-    model = SimpleNamespace(date_last_used=previous)
+    model = SimpleNamespace(id="snapshot", date_last_used=previous)
     storage = SimpleNamespace(
         snapshot=model,
         path_catalogue=tmp_path / "catalogue",
