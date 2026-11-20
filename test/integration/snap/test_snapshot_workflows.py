@@ -51,7 +51,10 @@ def association_copy(catalogue: SnapshotCatalogue, snapshot: Snapshot, associati
 
 def test_create_search_sync_and_install(snapshot_workspace: Path) -> None:
     source = make_source(snapshot_workspace, "lifecycle")
-    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=snapshot_workspace / "backups"),
+    )
     snapshot = make_snapshot("integration_lifecycle", source)
     creation_progress: list[int] = []
     messages: list[str] = []
