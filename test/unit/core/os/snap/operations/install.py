@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -37,6 +38,38 @@ def test_completion_retains_strict_publication_flag_semantics(tmp_path, publishe
     assert error.value.durability_confirmed is False
     assert error.value.__cause__ is cause
     assert model.date_last_used == (current if published is True else previous)
+
+
+@pytest.mark.parametrize("published", [True, False, None, 1])
+def test_registry_failure_reports_its_own_publication_state(tmp_path, published):
+    """A registry write failure reports registry publication, not the earlier JSON write."""
+    previous = datetime(2025, 1, 1)
+    current = datetime(2026, 1, 1)
+    cause = OSError("registry failed")
+    cause.published = published
+    cause.durability_confirmed = False
+    model = SimpleNamespace(date_last_used=previous)
+    storage = SimpleNamespace(
+        snapshot=model,
+        path_catalogue=tmp_path / "catalogue",
+        path_snapshot_json=tmp_path / "snapshot.json",
+        metadata=SimpleNamespace(read_bytes=lambda path: b"new", write_bytes=lambda path, contents: None),
+    )
+    journal = SimpleNamespace(
+        workspace=tmp_path,
+        payload={"payload": {"installed_destinations": [{"folder_id": "folder", "path": (tmp_path / "target").as_posix()}]}},
+    )
+
+    with patch("pylizlib.core.os.snap.operations.install.InstalledCopyRegistry.register", side_effect=cause):
+        with pytest.raises(SnapshotInstallMetadataError) as error:
+            SnapshotInstaller(storage)._complete_install_metadata(journal, {"new": "staged.json"}, current, previous)
+
+    expected = published if type(published) is bool else None
+    assert error.value.metadata_field == "installed_destinations"
+    assert error.value.metadata_published is expected
+    assert error.value.durability_confirmed is False
+    assert error.value.__cause__ is cause
+    assert model.date_last_used == current
 
 
 def test_empty_install_reports_completion_after_metadata_commit(tmp_path, caplog):

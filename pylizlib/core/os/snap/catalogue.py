@@ -16,7 +16,9 @@ from pylizlib.core.os.snap.domain import (
     Snapshot,
     SnapshotBackupInfo,
     SnapshotCatalogueStatistics,
+    SnapshotOperationResult,
     SnapshotSettings,
+    SnapshotUpdateResult,
     validate_directory_component,
 )
 from pylizlib.core.os.snap.manager import SnapshotManager
@@ -275,11 +277,25 @@ class SnapshotCatalogue:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
+        self.delete_with_result(snap, message_callback=message_callback)
+
+    def delete_with_result(self, snap: Snapshot, message_callback: MessageCallback | None = None) -> SnapshotOperationResult:
+        """Delete a stored snapshot and report its automatic backup.
+
+        Args:
+            snap (Snapshot): Snapshot to delete from the catalogue.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            SnapshotOperationResult: Published backup path when a backup was created.
+        """
         with catalogue_access(self.path_catalogue):
             snap_manager = self._manager(snap)
+            backup = None
             if self.settings.bck_before_delete_enabled:
-                snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
+                backup = snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
             snap_manager.delete(message_callback=message_callback)
+            return SnapshotOperationResult(backup)
 
     def get_all(self, *, strict: bool = False) -> list[Snapshot]:
         """Retrieves all snapshots from the catalogue.
@@ -407,6 +423,47 @@ class SnapshotCatalogue:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
             ValueError: The snapshot cannot be loaded, a field is invalid, or a path is duplicated or ambiguous.
         """
+        return self.update_snapshot_with_result(
+            snap_id,
+            name=name,
+            desc=desc,
+            tags=tags,
+            directory_paths=directory_paths,
+            data_updates=data_updates,
+            data_remove=data_remove,
+            message_callback=message_callback,
+        ).snapshot
+
+    def update_snapshot_with_result(
+        self,
+        snap_id: str,
+        *,
+        name: str | None = None,
+        desc: str | None = None,
+        tags: list[str] | None = None,
+        directory_paths: Sequence[str | Path] | None = None,
+        data_updates: Mapping[str, str] | None = None,
+        data_remove: Sequence[str] = (),
+        message_callback: MessageCallback | None = None,
+    ) -> SnapshotUpdateResult:
+        """Apply a partial update and report the saved model and the automatic backup.
+
+        Args:
+            snap_id (str): ID of the snapshot to edit.
+            name (str | None): Replacement display name.
+            desc (str | None): Replacement description.
+            tags (list[str] | None): Replacement tags.
+            directory_paths (Sequence[str | Path] | None): Complete replacement list of ordered source paths.
+            data_updates (Mapping[str, str] | None): Custom values to add or replace.
+            data_remove (Sequence[str]): Custom keys to remove before applying updates.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            SnapshotUpdateResult: Saved snapshot and published backup path, if created.
+
+        Notes:
+            The field and backup rules are the same as in update_snapshot().
+        """
         with catalogue_access(self.path_catalogue):
             previous = self.get_by_id(snap_id)
             if previous is None:
@@ -421,8 +478,8 @@ class SnapshotCatalogue:
                 data_updates=data_updates,
                 data_remove=data_remove,
             )
-            self.update_snapshot_by_objs(previous, snapshot, message_callback=message_callback)
-            return snapshot
+            backup = self._update_snapshot_by_objs(previous, snapshot, message_callback)
+            return SnapshotUpdateResult(backup_path=backup, snapshot=snapshot)
 
     def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot, message_callback=None):
         """Updates a snapshot by comparing the old and new Snapshot objects.
@@ -440,9 +497,22 @@ class SnapshotCatalogue:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
+        self._update_snapshot_by_objs(old, new, message_callback)
+
+    def _update_snapshot_by_objs(self, old: Snapshot, new: Snapshot, message_callback: MessageCallback | None) -> Path | None:
+        """Calculate association edits and apply them under the catalogue lock.
+
+        Args:
+            old (Snapshot): Current snapshot used for the diff.
+            new (Snapshot): Desired snapshot model.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            Path | None: Published backup path, if created.
+        """
         with catalogue_access(self.path_catalogue):
             edits = SnapshotUtils.get_edits_between_snapshots(old, new)
-            self.update_snapshot_by_edits(new, edits, message_callback=message_callback)
+            return self._update_snapshot_by_edits(new, edits, message_callback)
 
     def update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction], message_callback=None):
         """Updates a snapshot using a pre-computed list of edit actions.
@@ -461,13 +531,28 @@ class SnapshotCatalogue:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
+        self._update_snapshot_by_edits(snap, edits, message_callback)
+
+    def _update_snapshot_by_edits(self, snap: Snapshot, edits: list[SnapEditAction], message_callback: MessageCallback | None) -> Path | None:
+        """Run the shared backup and edit workflow.
+
+        Args:
+            snap (Snapshot): Desired snapshot model.
+            edits (list[SnapEditAction]): Association edits to apply.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            Path | None: Published backup path, if created.
+        """
         with catalogue_access(self.path_catalogue):
             snap_manager = self._manager(snap)
+            backup = None
             if self.settings.bck_before_modify_enabled:
-                snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
+                backup = snap_manager.create_backup(self.settings.backup_path, "beforeEdit", BackupType.SNAPSHOT_DIRECTORY)
             snap_manager.snapshot.date_modified = datetime.now()
             snap_manager.snapshot.date_last_modified = datetime.now()
             snap_manager.update_from_actions_list(edits, message_callback=message_callback)
+            return backup
 
     def duplicate_by_id(self, snap_id: str, message_callback=None):
         """Duplicates a snapshot by its ID.
@@ -602,13 +687,27 @@ class SnapshotCatalogue:
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
         """
+        self.sync_with_result(snap_id, message_callback=message_callback)
+
+    def sync_with_result(self, snap_id: str, message_callback: MessageCallback | None = None) -> SnapshotOperationResult:
+        """Capture current associated folders and report the automatic backup.
+
+        Args:
+            snap_id (str): ID of the snapshot whose stored copies are updated.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            SnapshotOperationResult: Published backup path when a backup was created.
+        """
         with catalogue_access(self.path_catalogue):
             snap = self._require_snapshot(snap_id)
 
             snap_manager = self._manager(snap)
+            backup = None
             if self.settings.bck_before_modify_enabled:
-                snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
+                backup = snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
             snap_manager.update_associated_dirs_from_system(message_callback=message_callback)
+            return SnapshotOperationResult(backup)
 
     def remove_installed_copies(self, snap_id: str, message_callback=None):
         """Removes the installed copies of a snapshot's associated directories from the system.
@@ -629,13 +728,26 @@ class SnapshotCatalogue:
             SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
             ValueError: Backup storage is not configured or a registered destination is unsafe.
         """
+        self.remove_installed_copies_with_result(snap_id, message_callback=message_callback)
+
+    def remove_installed_copies_with_result(self, snap_id: str, message_callback: MessageCallback | None = None) -> SnapshotOperationResult:
+        """Remove registered copies and report the backup of their current state.
+
+        Args:
+            snap_id (str): ID of the snapshot whose installed copies are removed.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            SnapshotOperationResult: Published backup path, or no path when there are no copies to remove.
+        """
         with catalogue_access(self.path_catalogue):
             snap = self.get_by_id(snap_id)
             if not snap:
                 logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
-                return
+                return SnapshotOperationResult(None)
             snap_manager = self._manager(snap)
-            snap_manager.remove_installed_copies(message_callback=message_callback)
+            backup = snap_manager._remove_installed_copies(message_callback=message_callback)
+            return SnapshotOperationResult(backup)
 
     def get_removable_paths(self, snap_id: str) -> list[Path] | None:
         """Return currently removable installed paths; None marks an untracked legacy snapshot.
@@ -686,6 +798,26 @@ class SnapshotCatalogue:
             settings. Every copy is staged first. clear_destination=False retains unrelated top-level children. A
             post-commit SnapshotInstallMetadataError reports installed contents with incomplete metadata confirmation.
         """
+        self.install_with_result(snap, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
+
+    def install_with_result(
+        self,
+        snap: Snapshot,
+        clear_destination: bool = True,
+        progress_callback: SnapshotPercentCallback | None = None,
+        message_callback: MessageCallback | None = None,
+    ) -> SnapshotOperationResult:
+        """Install a snapshot and report the published backup of existing targets.
+
+        Args:
+            snap (Snapshot): Snapshot whose latest stored contents are installed.
+            clear_destination (bool): Replace the target roots when True, or merge their top-level entries when False.
+            progress_callback (SnapshotPercentCallback | None): Optional percentage observer.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            SnapshotOperationResult: Published backup path when a backup was created. Missing targets are omitted.
+        """
         with catalogue_access(self.path_catalogue):
             stored_snapshot = self.get_by_id(snap.id)
             if stored_snapshot is None:
@@ -694,13 +826,15 @@ class SnapshotCatalogue:
             # The caller may hold a model loaded before the snapshot was updated.
             # Installation must use the persisted manifest that matches on-disk data.
             snap_manager = self._manager(stored_snapshot)
+            backup = None
             if self.settings.bck_before_install_enabled:
-                snap_manager._create_backup_for_existing_associations(
+                backup = snap_manager._create_backup_for_existing_associations(
                     self.settings.backup_path,
                     "preinstall",
                 )
             snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
             snap.date_last_used = stored_snapshot.date_last_used
+            return SnapshotOperationResult(backup)
 
     def exists(self, snap_id: str) -> bool:
         """Checks if a snapshot with the given ID exists in the catalogue.

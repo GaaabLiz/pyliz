@@ -35,6 +35,8 @@ def test_original_exports_and_class_locations_are_preserved():
         "SnapshotBusyError",
         "SnapshotCatalogueStatistics",
         "SnapshotFileInfo",
+        "SnapshotOperationResult",
+        "SnapshotUpdateResult",
     ]
     for qualified_name in FIXTURE["classes"]:
         module_name, class_name = qualified_name.split(".")
