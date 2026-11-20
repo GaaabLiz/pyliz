@@ -169,20 +169,22 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
         self.assertFalse(install_dir.exists())
 
     def test_remove_installed_copies_blocks_critical_paths(self):
+        critical_root = Path(Path.cwd().anchor)
         snap = Snapshot(
             id=gen_random_string(8),
             name="RemCriticalSnap",
             desc="",
-            directories=[SnapDirAssociation(index=1, original_path=str(Path("/")), folder_id="remcrit")],
+            directories=[SnapDirAssociation(index=1, original_path=str(critical_root), folder_id="remcrit")],
         )
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
-        InstalledCopyRegistry(CATALOGUE_PATH).set(snap.id, [InstalledCopy("remcrit", Path("/"))])
+        InstalledCopyRegistry(CATALOGUE_PATH).set(snap.id, [InstalledCopy("remcrit", critical_root)])
         with self.assertRaises(ValueError) as ctx:
             mgr.remove_installed_copies()
         self.assertIn("critical system path", str(ctx.exception))
 
     def test_remove_preflights_all_paths_before_deleting_any_copy(self):
         safe_path = TEST_LOCAL_ROOT / "safe_copy_before_critical"
+        critical_root = Path(Path.cwd().anchor)
         safe_path.mkdir(parents=True)
         (safe_path / "keep.txt").write_text("keep")
         snap = Snapshot(
@@ -191,7 +193,7 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
             desc="",
             directories=[
                 SnapDirAssociation(index=1, original_path=str(safe_path), folder_id="safe-removal"),
-                SnapDirAssociation(index=2, original_path=str(Path("/")), folder_id="critical-removal"),
+                SnapDirAssociation(index=2, original_path=str(critical_root), folder_id="critical-removal"),
             ],
         )
         mgr = self._mgr(snap)
@@ -199,7 +201,7 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
             snap.id,
             [
                 InstalledCopy("safe-removal", safe_path),
-                InstalledCopy("critical-removal", Path("/")),
+                InstalledCopy("critical-removal", critical_root),
             ],
         )
 
