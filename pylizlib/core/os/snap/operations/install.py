@@ -246,9 +246,7 @@ class SnapshotInstaller:
         registry = InstalledCopyRegistry(self.storage.path_catalogue)
         records = registry.get(self.storage.snapshot.id)
         if records is None:
-            raise RuntimeError(
-                "Installed destinations are unknown for this legacy snapshot. Install it once with this version before automatic removal."
-            )
+            raise RuntimeError("Installed destinations are unknown for this legacy snapshot. Install it once with this version before automatic removal.")
         if any(record.state == "removing" for record in records):
             raise RuntimeError("A previous removal was interrupted; review the local backup before retrying.")
 
@@ -275,12 +273,7 @@ class SnapshotInstaller:
         registry.set(self.storage.snapshot.id, remaining)
         failures = []
         for record, path in targets:
-            pending = [
-                InstalledCopy(current.folder_id, current.path, "removing")
-                if (current.folder_id, current.path) == (record.folder_id, record.path)
-                else current
-                for current in remaining
-            ]
+            pending = [InstalledCopy(current.folder_id, current.path, "removing") if (current.folder_id, current.path) == (record.folder_id, record.path) else current for current in remaining]
             try:
                 registry.set(self.storage.snapshot.id, pending)
             except Exception as error:
@@ -315,12 +308,7 @@ class SnapshotInstaller:
                     failures.append(error)
                     continue
 
-                restored = [
-                    InstalledCopy(current.folder_id, current.path, "installed")
-                    if (current.folder_id, current.path) == (record.folder_id, record.path)
-                    else current
-                    for current in remaining
-                ]
+                restored = [InstalledCopy(current.folder_id, current.path, "installed") if (current.folder_id, current.path) == (record.folder_id, record.path) else current for current in remaining]
                 try:
                     registry.set(self.storage.snapshot.id, restored)
                     remaining = restored
@@ -646,9 +634,7 @@ class SnapshotInstaller:
             "entries": [],
             "staging_roots": [path.as_posix() for path in staging_roots],
             "clear_destination": clear_destination,
-            "installed_destinations": [
-                {"folder_id": replacement.folder_id, "path": replacement.install_loc.as_posix()} for replacement in replacements
-            ],
+            "installed_destinations": [{"folder_id": replacement.folder_id, "path": replacement.install_loc.as_posix()} for replacement in replacements],
         }
         if clear_destination:
             journal_payload["entries"] = [
@@ -693,10 +679,7 @@ class SnapshotInstaller:
 
         self.storage.snapshot.date_last_used = last_used
         try:
-            registry_records = [
-                InstalledCopy(record["folder_id"], Path(record["path"]))
-                for record in journal.payload["payload"].get("installed_destinations", [])
-            ]
+            registry_records = [InstalledCopy(record["folder_id"], Path(record["path"])) for record in journal.payload["payload"].get("installed_destinations", [])]
             InstalledCopyRegistry(self.storage.path_catalogue).register(self.storage.snapshot.id, registry_records)
         except Exception as error:
             metadata_published = getattr(error, "published", None)
