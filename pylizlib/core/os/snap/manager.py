@@ -408,7 +408,16 @@ class SnapshotManager:
             return SnapshotArchiveService(self._storage()).create_backup(backup_path, prefix, backup_type, is_export, message_callback)
 
     def _create_backup_for_existing_associations(self, backup_path: Path, prefix: str, message_callback=None) -> Path | None:
-        """Create a partial AD backup for existing install destinations before installation."""
+        """Create an AD backup for existing install destinations, or skip when none exist.
+
+        Args:
+            backup_path (Path): Directory receiving the completed archive.
+            prefix (str): Prefix for the backup filename.
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            Path | None: Published archive, or None when no destination exists to protect.
+        """
         with catalogue_access(self.path_catalogue):
             return SnapshotArchiveService(self._storage()).create_backup_for_existing_associations(backup_path, prefix, message_callback)
 
