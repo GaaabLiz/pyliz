@@ -79,9 +79,7 @@ class InstalledCopyRegistry:
             ValueError: The existing registry has an invalid format or destination entry.
         """
         data = self._read()
-        data["snapshots"][snapshot_id] = [
-            {"folder_id": record.folder_id, "path": record.path.as_posix(), "state": record.state} for record in records
-        ]
+        data["snapshots"][snapshot_id] = [{"folder_id": record.folder_id, "path": record.path.as_posix(), "state": record.state} for record in records]
         SnapshotSerializer.write_text(self.path, json.dumps(data, ensure_ascii=False, indent=2))
 
     def register(self, snapshot_id: str, records: list[InstalledCopy]) -> None:
@@ -106,12 +104,7 @@ class InstalledCopyRegistry:
                 current.append(record)
                 known.add(key)
             else:
-                current = [
-                    InstalledCopy(existing.folder_id, existing.path, "installed")
-                    if (existing.folder_id, existing.path) == key
-                    else existing
-                    for existing in current
-                ]
+                current = [InstalledCopy(existing.folder_id, existing.path, "installed") if (existing.folder_id, existing.path) == key else existing for existing in current]
         self.set(snapshot_id, current)
 
     def _read(self) -> dict:
