@@ -27,8 +27,10 @@ from pylizlib.core.os.snap.domain import (
     SnapshotBackupInfo,
     SnapshotCatalogueStatistics,
     SnapshotFileInfo,
+    SnapshotOperationResult,
     SnapshotSettings,
     SnapshotSortKey,
+    SnapshotUpdateResult,
 )
 from pylizlib.core.os.snap.integrity import IntegrityManifest, SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
@@ -88,4 +90,6 @@ __all__ = [
     "SnapshotBusyError",
     "SnapshotCatalogueStatistics",
     "SnapshotFileInfo",
+    "SnapshotOperationResult",
+    "SnapshotUpdateResult",
 ]

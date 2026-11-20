@@ -32,9 +32,10 @@ from pylizlib.core.os.windows.security import grant_everyone_full_control
 class SnapshotInstallMetadataError(RuntimeError):
     """Report that installation committed but completion metadata could not be confirmed.
 
-    ``metadata_published`` is True when the metadata adapter confirms that the
-    new JSON was published, False when it confirms publication did not happen,
-    and None when the adapter cannot report the publication state.
+    ``metadata_published`` is True when the adapter confirms that the field
+    named by ``metadata_field`` was published, False when it confirms
+    publication did not happen, and None when the adapter cannot report the
+    publication state.
 
     Attributes:
         installation_completed (bool): Always True; installed content is not rolled back.
@@ -214,7 +215,7 @@ class SnapshotInstaller:
         return [path for _, path in targets]
 
     @coordinated("storage.path_catalogue")
-    def remove_installed_copies(self, message_callback=None):
+    def remove_installed_copies(self, message_callback=None) -> Path | None:
         """Back up and remove only destinations recorded by a completed installation.
 
         Args:
@@ -222,7 +223,7 @@ class SnapshotInstaller:
                 exceptions propagate according to the calling operation.
 
         Returns:
-            None: Registered local copies are removed, with successful removals persisted individually.
+            Path | None: Published backup path, or None when there are no registered local copies to remove.
 
         Raises:
             RuntimeError: Legacy installation history is unknown or a previous removal needs review.
@@ -245,7 +246,7 @@ class SnapshotInstaller:
         targets = self._existing_registered_targets(records, reject_invalid=True)
         if not targets:
             registry.set(self.storage.snapshot.id, [])
-            return
+            return None
 
         validate_destructive_destinations(
             [(record.folder_id, path) for record, path in targets],
@@ -258,7 +259,7 @@ class SnapshotInstaller:
             raise ValueError("Cannot remove installed copies without a configured backup_path.")
 
         backup_associations = self._backup_associations(targets)
-        SnapshotArchiveService(self.storage).create_backup_for_associations(backup_path, "beforeRemove", backup_associations, message_callback)
+        backup = SnapshotArchiveService(self.storage).create_backup_for_associations(backup_path, "beforeRemove", backup_associations, message_callback)
 
         # Prune destinations that were already absent only after the full backup succeeds.
         remaining = [record for record, _ in targets]
@@ -333,6 +334,7 @@ class SnapshotInstaller:
 
         if failures:
             raise ExceptionGroup("Failed to remove one or more installed copies.", failures)
+        return backup
 
     def _existing_registered_targets(self, records: list[InstalledCopy], *, reject_invalid: bool) -> list[tuple[InstalledCopy, Path]]:
         """Select currently present real directories from a persisted install record."""
@@ -670,9 +672,11 @@ class SnapshotInstaller:
             ]
             InstalledCopyRegistry(self.storage.path_catalogue).register(self.storage.snapshot.id, registry_records)
         except Exception as error:
+            metadata_published = getattr(error, "published", None)
+            metadata_published = metadata_published if type(metadata_published) is bool else None
             durability_confirmed = getattr(error, "durability_confirmed", None)
             durability_confirmed = durability_confirmed if type(durability_confirmed) is bool else None
-            metadata_error = SnapshotInstallMetadataError(True, durability_confirmed)
+            metadata_error = SnapshotInstallMetadataError(metadata_published, durability_confirmed)
             metadata_error.metadata_field = "installed_destinations"
             raise metadata_error from error
         try:

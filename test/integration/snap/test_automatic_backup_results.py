@@ -1,0 +1,112 @@
+"""Verify that catalogue results report the archive actually produced."""
+
+from pathlib import Path
+from zipfile import ZipFile
+
+import pytest
+
+from pylizlib.core.os.snap import BackupType, SnapshotCatalogue, SnapshotSettings
+
+
+def test_install_reports_skipped_and_partial_backups(snapshot_workspace: Path) -> None:
+    saved, missing = (snapshot_workspace / label for label in ("saved", "missing"))
+    for folder in (saved, missing):
+        folder.mkdir()
+        (folder / "captured.txt").write_text("captured contents", encoding="utf-8")
+    backups = snapshot_workspace / "backups"
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=backups, backup_pre_install=True),
+    )
+    snap = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[saved, missing])
+    for folder in (saved, missing):
+        (folder / "captured.txt").unlink()
+        folder.rmdir()
+
+    result = catalogue.install_with_result(snap)
+    assert result.backup_path is None
+    assert catalogue.get_backup_count() == 0
+    assert (saved / "captured.txt").is_file()
+    assert (missing / "captured.txt").is_file()
+
+    (saved / "captured.txt").write_text("local contents", encoding="utf-8")
+    (missing / "captured.txt").unlink()
+    missing.rmdir()
+    result = catalogue.install_with_result(snap)
+    archive = result.backup_path
+    assert archive is not None and archive.parent == backups
+    assert catalogue.list_backups(backups)[0].path == archive
+    with ZipFile(archive) as backup:
+        files = [name for name in backup.namelist() if name.endswith("/captured.txt")]
+        assert len(files) == 1
+        assert backup.read(files[0]) == b"local contents"
+    assert (missing / "captured.txt").is_file()
+    assert (saved / "captured.txt").read_text(encoding="utf-8") == "captured contents"
+
+
+def test_failed_automatic_backup_stops_install(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    local_file = source / "data.txt"
+    local_file.write_text("captured", encoding="utf-8")
+    blocked_backup_directory = snapshot_workspace / "backups"
+    blocked_backup_directory.touch()
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=blocked_backup_directory, backup_pre_install=True),
+    )
+    snap = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    local_file.write_text("local", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        catalogue.install_with_result(snap)
+    assert local_file.read_text(encoding="utf-8") == "local"
+    assert snap.date_last_used is None
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_edit_sync_and_delete_report_only_their_own_backups(snapshot_workspace: Path, enabled: bool) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    backups = snapshot_workspace / "backups"
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=backups, backup_pre_modify=enabled, backup_pre_delete=enabled),
+    )
+    snap = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+
+    edited = catalogue.update_snapshot_with_result(snap.id, name="Edited")
+    assert edited.snapshot == catalogue.get_by_id(snap.id)
+    assert edited.snapshot.name == "Edited"
+    synced = catalogue.sync_with_result(snap.id)
+    deleted = catalogue.delete_with_result(edited.snapshot)
+
+    reported = [result.backup_path for result in (edited, synced, deleted)]
+    if enabled:
+        listed = catalogue.list_backups(backups)
+        assert len(set(reported)) == len(listed) == 3
+        assert {entry.path for entry in listed} == set(reported)
+        assert all(entry.backup_type is BackupType.SNAPSHOT_DIRECTORY for entry in listed)
+    else:
+        assert reported == [None, None, None]
+        assert catalogue.get_backup_count() == 0
+    assert catalogue.get_by_id(snap.id) is None
+
+
+def test_removal_reports_its_backup_and_skips_when_nothing_is_installed(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    backups = snapshot_workspace / "backups"
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(backup_path=backups))
+    snap = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    assert catalogue.remove_installed_copies_with_result(snap.id).backup_path is None
+    assert source.is_dir()
+
+    catalogue.install(snap)
+    (source / "local.txt").write_text("local", encoding="utf-8")
+    result = catalogue.remove_installed_copies_with_result(snap.id)
+    assert result.backup_path is not None
+    assert catalogue.list_backups(backups)[0].path == result.backup_path
+    assert not source.exists()
+    assert catalogue.remove_installed_copies_with_result(snap.id).backup_path is None
+    assert catalogue.get_backup_count() == 1

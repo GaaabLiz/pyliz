@@ -217,6 +217,28 @@ class SnapshotBackupInfo:
 
 
 @dataclass(frozen=True)
+class SnapshotOperationResult:
+    """Report the automatic backup produced by a successful catalogue operation.
+
+    Attributes:
+        backup_path (Path | None): Published archive path, or None when no automatic backup was created.
+    """
+
+    backup_path: Path | None
+
+
+@dataclass(frozen=True)
+class SnapshotUpdateResult(SnapshotOperationResult):
+    """Report a saved snapshot update and its automatic backup.
+
+    Attributes:
+        snapshot (Snapshot): Saved model after applying the edit.
+    """
+
+    snapshot: "Snapshot"
+
+
+@dataclass(frozen=True)
 class SnapshotFileInfo:
     """Identify a file within a captured association.
 

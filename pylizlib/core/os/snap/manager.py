@@ -320,8 +320,19 @@ class SnapshotManager:
             SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
             ValueError: Backup storage is not configured or a registered target is unsafe.
         """
+        self._remove_installed_copies(message_callback=message_callback)
+
+    def _remove_installed_copies(self, message_callback=None) -> Path | None:
+        """Remove installed copies and pass the archive path to the catalogue facade.
+
+        Args:
+            message_callback (MessageCallback | None): Optional status observer.
+
+        Returns:
+            Path | None: Published archive path when copies were backed up.
+        """
         with catalogue_access(self.path_catalogue):
-            SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
+            return SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
 
     def get_removable_paths(self) -> list[Path] | None:
         """Return registered, present install directories; None means the history is unknown.

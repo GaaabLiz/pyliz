@@ -111,6 +111,18 @@ path is removed from the registry; errors leave paths that still exist
 registered. An interruption during removal leaves the entry marked as pending
 and requires review before retrying.
 
+## Automatic backup results
+
+`SnapshotCatalogue.install_with_result()`, `delete_with_result()`,
+`sync_with_result()`, and `remove_installed_copies_with_result()` return a
+`SnapshotOperationResult`. `update_snapshot_with_result()` also returns
+the saved model in `result.snapshot`. In every case, `result.backup_path`
+is the published archive produced by that call, or `None` when no backup was
+created. For example, an installation can succeed while recreating all its
+targets and produce no preliminary archive. Errors still propagate. A backup
+published before a later error can remain on disk even though the operation
+raises and returns no result.
+
 ## Content search
 
 `SnapshotSearchParams` reads in chunks and limits candidates to `max_files`
