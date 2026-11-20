@@ -3,12 +3,13 @@
 This facade owns backup triggers and caller-visible orchestration. Storage
 scans and archive algorithms live in dedicated internal modules."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.snap.callbacks import MessageCallback, SnapshotPercentCallback
 from pylizlib.core.os.snap.domain import (
     BackupType,
     SnapEditAction,
@@ -21,6 +22,7 @@ from pylizlib.core.os.snap.domain import (
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
+from pylizlib.core.os.snap.operations.configuration import build_associations, configure_snapshot
 from pylizlib.core.os.snap.operations.statistics import collect_catalogue_statistics
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
@@ -210,6 +212,53 @@ class SnapshotCatalogue:
             snap_manager = self._manager(snap)
             snap_manager.create(progress_callback=progress_callback, message_callback=message_callback)
 
+    def create_snapshot(
+        self,
+        *,
+        snap_id: str,
+        name: str,
+        directory_paths: Sequence[str | Path],
+        desc: str = "",
+        author: str = "UnknownUser",
+        tags: list[str] | None = None,
+        data: Mapping[str, str] | None = None,
+        progress_callback: SnapshotPercentCallback | None = None,
+        message_callback: MessageCallback | None = None,
+    ) -> Snapshot:
+        """Capture and save a snapshot from metadata and an ordered list of source paths.
+
+        Args:
+            snap_id (str): Caller-supplied catalogue ID.
+            name (str): Display name.
+            directory_paths (Sequence[str | Path]): Source directories in order, with one entry per filesystem identity.
+            desc (str): Display description.
+            author (str): Snapshot author.
+            tags (list[str] | None): Initial tags, empty when omitted.
+            data (Mapping[str, str] | None): Initial custom metadata.
+            progress_callback (SnapshotPercentCallback | None): Observer receiving copy progress as a percentage.
+            message_callback (MessageCallback | None): Observer receiving one status message at a time.
+
+        Returns:
+            Snapshot: Saved snapshot with capture metadata and newly generated association IDs.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            FileExistsError: The snapshot ID already exists.
+            ValueError: Metadata, source paths or the configured association ID length is invalid.
+        """
+        with catalogue_access(self.path_catalogue):
+            snapshot = Snapshot(
+                id=snap_id,
+                name=name,
+                desc=desc,
+                author=author,
+                tags=tags.copy() if tags is not None else [],
+                data=dict(data) if data is not None else {},
+                directories=build_associations(directory_paths, self.settings.folder_id_length),
+            )
+            self.add(snapshot, progress_callback=progress_callback, message_callback=message_callback)
+            return snapshot
+
     def delete(self, snap: Snapshot, message_callback=None):
         """Deletes a snapshot from the catalogue.
 
@@ -322,6 +371,57 @@ class SnapshotCatalogue:
             snapshot = read_snapshot_by_id(self.path_catalogue, snap_id, self.settings)
             if snapshot is not None:
                 recover_storage_transactions(self._manager(snapshot)._storage())
+            return snapshot
+
+    def update_snapshot(
+        self,
+        snap_id: str,
+        *,
+        name: str | None = None,
+        desc: str | None = None,
+        tags: list[str] | None = None,
+        directory_paths: Sequence[str | Path] | None = None,
+        data_updates: Mapping[str, str] | None = None,
+        data_remove: Sequence[str] = (),
+        message_callback: MessageCallback | None = None,
+    ) -> Snapshot:
+        """Apply a partial update to the current stored snapshot using the normal edit and backup workflow.
+
+        Args:
+            snap_id (str): ID of the snapshot to edit.
+            name (str | None): Replacement name; None preserves the current value.
+            desc (str | None): Replacement description; None preserves it, an empty string clears it.
+            tags (list[str] | None): Replacement tags; None preserves them, an empty list clears them.
+            directory_paths (Sequence[str | Path] | None): Complete ordered source list when supplied, including an
+                empty list to remove all associations. None leaves associations and their indexes unchanged.
+                Paths that identify the same retained directories keep the stored spelling, IDs, and capture metadata.
+            data_updates (Mapping[str, str] | None): Custom values to add or replace. Unspecified keys are preserved.
+            data_remove (Sequence[str]): Custom keys to remove, ignoring missing keys. Updates take precedence
+                when a key is present in both arguments.
+            message_callback (MessageCallback | None): Observer receiving one status message at a time.
+
+        Returns:
+            Snapshot: Saved snapshot after the edit, including capture metadata for new associations.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            ValueError: The snapshot cannot be loaded, a field is invalid, or a path is duplicated or ambiguous.
+        """
+        with catalogue_access(self.path_catalogue):
+            previous = self.get_by_id(snap_id)
+            if previous is None:
+                raise ValueError(f"No snapshot found with ID {snap_id}")
+            snapshot = configure_snapshot(
+                previous,
+                self.settings.folder_id_length,
+                name=name,
+                desc=desc,
+                tags=tags,
+                directory_paths=directory_paths,
+                data_updates=data_updates,
+                data_remove=data_remove,
+            )
+            self.update_snapshot_by_objs(previous, snapshot, message_callback=message_callback)
             return snapshot
 
     def update_snapshot_by_objs(self, old: Snapshot, new: Snapshot, message_callback=None):

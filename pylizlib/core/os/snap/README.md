@@ -14,6 +14,7 @@ preserving formats, signatures, return values, and error behavior.
 | Association validation and operations | `association_model.py` |
 | Snapshot validation, metadata, and cloning | `snapshot_model.py` |
 | Creation, duplication, and deletion | `operations/lifecycle.py` |
+| Composing configurations from fields and paths | `operations/configuration.py` |
 | Installing and removing installed copies | `operations/install.py` |
 | Updating internal copies from the source | `operations/sync.py` |
 | Catalogue statistics | `operations/statistics.py` |
@@ -172,6 +173,24 @@ the ZIP files recognized by `list_backups()` in
 directory is missing or not configured, the count is zero.
 `get_statistics(include_backups=False)` skips the backup count and returns
 `backup_count=None`.
+
+## Creating and editing from fields
+
+`SnapshotCatalogue.create_snapshot(snap_id=..., name=..., directory_paths=...)`
+captures the supplied sources and returns the saved snapshot. The caller
+supplies the snapshot ID; new association IDs use the catalogue's current
+`SnapshotSettings.folder_id_length`.
+
+`SnapshotCatalogue.update_snapshot(snap_id, ...)` reads the stored snapshot
+and applies the existing edit and backup workflow under one catalogue lock.
+Omitted fields or fields set to `None` keep their stored values. When supplied,
+`directory_paths` replaces the complete list in the given order. Equivalent
+paths reuse the stored spelling, association IDs, copy names, and integrity
+metadata. Duplicate paths and matches to multiple existing associations are
+rejected. An empty list removes all associations from the catalogue entry.
+`data_updates` merges custom values into the stored mapping; use
+`data_remove` to explicitly remove keys. An update wins if a key appears in
+both arguments. Normal catalogue edit timestamps still apply.
 
 ## Sizes and capture times
 
