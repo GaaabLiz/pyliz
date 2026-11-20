@@ -79,7 +79,7 @@ class SnapshotLifecycle:
 
             had_original = self.storage.path_snapshot.exists() or self.storage.path_snapshot.is_symlink()
             install_registry = InstalledCopyRegistry(self.storage.path_catalogue)
-            if not had_original and install_registry.get(self.storage.snapshot.id) is None:
+            if not had_original:
                 install_registry.set(self.storage.snapshot.id, [])
             journal = SnapshotTransactionJournal.begin(
                 self.storage.path_catalogue,
@@ -122,6 +122,10 @@ class SnapshotLifecycle:
         """
         recover_storage_transactions(self.storage)
         remove_directory_or_move_to_temp(self.storage.root_path(), message_callback=message_callback)
+        try:
+            InstalledCopyRegistry(self.storage.path_catalogue).set(self.storage.snapshot.id, [])
+        except Exception as error:
+            logger.warning("Could not clear installed-copy history for deleted snapshot '%s': %s", self.storage.snapshot.id, error)
 
     @coordinated("storage.path_catalogue")
     def duplicate(self, message_callback=None):
@@ -148,7 +152,8 @@ class SnapshotLifecycle:
         install_registry = InstalledCopyRegistry(self.storage.path_catalogue)
         new_snap.name = self.storage.snapshot.name + " Copy"
         new_snap.date_created = datetime.now()
-        if install_registry.get(new_snap.id) is None:
+        duplicate_path = self.storage.path_catalogue / new_snap.folder_name
+        if not (duplicate_path.exists() or duplicate_path.is_symlink()):
             install_registry.set(new_snap.id, [])
 
         def prepare_duplicate(staging_path: Path) -> None:

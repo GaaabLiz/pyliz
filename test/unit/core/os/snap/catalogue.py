@@ -224,7 +224,10 @@ class TestSnapshotCatalogueCRUD(unittest.TestCase):
             self.cat.add(replacement)
 
         self.assertEqual({p.relative_to(dest): p.read_bytes() for p in dest.rglob("*") if p.is_file()}, before)
-        self.assertEqual(set(CATALOGUE_PATH.iterdir()), {dest, CATALOGUE_PATH / ".pyliz_snapshot.lock"})
+        self.assertEqual(
+            set(CATALOGUE_PATH.iterdir()),
+            {dest, CATALOGUE_PATH / ".pyliz_snapshot.lock", CATALOGUE_PATH / ".pyliz_installed_copies.json"},
+        )
 
     def test_get_all_skips_corrupted_entries(self):
         # Create a valid snapshot
@@ -463,6 +466,7 @@ class TestSnapshotCatalogueAssocUpdate(unittest.TestCase):
             self.cat.update_assoc_with_installed("nonexistent_id")
 
     def test_remove_installed_copies_deletes_all_original_paths(self):
+        self.cat.settings.backup_path = BACKUP_PATH
         install1 = INSTALL_DEST_PATH / "rem1"
         install2 = INSTALL_DEST_PATH / "rem2"
         install1.mkdir(parents=True)
@@ -480,6 +484,7 @@ class TestSnapshotCatalogueAssocUpdate(unittest.TestCase):
             ],
         )
         self.cat.add(snap)
+        self.cat.install(snap)
         self.cat.remove_installed_copies(snap.id)
         self.assertFalse(install1.exists())
         self.assertFalse(install2.exists())

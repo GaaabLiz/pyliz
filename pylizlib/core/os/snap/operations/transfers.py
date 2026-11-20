@@ -209,8 +209,7 @@ class CatalogueTransferService:
                 validate_staged_snapshot_tree(staged_path, snapshot_to_import.id, self.settings.json_filename)
 
             install_registry = InstalledCopyRegistry(self.path_catalogue)
-            if install_registry.get(snapshot_to_import.id) is None:
-                install_registry.set(snapshot_to_import.id, [])
+            install_registry.set(snapshot_to_import.id, [])
             # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 temp_dir_path,
@@ -257,8 +256,7 @@ class CatalogueTransferService:
                 return
 
             install_registry = InstalledCopyRegistry(self.path_catalogue)
-            if install_registry.get(snap_id) is None:
-                install_registry.set(snap_id, [])
+            install_registry.set(snap_id, [])
             # Copy the extracted folder to the catalogue
             publish_snapshot_tree(
                 potential_snap_dir,

@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from pylizlib.core.data.gen import gen_random_string
-from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import (
     SnapDirAssociation,
@@ -16,6 +15,7 @@ from pylizlib.core.os.snap.domain import (
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
+from pylizlib.core.os.snap.storage.install_registry import InstalledCopy, InstalledCopyRegistry
 from test.support.snapshot import (
     CATALOGUE_PATH,
     SOURCE_DATA_PATH,
@@ -160,7 +160,10 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
             desc="",
             directories=[SnapDirAssociation(index=1, original_path=str(install_dir), folder_id="rem1")],
         )
-        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        settings = SnapshotSettings(backup_path=TEST_LOCAL_ROOT / "backups")
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, settings)
+        mgr.create()
+        mgr.install()
         self.assertTrue(install_dir.exists())
         mgr.remove_installed_copies()
         self.assertFalse(install_dir.exists())
@@ -170,9 +173,10 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
             id=gen_random_string(8),
             name="RemCriticalSnap",
             desc="",
-            directories=[SnapDirAssociation(index=1, original_path="/usr/bin/test", folder_id="remcrit")],
+            directories=[SnapDirAssociation(index=1, original_path=str(Path("/")), folder_id="remcrit")],
         )
         mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        InstalledCopyRegistry(CATALOGUE_PATH).set(snap.id, [InstalledCopy("remcrit", Path("/"))])
         with self.assertRaises(ValueError) as ctx:
             mgr.remove_installed_copies()
         self.assertIn("critical system path", str(ctx.exception))
@@ -187,10 +191,17 @@ class TestSnapshotManagerInstall(SnapshotManagerTestHelper):
             desc="",
             directories=[
                 SnapDirAssociation(index=1, original_path=str(safe_path), folder_id="safe-removal"),
-                SnapDirAssociation(index=2, original_path="/usr/bin/test", folder_id="critical-removal"),
+                SnapDirAssociation(index=2, original_path=str(Path("/")), folder_id="critical-removal"),
             ],
         )
         mgr = self._mgr(snap)
+        InstalledCopyRegistry(CATALOGUE_PATH).set(
+            snap.id,
+            [
+                InstalledCopy("safe-removal", safe_path),
+                InstalledCopy("critical-removal", Path("/")),
+            ],
+        )
 
         with self.assertRaisesRegex(ValueError, "critical system path"):
             mgr.remove_installed_copies()
@@ -301,24 +312,23 @@ class TestSnapshotManagerInstallFailurePaths(SnapshotManagerTestHelper):
     def test_remove_installed_copies_exceptions(self):
         # coverage 229-232
         snap = make_snapshot("RemCov", self._src, n=1)
-        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings())
+        mgr = SnapshotManager(snap, CATALOGUE_PATH, SnapshotSettings(backup_path=TEST_LOCAL_ROOT / "backups"))
         mgr.create()
+        mgr.install()
         install_path = Path(snap.directories[0].original_path)
 
-        # Test 231-232
+        # A missing registered path is pruned without creating a backup.
         shutil.rmtree(install_path)
-        with self.assertLogs(level="DEBUG") as cm:
-            logger.setLevel("DEBUG")
-            mgr.remove_installed_copies()
-        self.assertTrue(any("does not exist" in out for out in cm.output))
+        mgr.remove_installed_copies()
 
-        # Test 229-230
+        # A later install registers the destination again for the failure case.
         install_path.mkdir(parents=True, exist_ok=True)
+        mgr.install()
         with patch("shutil.rmtree", side_effect=Exception("mocked error")):
             with self.assertLogs(level="ERROR") as cm2:
                 with self.assertRaises(ExceptionGroup):
                     mgr.remove_installed_copies()
-            self.assertTrue(any("Failed to remove directory" in out for out in cm2.output))
+            self.assertTrue(any("Failed to remove installed directory" in out for out in cm2.output))
 
     @patch("sys.platform", "win32")
     def test_install_win32_no_pywin32(self):

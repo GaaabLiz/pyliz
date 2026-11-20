@@ -141,7 +141,9 @@ class TestSnapshotManagerDirectoryManagement(SnapshotManagerTestHelper):
     def test_remove_installed_copies_reports_failures_after_attempting_other_targets(self):
         snap = make_snapshot("BulkRemovalFailure", self._src, n=2)
         mgr = self._mgr(snap)
+        mgr.settings.backup_path = CATALOGUE_PATH / "backups"
         mgr.create()
+        mgr.install()
         before = mgr.path_snapshot_json.read_bytes()
         real_unlink = os.unlink
 
