@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from pylizlib.core.os.snap import BackupType, SnapDirAssociation, Snapshot, SnapshotCatalogue, SnapshotManager, SnapshotSettings
+from pylizlib.core.os.snap.storage.install_registry import InstalledCopy, InstalledCopyRegistry
 
 
 @pytest.mark.parametrize("operation", ["install-replace", "install-merge", "restore-ad", "remove"])
@@ -30,6 +31,11 @@ def test_link_followed_by_parent_component_never_selects_another_target(snapshot
     snapshot = Snapshot("linked-parent", "linked parent", "", directories=[SnapDirAssociation(0, str(original), "folder")])
     catalogue = SnapshotCatalogue(root / "catalogue", settings)
     catalogue.add(snapshot)
+    if operation == "remove":
+        InstalledCopyRegistry(catalogue.path_catalogue).set(
+            snapshot.id,
+            [InstalledCopy("folder", Path(snapshot.directories[0].original_path))],
+        )
     manager = SnapshotManager(snapshot, catalogue.path_catalogue, settings)
     archive = manager.create_backup(root / "exports", "source", BackupType.ASSOCIATED_DIRECTORIES)
     (actual / "payload").write_bytes(b"live source")
