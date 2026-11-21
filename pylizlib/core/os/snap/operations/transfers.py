@@ -4,11 +4,13 @@ import json
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from typing import Protocol
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotSettings
+from pylizlib.core.os.snap.integrity import build_integrity_manifest
 from pylizlib.core.os.snap.operations.backup.associations import association_identities
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -197,17 +199,6 @@ class CatalogueTransferService:
             if self.query.exists(snapshot_to_import.id):
                 raise ValueError(f"A snapshot with the ID '{snapshot_to_import.id}' already exists in the catalogue.")
 
-            def validate_import(staged_path: Path) -> None:
-                """Check copied metadata and association directories before publication.
-
-                Args:
-                    staged_path (Path): Completed private snapshot tree to inspect before publication.
-
-                Returns:
-                    None: No return value.
-                """
-                validate_staged_snapshot_tree(staged_path, snapshot_to_import.id, self.settings.json_filename)
-
             install_registry = InstalledCopyRegistry(self.path_catalogue)
             install_registry.set(snapshot_to_import.id, [])
 
@@ -216,7 +207,7 @@ class CatalogueTransferService:
                 temp_dir_path,
                 snapshot_to_import.id,
                 self.path_catalogue,
-                prepare_staging=validate_import,
+                prepare_staging=partial(self._prepare_staged_import, snapshot_id=snapshot_to_import.id),
                 copy_strategy=self.settings.copy_strategy,
                 operation="Snapshot import",
             )
@@ -225,8 +216,8 @@ class CatalogueTransferService:
     def _import_entry(self, potential_snap_dir: Path) -> None:
         """Import one extracted entry; log and skip per-entry failures as before.
 
-        Only its raw ID is inspected here. Full domain validation belongs to
-        single-snapshot import and must not be added to this legacy batch flow.
+        With legacy migration enabled, validate and prepare each entry in
+        staging. Preserve the original ID-only batch behavior by default.
 
         Args:
             potential_snap_dir (Path): One extracted batch-import entry; non-directories and invalid entries are
@@ -264,6 +255,7 @@ class CatalogueTransferService:
                 potential_snap_dir,
                 snap_id,
                 self.path_catalogue,
+                prepare_staging=partial(self._prepare_staged_import, snapshot_id=snap_id) if self.settings.allow_unverified_legacy_snapshots else None,
                 copy_strategy=self.settings.copy_strategy,
                 operation="Catalogue import",
             )
@@ -271,6 +263,36 @@ class CatalogueTransferService:
 
         except Exception as e:
             logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
+
+    def _prepare_staged_import(self, staged_path: Path, snapshot_id: str) -> None:
+        """Validate a private staged import and upgrade its legacy metadata when enabled.
+
+        Args:
+            staged_path (Path): Complete private copy, before it is published.
+            snapshot_id (str): Snapshot ID expected in the staged metadata.
+
+        Returns:
+            None: Existing manifests were checked and any legacy migration completed.
+
+        Notes:
+            Newly recorded hashes describe the imported bytes. Legacy storage names
+            and association IDs remain stable. Original source paths are never scanned.
+        """
+        json_filename = self.settings.json_filename
+        snapshot = validate_staged_snapshot_tree(staged_path, snapshot_id, json_filename)
+        if not self.settings.allow_unverified_legacy_snapshots:
+            return
+
+        json_path = staged_path / json_filename
+        raw = json.loads(SnapshotSerializer.read_text(json_path))
+        migrated = "capture_started_at" not in raw or "capture_completed_at" not in raw
+        migrated |= any("storage_name" not in association for association in raw.get("directories", []))
+        for association in snapshot.directories:
+            if association.integrity_manifest is None:
+                association.record_captured_content(build_integrity_manifest(staged_path / association.directory_name))
+                migrated = True
+        if migrated:
+            SnapshotSerializer.to_json(snapshot, json_path)
 
     def _read_imported_snapshot(self, temp_dir_path: Path) -> Snapshot:
         """Read extracted metadata and validate its optional SD export manifest.

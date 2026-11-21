@@ -191,3 +191,36 @@ def test_sd_restore_verifies_the_copied_tree_instead_of_only_the_archive(snapsho
     assert isinstance(error.value.__cause__, SnapshotIntegrityError)
     assert manager.path_snapshot_json.read_bytes() == before_json
     assert (manager.path_snapshot / association_name / "payload").read_bytes() == b"capture"
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_import_migrates_legacy_storage_name_and_manifest(snapshot_workspace: Path, batch: bool):
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(allow_unverified_legacy_snapshots=True))
+    original_path = snapshot_workspace / "original-missing" / "data"
+    metadata = {
+        "id": "legacy",
+        "name": "Legacy",
+        "desc": "",
+        "directories": [{"folder_id": "stable-id", "index": 1, "original_path": str(original_path)}],
+    }
+    archive_path = snapshot_workspace / "legacy.zip"
+    prefix = "legacy/" if batch else ""
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(f"{prefix}snapshot.json", json.dumps(metadata))
+        archive.writestr(f"{prefix}1-data/settings.txt", b"legacy content")
+    original_archive = archive_path.read_bytes()
+
+    (catalogue.import_catalogue if batch else catalogue.import_snapshot)(archive_path)
+
+    stored_metadata = json.loads((catalogue.path_catalogue / "legacy" / "snapshot.json").read_text())
+    (association,) = stored_metadata["directories"]
+    assert association["folder_id"] == "stable-id"
+    assert association["storage_name"] == "1-data"
+    assert association["integrity_manifest"]["settings.txt"]["size"] == len(b"legacy content")
+    assert archive_path.read_bytes() == original_archive
+
+    catalogue.settings.allow_unverified_legacy_snapshots = False
+    snapshot = catalogue.get_by_id("legacy")
+    assert snapshot is not None
+    catalogue.install(snapshot)
+    assert (original_path / "settings.txt").read_bytes() == b"legacy content"
