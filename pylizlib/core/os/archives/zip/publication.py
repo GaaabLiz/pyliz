@@ -2,7 +2,7 @@
 
 import tempfile
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
@@ -32,13 +32,20 @@ def write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], messa
     return _write_verified_zip(zip_path, files, message_callback, replace_existing=True)
 
 
-def write_verified_zip_exclusive(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback=None) -> Path:
+def write_verified_zip_exclusive(
+    zip_path: Path,
+    files: Iterable[tuple[Path, Path]],
+    message_callback=None,
+    *,
+    validate: Callable[[Path], None] | None = None,
+) -> Path:
     """Publish a verified ZIP using an exclusive same-filesystem hard link.
 
     Args:
         zip_path (Path): Final path, which must not already exist.
         files (Iterable[tuple[Path, Path]]): Source entries and relative archive names.
         message_callback (Callable[[str], None] | None): Optional per-member observer.
+        validate (Callable[[Path], None] | None): Optional validation of the closed archive before publication.
 
     Returns:
         Path: Published ZIP path, after the temporary archive has passed CRC checks.
@@ -48,10 +55,10 @@ def write_verified_zip_exclusive(zip_path: Path, files: Iterable[tuple[Path, Pat
         OSError: If writing or hard-link publication fails.
         zipfile.BadZipFile: If CRC verification fails.
     """
-    return _write_verified_zip(zip_path, files, message_callback, replace_existing=False)
+    return _write_verified_zip(zip_path, files, message_callback, replace_existing=False, validate=validate)
 
 
-def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback, *, replace_existing: bool) -> Path:
+def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], message_callback, *, replace_existing: bool, validate: Callable[[Path], None] | None = None) -> Path:
     """Write one sibling temporary ZIP and publish it with the selected policy.
 
     Args:
@@ -60,6 +67,7 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
         message_callback (Callable[[str], None] | None): Per-member observer.
         replace_existing (bool): Replace the final entry when True, otherwise link exclusively. Cleanup errors are
             logged without hiding the main result.
+        validate (Callable[[Path], None] | None): Optional checks to run before CRC verification and publication.
 
     Returns:
         Path: Final path after CRC verification and publication.
@@ -84,6 +92,9 @@ def _write_verified_zip(zip_path: Path, files: Iterable[tuple[Path, Path]], mess
                 if source.is_dir() and not archive_name.endswith("/"):
                     archive_name += "/"
                 archive.write(source, arcname=archive_name)
+
+        if validate is not None:
+            validate(temporary_path)
 
         # Reopen after close: finalization can fail, and each member must
         # pass its CRC check before the normal filename becomes visible.

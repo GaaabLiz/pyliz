@@ -290,7 +290,7 @@ class SnapshotCatalogue:
             SnapshotOperationResult: Published backup path when a backup was created.
         """
         with catalogue_access(self.path_catalogue):
-            snap_manager = self._manager(snap)
+            snap_manager = self._manager(self._require_snapshot(snap.id))
             backup = None
             if self.settings.bck_before_delete_enabled:
                 backup = snap_manager.create_backup(self.settings.backup_path, "beforeDelete", BackupType.SNAPSHOT_DIRECTORY)
@@ -337,13 +337,15 @@ class SnapshotCatalogue:
         """
         return len(self.get_all(strict=strict))
 
-    def get_statistics(self, *, include_backups: bool = True, strict: bool = False) -> SnapshotCatalogueStatistics:
+    def get_statistics(self, *, include_backups: bool = True, strict: bool = False, snapshots: list[Snapshot] | None = None) -> SnapshotCatalogueStatistics:
         """Summarize the published contents of this catalogue after normal snapshot recovery.
 
         Args:
             include_backups (bool): Count recognized ZIP archives in the configured backup directory. False skips
                 all backup I/O and sets backup_count to None.
             strict (bool): Propagate filesystem errors when reading catalogue metadata, as in get_all().
+            snapshots (list[Snapshot] | None): Previously loaded snapshots from this catalogue. When supplied,
+                calculate statistics for that list without reloading catalogue metadata.
 
         Returns:
             SnapshotCatalogueStatistics: Counts, logical byte sizes, largest file and creation date range.
@@ -361,7 +363,8 @@ class SnapshotCatalogue:
             using file metadata. Legacy scanning errors propagate even in tolerant catalogue mode.
         """
         with catalogue_access(self.path_catalogue, write=False):
-            snapshots = self.get_all(strict=strict)
+            if snapshots is None:
+                snapshots = self.get_all(strict=strict)
             backup_count = self._backups().count_backups() if include_backups else None
             return collect_catalogue_statistics(self.path_catalogue, snapshots, backup_count)
 
@@ -599,6 +602,27 @@ class SnapshotCatalogue:
 
             # Use the existing create_backup method with a specific prefix for export
             snap_manager.create_backup(destination_path, "export", BackupType.ASSOCIATED_DIRECTORIES, is_export=True, message_callback=message_callback)
+
+    def export_captured_assoc_dirs(self, snap_id: str, destination_path: Path, message_callback: MessageCallback | None = None) -> None:
+        """Export the captured copies as an associated-directory ZIP.
+
+        Args:
+            snap_id (str): ID of the stored snapshot to export.
+            destination_path (Path): Folder receiving the completed archive.
+            message_callback (MessageCallback | None): Optional per-entry status observer.
+
+        Returns:
+            None: The associated-directory archive is written to destination_path.
+
+        Raises:
+            SnapshotIncompleteError: A declared captured directory is missing.
+            SnapshotBusyError: Another operation owns the catalogue.
+        """
+        from pylizlib.core.os.snap.operations.backup.creation import BackupCreator
+
+        with catalogue_access(self.path_catalogue):
+            storage = self._manager(self._require_snapshot(snap_id))._storage()
+            BackupCreator(storage).export_captured_associations(destination_path, message_callback)
 
     def export_snapshot(self, snap_id: str, destination_path: Path, message_callback=None):
         """Exports the entire snapshot directory (the internal backup) to a zip file.

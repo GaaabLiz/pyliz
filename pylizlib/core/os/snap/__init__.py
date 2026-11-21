@@ -42,6 +42,7 @@ from pylizlib.core.os.snap.searcher import (
     SnapshotProgressCallback,
     SnapshotSearcher,
     SnapshotSearchParams,
+    SnapshotSearchReport,
     SnapshotSearchResult,
 )
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
@@ -92,4 +93,5 @@ __all__ = [
     "SnapshotFileInfo",
     "SnapshotOperationResult",
     "SnapshotUpdateResult",
+    "SnapshotSearchReport",
 ]

@@ -102,7 +102,10 @@ included in exports. `SnapshotCatalogue.get_removable_paths(id)` returns
 registered paths that still exist as real directories; `None` indicates a
 legacy snapshot with no verifiable installation history. Automatic removal
 refuses to proceed in that case because `date_last_used` does not identify
-which paths were installed.
+which paths were installed. A completed installation transfers each destination
+to the snapshot that installed it in the same registry update. A destination
+with multiple owners in an older registry requires reinstallation to establish
+which snapshot owns it before automatic removal.
 
 Removal of registered copies first creates an AD backup of their current local
 state. It requires `SnapshotSettings.backup_path`; if it is unset or backup
@@ -149,6 +152,12 @@ longer span may be found when it fits in the current window, but matches across
 chunks and the EOF tail are not guaranteed. Only `False` stops the current
 snapshot search; the callback is also called while reading, so it can stop a
 very large file.
+
+`search_with_report()` reports cancellation and detects additional matches or
+candidate files beyond the configured limits. It raises `ValueError` for
+invalid regex syntax and propagates read, decoding and match errors so the
+caller can report a failed snapshot search. `validate_query()` allows checking
+syntax before starting a background job. The existing list-returning methods keep their behavior.
 
 ## Catalogue statistics
 
@@ -266,6 +275,12 @@ archive leaves the previous snapshot intact. The same check protects single
 imports and duplication. Legacy metadata without a manifest remains explicitly
 unverified; `allow_unverified_legacy_snapshots` continues to control its
 installation and does not imply integrity guarantees.
+
+Before deleting a snapshot, the catalogue reloads its metadata under the same
+lock as backup creation and removal. Before publication, a backup ZIP passes the
+same member and size checks used to preflight restore. Associated-directory
+exports can read current files with `export_assoc_dirs()` or the captured copies
+with `export_captured_assoc_dirs()`. Both use the association layout of AD ZIPs.
 
 ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
 the range representable by the format. Before extraction, import and restore

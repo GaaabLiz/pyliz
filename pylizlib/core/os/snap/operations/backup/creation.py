@@ -15,6 +15,7 @@ from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation
 from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, build_backup_manifest
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename
+from pylizlib.core.os.snap.storage.archives import validate_zip_archive
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
@@ -119,6 +120,21 @@ class BackupCreator:
         assert result is not None
         return result
 
+    @coordinated("storage.path_catalogue")
+    def export_captured_associations(self, destination: Path, message_callback=None) -> Path:
+        """Publish an AD export sourced from the stored association trees.
+
+        Args:
+            destination (Path): Folder receiving the completed export.
+            message_callback (MessageCallback | None): Optional per-entry status observer.
+
+        Returns:
+            Path: Published archive path.
+        """
+        result = self._create_backup(destination, "export", BackupType.ASSOCIATED_DIRECTORIES, True, message_callback, captured=True)
+        assert result is not None
+        return result
+
     def _create_backup(
         self,
         backup_path: Path,
@@ -129,6 +145,7 @@ class BackupCreator:
         *,
         only_existing: bool = False,
         association_subset: list[SnapDirAssociation] | None = None,
+        captured: bool = False,
     ) -> Path | None:
         """Create and publish an archive, optionally selecting a subset of AD roots.
 
@@ -141,6 +158,7 @@ class BackupCreator:
             only_existing (bool): Skip absent association destinations and return None when none exist.
             association_subset (list[SnapDirAssociation] | None): Exact AD roots to archive, or None to use the
                 snapshot's associations.
+            captured (bool): Read AD content from stored copies instead of original paths.
 
         Returns:
             Path | None: Published verified archive, or None when an only-existing backup has no targets.
@@ -178,12 +196,14 @@ class BackupCreator:
                     )
 
             base_zip_name = build_backup_filename(self.storage.snapshot.id, prefix, backup_type, timestamp, is_export)
-            archived_roots = [Path(association.original_path) for association in (associations or [])] if backup_type == BackupType.ASSOCIATED_DIRECTORIES else [self.storage.root_path()]
+            archived_roots = (
+                [self._association_source(association, captured=captured) for association in (associations or [])] if backup_type == BackupType.ASSOCIATED_DIRECTORIES else [self.storage.root_path()]
+            )
             self._validate_archive_destination(backup_path / base_zip_name, archived_roots)
 
             backup_path.mkdir(parents=True, exist_ok=True)
 
-            entries = list(self._files_to_archive(backup_type, associations=associations))
+            entries = list(self._files_to_archive(backup_type, associations=associations, captured=captured))
             if any(archive_name == Path(BACKUP_MANIFEST_NAME) for _, archive_name in entries):
                 raise ValueError(f"Snapshot content conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
             manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp, associations=associations)
@@ -296,7 +316,19 @@ class BackupCreator:
                     logger.warning(f"Could not remove unfinished backup manifest '{temporary_path}': {error}")
             raise
 
-    def _files_to_archive(self, backup_type: BackupType, *, associations: list[SnapDirAssociation] | None = None):
+    def _association_source(self, association: SnapDirAssociation, *, captured: bool) -> Path:
+        """Resolve the source tree selected for an AD archive.
+
+        Args:
+            association (SnapDirAssociation): Association supplying both source locations.
+            captured (bool): Select the copy stored in the catalogue.
+
+        Returns:
+            Path: Root of the original or captured association tree.
+        """
+        return self.storage.child_path(association.directory_name) if captured else Path(association.original_path)
+
+    def _files_to_archive(self, backup_type: BackupType, *, associations: list[SnapDirAssociation] | None = None, captured: bool = False):
         """Enumerate stored or live files using their distinct existing link policies.
 
         Args:
@@ -304,6 +336,7 @@ class BackupCreator:
                 (SD).
             associations (list[SnapDirAssociation] | None): Optional AD subset to enumerate; None selects every
                 association in the snapshot.
+            captured (bool): Read AD content from the stored association trees.
 
         Yields:
             tuple[Path, Path]: Source entry and relative archive name, including empty directories.
@@ -317,7 +350,7 @@ class BackupCreator:
             missing_folders = []
             source_associations = self.storage.snapshot.directories if associations is None else associations
             for association in source_associations:
-                folder = Path(association.original_path)
+                folder = self._association_source(association, captured=captured)
                 try:
                     mode = folder.stat().st_mode
                 except (FileNotFoundError, NotADirectoryError):
@@ -351,8 +384,22 @@ class BackupCreator:
             for tree_entry in iter_tree_entries_strict(snapshot_root):
                 yield tree_entry, tree_entry.relative_to(self.storage.path_snapshot)
 
-    @staticmethod
-    def _publish_unique_archive(backup_path: Path, base_zip_name: str, entries: list[tuple[Path, Path]], message_callback=None) -> Path:
+    def _validate_written_archive(self, archive: Path) -> None:
+        """Apply the restore member and resource checks before publication.
+
+        Args:
+            archive (Path): Completed ZIP in private staging.
+
+        Returns:
+            None: The archive passed restore preflight.
+        """
+        validate_zip_archive(
+            archive,
+            max_entries=self.storage.settings.max_archive_entries,
+            max_uncompressed_bytes=self.storage.settings.max_archive_uncompressed_bytes,
+        )
+
+    def _publish_unique_archive(self, backup_path: Path, base_zip_name: str, entries: list[tuple[Path, Path]], message_callback=None) -> Path:
         """Retry only final-name collisions while retaining exclusive publication.
 
         Args:
@@ -376,7 +423,7 @@ class BackupCreator:
                 collision_index += 1
                 continue
             try:
-                return _write_verified_zip_exclusive(zip_path, entries, message_callback)
+                return _write_verified_zip_exclusive(zip_path, entries, message_callback, validate=self._validate_written_archive)
             except FileExistsError:
                 if not (zip_path.exists() or zip_path.is_symlink()):
                     raise
