@@ -285,7 +285,10 @@ and rejects mismatches. Imports leave the source archive untouched.
 
 Before deleting a snapshot, the catalogue reloads its metadata under the same
 lock as backup creation and removal. Before publication, a backup ZIP passes the
-same member and size checks used to preflight restore. Associated-directory
+same member and size checks used to preflight restore. SD ZIPs also check every
+association root and verify archived bytes against any recorded integrity
+manifest. A failed check prevents automatic deletion, edit, or synchronization
+from proceeding with an unusable backup. Associated-directory
 exports can read current files with `export_assoc_dirs()` or the captured copies
 with `export_captured_assoc_dirs()`. Both use the association layout of AD ZIPs.
 

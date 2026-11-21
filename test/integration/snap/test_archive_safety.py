@@ -23,6 +23,27 @@ def _captured_snapshot(workspace: Path):
     return catalogue, snapshot, manager, archive
 
 
+@pytest.mark.parametrize("damage", ["changed_file", "missing_association"])
+def test_pre_delete_backup_refuses_unrestorable_content(snapshot_workspace: Path, damage: str) -> None:
+    catalogue, snapshot, manager, _ = _captured_snapshot(snapshot_workspace)
+    catalogue.settings.backup_path = snapshot_workspace / "automatic-backups"
+    catalogue.settings.backup_pre_delete = True
+    association_root = manager.path_snapshot / snapshot.directories[0].directory_name
+    if damage == "changed_file":
+        (association_root / "payload").write_bytes(b"changed")
+        expected_error = SnapshotIntegrityError
+    else:
+        association_root.rename(association_root.with_name("moved"))
+        expected_error = FileNotFoundError
+
+    with pytest.raises(expected_error):
+        catalogue.delete_with_result(snapshot)
+
+    assert catalogue.exists(snapshot.id)
+    assert (manager.path_snapshot / catalogue.settings.json_filename).is_file()
+    assert list(catalogue.settings.backup_path.iterdir()) == []
+
+
 @pytest.mark.parametrize("entry_point", ["import_snapshot", "import_catalogue", "restore_backup"])
 @pytest.mark.parametrize("transaction_name", [".pyliz_transactions", ".PYLIZ_TRANSACTIONS", ".pyliz_transactions. ", ".pyliz_snapshot.lock", ".PYLIZ_SNAPSHOT.LOCK", ".pyliz_snapshot.lock. "])
 def test_archive_journals_are_rejected_before_publication(snapshot_workspace: Path, entry_point: str, transaction_name: str) -> None:

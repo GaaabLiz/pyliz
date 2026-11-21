@@ -65,6 +65,10 @@ def test_create_and_edit_from_fields(snapshot_workspace: Path) -> None:
     assert (root / new.directory_name / "data.txt").read_text(encoding="utf-8") == "added"
     assert catalogue.get_by_id(snapshot.id) == updated
     assert catalogue.get_backup_count() == 1
+    (before_edit,) = catalogue.list_backups(catalogue.settings.backup_path)
+    restored_catalogue = SnapshotCatalogue(snapshot_workspace / "restored")
+    restored_catalogue.restore_backup(before_edit.path)
+    assert restored_catalogue.get_by_id(snapshot.id) == snapshot
 
     metadata_edit = catalogue.update_snapshot(snapshot.id, desc="", tags=[], data_updates={"hidden": ""})
     assert metadata_edit.directories == updated.directories
