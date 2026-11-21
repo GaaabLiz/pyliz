@@ -1,0 +1,45 @@
+name: Set up the Python project
+description: Install uv and prepare the locked development or native build environment
+
+inputs:
+  uv-version:
+    description: Exact uv version used by the workflow
+    required: true
+  python-version:
+    description: Python version override for the version in project.mk
+    default: ''
+  profile:
+    description: Use dev for development tools or build to include PyInstaller
+    default: dev
+
+runs:
+  using: composite
+  steps:
+    - name: Install Make
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: choco install make --yes
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+        enable-cache: true
+
+    - name: Sync project dependencies
+      shell: bash
+      env:
+        SETUP_PROJECT_PYTHON: ${{ inputs.python-version }}
+        SETUP_PROJECT_PROFILE: ${{ inputs.profile }}
+      run: |
+        if [ -n "$SETUP_PROJECT_PYTHON" ]; then
+          export CI_PYTHON_VERSION="$SETUP_PROJECT_PYTHON"
+          export UV_PYTHON="$SETUP_PROJECT_PYTHON"
+          echo "UV_PYTHON=$SETUP_PROJECT_PYTHON" >> "$GITHUB_ENV"
+        fi
+        case "$SETUP_PROJECT_PROFILE" in
+          dev) make ci-setup ;;
+          build) make ci-setup-build ;;
+          *) echo "Unknown project setup profile: $SETUP_PROJECT_PROFILE" >&2; exit 1 ;;
+        esac

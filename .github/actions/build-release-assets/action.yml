@@ -1,0 +1,39 @@
+name: Build release assets
+description: Build, verify, and upload release assets for the current runner
+
+inputs:
+  uv-version:
+    description: Exact uv version used by the release workflow
+    required: true
+  python-version:
+    description: Python version used for the native build
+    required: true
+  artifact-name:
+    description: Name of the platform artifact downloaded by release jobs
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up the native build environment
+      uses: ./.github/actions/setup-project
+      with:
+        uv-version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+        profile: build
+
+    - name: Build application assets
+      shell: bash
+      run: make ci-build-release-assets
+
+    - name: Verify and stage application assets
+      id: assets
+      shell: bash
+      run: make ci-stage-release-artifacts
+
+    - name: Upload platform assets
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.assets.outputs.directory }}
+        if-no-files-found: error

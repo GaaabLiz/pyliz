@@ -15,14 +15,11 @@ jobs:
     outputs:
       python_version: ${{ steps.config.outputs.python_version }}
       uv_version: ${{ steps.config.outputs.uv_version }}
-      release_branch: ${{ steps.config.outputs.release_branch }}
       build_linux: ${{ steps.config.outputs.build_linux }}
       build_macos: ${{ steps.config.outputs.build_macos }}
       build_windows: ${{ steps.config.outputs.build_windows }}
       enable_release_docs: ${{ steps.config.outputs.enable_release_docs }}
-      release_artifacts: ${{ steps.config.outputs.release_artifacts }}
-      changelog_file: ${{ steps.config.outputs.changelog_file }}
-      release_notes_file: ${{ steps.config.outputs.release_notes_file }}
+      release_notes_filename: ${{ steps.config.outputs.release_notes_filename }}
       enable_pypi_publish: ${{ steps.config.outputs.enable_pypi_publish }}
       pypi_environment: ${{ steps.config.outputs.pypi_environment }}
       enable_dockerhub_publish: ${{ steps.config.outputs.enable_dockerhub_publish }}
@@ -37,6 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Print CI configuration
@@ -46,6 +44,9 @@ jobs:
         id: config
         run: make ci-export-config
 
+      - name: Verify release tag is on the target branch
+        run: make ci-verify-release-target-branch
+
   ci-gate:
     name: Validate release commit
     needs: ci-config
@@ -53,11 +54,33 @@ jobs:
     permissions:
       contents: read
 
-  changelog-and-release:
-    name: Generate changelog and create draft release
+  release-notes-and-draft:
+    name: Create draft release with per-version notes
     needs:
       - ci-config
       - ci-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+          path: release-notes
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          body_path: release-notes/${{ needs.ci-config.outputs.release_notes_filename }}
+          draft: true
+
+  publish-release-docs:
+    name: Generate and submit optional API documentation
+    needs:
+      - ci-config
+      - ci-gate
+    if: needs.ci-config.outputs.enable_release_docs == '1'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -69,42 +92,22 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_AUTOMATION_TOKEN || github.token }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Set up the Python project
+        uses: ./.github/actions/setup-project
         with:
-          version: ${{ needs.ci-config.outputs.uv_version }}
+          uv-version: ${{ needs.ci-config.outputs.uv_version }}
           python-version: ${{ needs.ci-config.outputs.python_version }}
-          enable-cache: true
 
-      - name: Setup CI environment
-        run: make ci-setup
+      - name: Prepare release documentation branch
+        run: make ci-prepare-release-docs-branch
 
-      - name: Prepare release automation branch
-        run: make ci-prepare-release-update-branch
-
-      - name: Install git-cliff
-        run: make ci-install-git-cliff
-
-      - name: Generate changelog
-        run: make ci-generate-changelog
-
-      - name: Generate docs
-        if: needs.ci-config.outputs.enable_release_docs == '1'
+      - name: Generate API documentation
         run: make ci-generate-docs
 
-      - name: Generate release notes
-        run: make ci-generate-release-notes
-
-      - name: Open or update generated files pull request
-        run: make ci-open-release-updates-pr
+      - name: Open or update API documentation PR
+        run: make ci-open-release-docs-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN || github.token }}
-
-      - name: Create draft release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          body_path: ${{ needs.ci-config.outputs.release_notes_file }}
-          draft: true
 
   build-linux:
     name: Build Linux application assets
@@ -122,27 +125,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Build and upload application assets
+        uses: ./.github/actions/build-release-assets
         with:
-          version: ${{ needs.ci-config.outputs.uv_version }}
+          uv-version: ${{ needs.ci-config.outputs.uv_version }}
           python-version: ${{ needs.ci-config.outputs.python_version }}
-          enable-cache: true
-
-      - name: Setup CI environment
-        run: make ci-setup-build
-
-      - name: Build and verify application assets
-        run: |
-          make ci-build-release-assets
-          make ci-verify-release-artifacts
-
-      - name: Upload Linux assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets-linux
-          path: ${{ needs.ci-config.outputs.release_artifacts }}
-          if-no-files-found: error
+          artifact-name: release-assets-linux
 
   build-macos:
     name: Build macOS application assets
@@ -160,27 +148,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Build and upload application assets
+        uses: ./.github/actions/build-release-assets
         with:
-          version: ${{ needs.ci-config.outputs.uv_version }}
+          uv-version: ${{ needs.ci-config.outputs.uv_version }}
           python-version: ${{ needs.ci-config.outputs.python_version }}
-          enable-cache: true
-
-      - name: Setup CI environment
-        run: make ci-setup-build
-
-      - name: Build and verify application assets
-        run: |
-          make ci-build-release-assets
-          make ci-verify-release-artifacts
-
-      - name: Upload macOS assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets-macos
-          path: ${{ needs.ci-config.outputs.release_artifacts }}
-          if-no-files-found: error
+          artifact-name: release-assets-macos
 
   build-windows:
     name: Build Windows application assets
@@ -198,37 +171,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Make
-        run: choco install make --yes
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Build and upload application assets
+        uses: ./.github/actions/build-release-assets
         with:
-          version: ${{ needs.ci-config.outputs.uv_version }}
+          uv-version: ${{ needs.ci-config.outputs.uv_version }}
           python-version: ${{ needs.ci-config.outputs.python_version }}
-          enable-cache: true
-
-      - name: Setup CI environment
-        run: make ci-setup-build
-
-      - name: Build and verify application assets
-        run: |
-          make ci-build-release-assets
-          make ci-verify-release-artifacts
-
-      - name: Upload Windows assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets-windows
-          path: ${{ needs.ci-config.outputs.release_artifacts }}
-          if-no-files-found: error
+          artifact-name: release-assets-windows
 
   release-ready:
     name: Confirm release build completion
     needs:
       - ci-config
       - ci-gate
-      - changelog-and-release
+      - release-notes-and-draft
       - build-linux
       - build-macos
       - build-windows
@@ -236,7 +191,7 @@ jobs:
       always() &&
       needs.ci-config.result == 'success' &&
       needs.ci-gate.result == 'success' &&
-      needs.changelog-and-release.result == 'success' &&
+      needs.release-notes-and-draft.result == 'success' &&
       (needs.build-linux.result == 'success' ||
        (needs.ci-config.outputs.build_linux == '0' && needs.build-linux.result == 'skipped')) &&
       (needs.build-macos.result == 'success' ||
@@ -252,16 +207,13 @@ jobs:
     name: Publish verified package to PyPI
     needs:
       - ci-config
-      - release-ready
-    if: >-
-      always() &&
-      needs.ci-config.result == 'success' &&
-      needs.release-ready.result == 'success' &&
-      needs.ci-config.outputs.enable_pypi_publish == '1'
+      - ci-gate
+    if: needs.ci-config.outputs.enable_pypi_publish == '1'
     runs-on: ubuntu-latest
     environment: ${{ needs.ci-config.outputs.pypi_environment }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Download CI-verified package distributions
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -275,7 +227,7 @@ jobs:
           version: ${{ needs.ci-config.outputs.uv_version }}
           enable-cache: false
 
-      - name: Publish to PyPI with the existing API token
+      - name: Publish to PyPI
         run: uv publish
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
@@ -302,6 +254,12 @@ jobs:
           name: python-package-dist
           path: release-artifacts
 
+      - name: Download release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+          path: release-artifacts
+
       - name: Download Linux assets
         if: needs.ci-config.outputs.build_linux == '1'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -326,6 +284,7 @@ jobs:
       - name: Publish draft release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          body_path: release-artifacts/${{ needs.ci-config.outputs.release_notes_filename }}
           files: release-artifacts/**
           draft: false
 
