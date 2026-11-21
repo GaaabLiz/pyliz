@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotSettings
 
 
@@ -29,3 +31,34 @@ def test_reusing_deleted_snapshot_id_does_not_reuse_installed_paths(snapshot_wor
 
     assert result.backup_path is None
     assert old_target.is_dir()
+
+
+def test_remove_rejects_destinations_installed_after_confirmation(snapshot_workspace: Path) -> None:
+    first = snapshot_workspace / "first"
+    second = snapshot_workspace / "second"
+    for path in (first, second):
+        path.mkdir()
+        (path / "payload").write_text(path.name, encoding="utf-8")
+    backups = snapshot_workspace / "backups"
+    settings = SnapshotSettings(backup_path=backups)
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", settings)
+    other_instance = SnapshotCatalogue(catalogue.path_catalogue, settings)
+    snapshot = catalogue.create_snapshot(snap_id="shared", name="Shared", directory_paths=[first])
+    catalogue.install(snapshot)
+    confirmed = catalogue.get_removable_paths(snapshot.id)
+    assert confirmed == [first]
+
+    updated = other_instance.update_snapshot(snapshot.id, directory_paths=[second])
+    other_instance.install(updated)
+    with pytest.raises(ValueError, match="installed folders changed"):
+        catalogue.remove_installed_copies_with_result(snapshot.id, expected_paths=confirmed)
+
+    assert first.is_dir()
+    assert second.is_dir()
+    assert not backups.exists()
+
+    refreshed = catalogue.get_removable_paths(snapshot.id)
+    assert refreshed is not None and set(refreshed) == {first, second}
+    assert catalogue.remove_installed_copies_with_result(snapshot.id, expected_paths=refreshed).backup_path is not None
+    assert not first.exists()
+    assert not second.exists()

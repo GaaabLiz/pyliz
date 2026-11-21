@@ -3,6 +3,7 @@
 Filesystem workflows live in operations; this module retains public methods,
 legacy metadata-update ordering and the small association add/remove API."""
 
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
 
@@ -322,17 +323,18 @@ class SnapshotManager:
         """
         self._remove_installed_copies(message_callback=message_callback)
 
-    def _remove_installed_copies(self, message_callback=None) -> Path | None:
+    def _remove_installed_copies(self, message_callback=None, *, expected_paths: Collection[Path] | None = None) -> Path | None:
         """Remove installed copies and pass the archive path to the catalogue facade.
 
         Args:
             message_callback (MessageCallback | None): Optional status observer.
+            expected_paths (Collection[Path] | None): Confirmed removable paths, if supplied by the caller.
 
         Returns:
             Path | None: Published archive path when copies were backed up.
         """
         with catalogue_access(self.path_catalogue):
-            return SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback)
+            return SnapshotInstaller(self._storage()).remove_installed_copies(message_callback=message_callback, expected_paths=expected_paths)
 
     def get_removable_paths(self) -> list[Path] | None:
         """Return registered, present install directories; None means the history is unknown.

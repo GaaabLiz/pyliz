@@ -114,6 +114,11 @@ path is removed from the registry; errors leave paths that still exist
 registered. An interruption during removal leaves the entry marked as pending
 and requires review before retrying.
 
+After prompting the user with `get_removable_paths()`, pass the confirmed paths
+as `expected_paths` to `remove_installed_copies_with_result()`. The library checks
+that the set matches the actual removal plan under the catalogue lock before
+creating a backup or deleting any directory.
+
 ## Automatic backup results
 
 `SnapshotCatalogue.install_with_result()`, `delete_with_result()`,
