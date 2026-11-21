@@ -245,3 +245,30 @@ def test_import_migrates_legacy_storage_name_and_manifest(snapshot_workspace: Pa
     assert snapshot is not None
     catalogue.install(snapshot)
     assert (original_path / "settings.txt").read_bytes() == b"legacy content"
+
+
+def test_catalogue_import_reports_each_snapshot_outcome(snapshot_workspace: Path) -> None:
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(allow_unverified_legacy_snapshots=True))
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    catalogue.create_snapshot(snap_id="existing", name="Existing", directory_paths=[source])
+    archive_path = snapshot_workspace / "partial.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for snap_id in ("valid", "existing", "incomplete"):
+            metadata = {
+                "id": snap_id,
+                "name": snap_id,
+                "desc": "",
+                "directories": [{"folder_id": "stable-id", "index": 1, "original_path": str(source)}],
+            }
+            archive.writestr(f"{snap_id}/snapshot.json", json.dumps(metadata))
+            if snap_id != "incomplete":
+                archive.writestr(f"{snap_id}/1-source/captured.txt", b"archive contents")
+
+    report = catalogue.import_catalogue_with_report(archive_path)
+    assert report.imported == ["valid"]
+    assert report.skipped == ["existing"]
+    assert set(report.failed) == {"incomplete"}
+    assert report.failed["incomplete"]
+    assert {snap.id for snap in catalogue.get_all()} == {"valid", "existing"}
+    assert catalogue.import_catalogue(archive_path) is None

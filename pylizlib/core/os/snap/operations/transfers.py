@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from pylizlib.core.log.pylizLogger import logger
-from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotSettings
+from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotCatalogueImportReport, SnapshotSettings
 from pylizlib.core.os.snap.integrity import build_integrity_manifest
 from pylizlib.core.os.snap.operations.backup.associations import association_identities
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
@@ -162,6 +162,25 @@ class CatalogueTransferService:
             ValueError: If the provided path is not a valid .zip file or contains operational transaction storage.
             IOError: If the zip file fails to extract.
         """
+        self.import_catalogue_with_report(zip_path)
+
+    @coordinated("path_catalogue")
+    def import_catalogue_with_report(self, zip_path: Path) -> SnapshotCatalogueImportReport:
+        """Import the catalogue and record outcomes for each directory entry.
+
+        Args:
+            zip_path (Path): Path to a catalogue ZIP archive.
+
+        Returns:
+            SnapshotCatalogueImportReport: Published and existing IDs and the reasons for failed directory entries.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            ValueError: The ZIP is invalid or contains operational transaction storage.
+            OSError: The archive cannot be extracted.
+        """
+
+        report = SnapshotCatalogueImportReport()
 
         # Reject imported recovery instructions before publishing any catalogue entry.
         with self._extract_archive(zip_path) as temp_dir_path:
@@ -172,7 +191,8 @@ class CatalogueTransferService:
 
             # Iterate through extracted folders and import them
             for potential_snap_dir in temp_dir_path.iterdir():
-                self._import_entry(potential_snap_dir)
+                self._import_entry(potential_snap_dir, report)
+        return report
 
     @coordinated("path_catalogue")
     def import_snapshot(self, zip_path: Path):
@@ -213,8 +233,8 @@ class CatalogueTransferService:
             )
         logger.info("Imported snapshot id=%s", snapshot_to_import.id)
 
-    def _import_entry(self, potential_snap_dir: Path) -> None:
-        """Import one extracted entry; log and skip per-entry failures as before.
+    def _import_entry(self, potential_snap_dir: Path, report: SnapshotCatalogueImportReport) -> None:
+        """Import one extracted directory and record its outcome.
 
         With legacy migration enabled, validate and prepare each entry in
         staging. Preserve the original ID-only batch behavior by default.
@@ -222,6 +242,7 @@ class CatalogueTransferService:
         Args:
             potential_snap_dir (Path): One extracted batch-import entry; non-directories and invalid entries are
                 skipped under legacy policy.
+            report (SnapshotCatalogueImportReport): Mutable collections for outcomes of this batch.
 
         Returns:
             None: No return value.
@@ -231,6 +252,7 @@ class CatalogueTransferService:
 
         json_path = potential_snap_dir / self.settings.json_filename
         if not json_path.is_file():
+            report.failed[potential_snap_dir.name] = "Snapshot metadata is missing."
             logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
             return
 
@@ -239,12 +261,14 @@ class CatalogueTransferService:
             data = json.loads(SnapshotSerializer.read_text(json_path))
             snap_id = data.get("id")
             if not snap_id:
+                report.failed[potential_snap_dir.name] = "Snapshot ID is missing from metadata."
                 logger.warning(f"Skipping directory '{potential_snap_dir.name}' as snapshot ID is missing from json.")
                 return
 
             # Check for ID conflict
             if self.query.exists(snap_id):
                 logger.info(f"Snapshot with ID '{snap_id}' already exists. Skipping import.")
+                report.skipped.append(snap_id)
                 return
 
             install_registry = InstalledCopyRegistry(self.path_catalogue)
@@ -259,10 +283,12 @@ class CatalogueTransferService:
                 copy_strategy=self.settings.copy_strategy,
                 operation="Catalogue import",
             )
+            report.imported.append(snap_id)
             logger.info(f"Successfully imported snapshot with ID '{snap_id}'.")
 
-        except Exception as e:
-            logger.error(f"Failed to import snapshot from directory '{potential_snap_dir.name}': {e}")
+        except Exception as error:
+            report.failed[potential_snap_dir.name] = str(error).strip() or type(error).__name__
+            logger.error("Failed to import snapshot from directory '%s': %s", potential_snap_dir.name, error)
 
     def _prepare_staged_import(self, staged_path: Path, snapshot_id: str) -> None:
         """Validate a private staged import and upgrade its legacy metadata when enabled.

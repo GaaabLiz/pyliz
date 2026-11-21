@@ -15,6 +15,7 @@ from pylizlib.core.os.snap.domain import (
     SnapEditAction,
     Snapshot,
     SnapshotBackupInfo,
+    SnapshotCatalogueImportReport,
     SnapshotCatalogueStatistics,
     SnapshotOperationResult,
     SnapshotSettings,
@@ -677,8 +678,24 @@ class SnapshotCatalogue:
             ValueError: If the provided path is not a valid .zip file.
             IOError: If the zip file fails to extract.
         """
+        self.import_catalogue_with_report(zip_path)
+
+    def import_catalogue_with_report(self, zip_path: Path) -> SnapshotCatalogueImportReport:
+        """Import a batch and report every snapshot imported, skipped or failed.
+
+        Args:
+            zip_path (Path): ZIP export of a snapshot catalogue.
+
+        Returns:
+            SnapshotCatalogueImportReport: Outcomes of the individual archive directories.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            ValueError: The ZIP is invalid or contains operational transaction storage.
+            OSError: The archive cannot be extracted.
+        """
         with catalogue_access(self.path_catalogue):
-            self._transfers().import_catalogue(zip_path)
+            return self._transfers().import_catalogue_with_report(zip_path)
 
     def import_snapshot(self, zip_path: Path):
         """Imports a snapshot from a zip file into the catalogue.

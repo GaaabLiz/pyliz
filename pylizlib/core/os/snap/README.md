@@ -294,6 +294,11 @@ missing, it is generated from the imported bytes and becomes the baseline for
 later integrity checks. If a manifest is already present, import verifies it
 and rejects mismatches. Imports leave the source archive untouched.
 
+`import_catalogue_with_report()` lists newly imported and already present
+snapshot IDs and gives a reason for each failed directory. Valid entries are
+published even when others fail. `import_catalogue()` keeps its existing
+return value.
+
 Before deleting a snapshot, the catalogue reloads its metadata under the same
 lock as backup creation and removal. Before publication, a backup ZIP passes the
 same member and size checks used to preflight restore. SD ZIPs also check every

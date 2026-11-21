@@ -25,6 +25,7 @@ from pylizlib.core.os.snap.domain import (
     SnapEditType,
     Snapshot,
     SnapshotBackupInfo,
+    SnapshotCatalogueImportReport,
     SnapshotCatalogueStatistics,
     SnapshotFileInfo,
     SnapshotOperationResult,
@@ -94,4 +95,5 @@ __all__ = [
     "SnapshotOperationResult",
     "SnapshotUpdateResult",
     "SnapshotSearchReport",
+    "SnapshotCatalogueImportReport",
 ]
