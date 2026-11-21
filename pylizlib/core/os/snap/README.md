@@ -276,6 +276,13 @@ imports and duplication. Legacy metadata without a manifest remains explicitly
 unverified; `allow_unverified_legacy_snapshots` continues to control its
 installation and does not imply integrity guarantees.
 
+With `allow_unverified_legacy_snapshots=True`, single and batch imports
+rewrite legacy metadata in the staged copy before publication. Association IDs
+and stored directory names remain stable. Where an integrity manifest is
+missing, it is generated from the imported bytes and becomes the baseline for
+later integrity checks. If a manifest is already present, import verifies it
+and rejects mismatches. Imports leave the source archive untouched.
+
 Before deleting a snapshot, the catalogue reloads its metadata under the same
 lock as backup creation and removal. Before publication, a backup ZIP passes the
 same member and size checks used to preflight restore. Associated-directory

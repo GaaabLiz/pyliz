@@ -390,7 +390,7 @@ class SnapshotSettings:
         copy_strategy (DirectoryCopyStrategy): Live content-copy strategy; assigning it under EXTENDED mode adds
             one metadata wrapper when needed.
         allow_unverified_legacy_snapshots (bool): Permit installing legacy associations without an integrity
-            manifest when True; False by default.
+            manifest and migrate older metadata during archive import when True; False by default.
         copy_metadata_mode (CopyMetadataMode): BASIC or EXTENDED metadata selection; assigning it can wrap or
             unwrap copy_strategy.
         archive_temp_directory (Path | None): Optional ZIP extraction parent. None uses catalogue storage for
