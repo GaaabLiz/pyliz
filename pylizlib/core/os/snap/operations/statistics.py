@@ -2,12 +2,12 @@
 
 import stat
 from collections.abc import Iterator
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 from pylizlib.core.os.filesystem.tree import iter_tree_entry_stats_strict
 from pylizlib.core.os.snap.domain import SnapDirAssociation, Snapshot, SnapshotCatalogueStatistics, SnapshotFileInfo
+from pylizlib.core.os.snap.sorting import chronological_key
 from pylizlib.core.os.snap.storage.paths import get_snapshot_child_path
 
 
@@ -27,7 +27,7 @@ def collect_catalogue_statistics(path_catalogue: Path, snapshots: list[Snapshot]
 
     for snapshot in snapshots:
         created = snapshot.date_created
-        date_key = (_creation_time(created), snapshot.id)
+        date_key = (chronological_key(created), snapshot.id)
         if oldest is None or date_key < oldest[0]:
             oldest = (date_key, created)
         if newest is None or date_key > newest[0]:
@@ -60,25 +60,6 @@ def collect_catalogue_statistics(path_catalogue: Path, snapshots: list[Snapshot]
         newest_snapshot_date=newest[1] if newest is not None else None,
         backup_count=backup_count,
     )
-
-
-def _creation_time(created: datetime) -> timedelta:
-    """Compare creation times with exact precision across timezone offsets.
-
-    Args:
-        created (datetime): Persisted creation date. Naive dates use local time, with UTC as the fallback for dates
-            outside the platform's local conversion range.
-
-    Returns:
-        timedelta: Creation instant relative to datetime.min in UTC, which can be negative for early dates.
-    """
-    offset = created.utcoffset()
-    if offset is None:
-        try:
-            offset = created.astimezone().utcoffset()
-        except (OSError, OverflowError, ValueError):
-            offset = None
-    return created.replace(tzinfo=None) - datetime.min - (offset or timedelta())
 
 
 def _iter_association_entries(path_catalogue: Path, snapshot_id: str, association: SnapDirAssociation) -> Iterator[tuple[str, int | None]]:

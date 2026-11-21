@@ -1,6 +1,6 @@
 """Focused contract tests for the extracted snapshot responsibilities."""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -121,6 +121,18 @@ def test_sort_keeps_none_last_even_in_reverse_and_does_not_mutate():
     snapshots = [missing, older, newer]
     assert sort_snapshots(snapshots, SnapshotSortKey.DATE_MODIFIED, True) == [newer, older, missing]
     assert snapshots == [missing, older, newer]
+
+
+@pytest.mark.parametrize("field", [SnapshotSortKey.DATE_CREATED, SnapshotSortKey.DATE_MODIFIED, SnapshotSortKey.DATE_LAST_USED])
+def test_sort_compares_aware_and_naive_dates_by_instant(field):
+    local = datetime(2024, 7, 1, 12)
+    same_instant = local.astimezone(timezone(timedelta(hours=5)))
+    earlier = Snapshot("early", "early", "", **{field.value: same_instant - timedelta(seconds=1)})
+    middle = Snapshot("mid", "mid", "", **{field.value: local})
+    later = Snapshot("late", "late", "", **{field.value: same_instant + timedelta(seconds=1)})
+
+    assert sort_snapshots([middle, later, earlier], field) == [earlier, middle, later]
+    assert sort_snapshots([later, earlier, middle], field, True) == [later, middle, earlier]
 
 
 def test_entry_check_distinguishes_real_and_dangling_link(tmp_path):

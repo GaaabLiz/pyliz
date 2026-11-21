@@ -1,6 +1,27 @@
 """Snapshot ordering with case-insensitive strings and trailing missing values."""
 
+from datetime import datetime, timedelta
+
 from pylizlib.core.os.snap.domain import Snapshot, SnapshotSortKey
+
+
+def chronological_key(value: datetime) -> timedelta:
+    """Normalize an instant for ordering without modifying the persisted timestamp.
+
+    Args:
+        value (datetime): Snapshot timestamp. Naive values use local time, with UTC as the fallback for dates
+            outside the platform's local conversion range.
+
+    Returns:
+        timedelta: Instant relative to datetime.min in UTC, which can be negative for early dates.
+    """
+    offset = value.utcoffset()
+    if offset is None:
+        try:
+            offset = value.astimezone().utcoffset()
+        except (OSError, OverflowError, ValueError):
+            pass
+    return value.replace(tzinfo=None) - datetime.min - (offset or timedelta())
 
 
 def sort_snapshots(
@@ -10,7 +31,7 @@ def sort_snapshots(
 ) -> list[Snapshot]:
     """Sorts a list of Snapshot objects by a specified key.
     Snapshots with a None value for the key are placed at the end.
-    String comparison is case-insensitive.
+    Strings compare case-insensitively and dates compare by instant.
 
     Args:
         snapshots (list[Snapshot]): The list of Snapshots to sort.
@@ -31,18 +52,20 @@ def sort_snapshots(
             snaps_with_value.append(snap)
 
     def get_key(snapshot: Snapshot):
-        """Use lowercase strings for comparison and retain native non-string values.
+        """Compare lowercase strings and normalized timestamps when applicable.
 
         Args:
             snapshot (Snapshot): Snapshot model used or mutated by this operation; association identities are retained
                 where documented.
 
         Returns:
-            object: Use lowercase strings for comparison and retain native non-string values.
+            object: Key comparable with other values of this snapshot field.
         """
         value = getattr(snapshot, key_attr)
         if isinstance(value, str):
             return value.lower()
+        if isinstance(value, datetime):
+            return chronological_key(value)
         return value
 
     sorted_snaps = sorted(snaps_with_value, key=get_key, reverse=reverse)
