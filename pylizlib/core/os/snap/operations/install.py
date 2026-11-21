@@ -16,6 +16,7 @@ from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
+from pylizlib.core.os.snap.operations.backup.creation import verify_displaced_install_sources
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
@@ -110,7 +111,15 @@ class SnapshotInstaller:
         self.storage = storage
 
     @coordinated("storage.path_catalogue")
-    def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
+    def install(
+        self,
+        enable_everyone_full_control: bool = False,
+        clear_destination: bool = True,
+        progress_callback=None,
+        message_callback=None,
+        *,
+        backup_path: Path | None = None,
+    ) -> Path | None:
         """Installs the snapshot's contents to their original locations on the filesystem.
         Copies are prepared and verified in staging before live destinations are replaced or merged.
 
@@ -124,9 +133,10 @@ class SnapshotInstaller:
                 percentage from 0 through 100; return values do not cancel the operation.
             message_callback (MessageCallback | None): Optional status observer receiving one message string; its
                 exceptions propagate according to the calling operation.
+            backup_path (Path | None): Pre-install archive directory when automatic backups are enabled.
 
         Returns:
-            None: No return value.
+            Path | None: Published pre-install backup when existing destinations were archived.
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
@@ -160,6 +170,7 @@ class SnapshotInstaller:
 
         previous_date = self.storage.snapshot.date_last_used
         last_used = datetime.now()
+        backup = None
         replacements = self._plan_replacements()
         staging_roots = [rb.staging_dir for rb in replacements]
         journal = self._begin_install_journal(replacements, staging_roots, clear_destination)
@@ -177,7 +188,20 @@ class SnapshotInstaller:
             if not clear_destination:
                 merge_entries = self._plan_merge_entries(replacements)
                 journal.update_payload(entries=merge_entries)
+            if backup_path is not None:
+                backup = SnapshotArchiveService(self.storage).create_backup_for_existing_associations(backup_path, "preinstall", message_callback)
             self._publish_directories(replacements, clear_destination, merge_entries)
+
+            if backup_path is not None:
+                names = {association.folder_id: association.directory_name for association in self.storage.snapshot.directories}
+                displaced = {}
+                for entry in journal.payload["payload"]["entries"]:
+                    if entry["had_original"]:
+                        name = names[entry["folder_id"]]
+                        if entry.get("merge_child"):
+                            name = f"{name}/{Path(entry['destination']).name}"
+                        displaced[name] = Path(entry["backup"])
+                verify_displaced_install_sources(backup, displaced, merge=not clear_destination)
 
             self._apply_windows_permissions(replacements, enable_everyone_full_control, win32security, con)
             journal.set_state("commit_decided")
@@ -195,6 +219,7 @@ class SnapshotInstaller:
         cleanup_paths.extend(staging_roots)
         journal.finalize(cleanup_paths, "Installation")
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
+        return backup
 
     @coordinated("storage.path_catalogue")
     def get_removable_paths(self) -> list[Path] | None:

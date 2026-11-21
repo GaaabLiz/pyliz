@@ -95,6 +95,9 @@ destination. The automatic pre-install backup is partial: it archives existing
 destinations and lists them in the manifest, so missing destinations can be
 recreated while the others remain protected. If no destination exists, the
 archive is skipped and installation continues.
+The installer creates this archive after staging the incoming copies. It
+checks the displaced copies against the archive before committing. A mismatch
+rolls back installation while the previous copies are still available.
 
 Completed installations record their published destinations in
 `.pyliz_installed_copies.json` at the catalogue root. This local file is not

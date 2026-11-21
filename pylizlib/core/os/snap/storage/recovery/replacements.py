@@ -371,7 +371,8 @@ class ReplacementValidator:
             if not stage.resolve(strict=False).is_relative_to(self.workspace.resolve(strict=False)):
                 raise TransactionRecoveryError("Restore staging path escaped its transaction workspace.")
         else:
-            if stage_root.parent != destination.parent or not stage_root.name.startswith(f"{live.name}_staging_"):
+            live_root = destination.parent if entry.get("merge_child") else destination
+            if stage_root.parent != live_root.parent or not stage_root.name.startswith(f"{live.name}_staging_"):
                 raise TransactionRecoveryError("Install staging path is not a generated sibling of its destination.")
             if not entry.get("merge_child") and stage != stage_root:
                 raise TransactionRecoveryError("Install staging directory does not match its journal entry.")

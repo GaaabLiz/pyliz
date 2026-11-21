@@ -25,6 +25,7 @@ from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.configuration import build_associations, configure_snapshot
+from pylizlib.core.os.snap.operations.install import SnapshotInstaller
 from pylizlib.core.os.snap.operations.statistics import collect_catalogue_statistics
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
@@ -855,6 +856,9 @@ class SnapshotCatalogue:
 
         Returns:
             SnapshotOperationResult: Published backup path when a backup was created. Missing targets are omitted.
+
+        Raises:
+            SourceChangedError: A displaced entry changed after the backup was written; the installation is rolled back.
         """
         with catalogue_access(self.path_catalogue):
             stored_snapshot = self.get_by_id(snap.id)
@@ -864,13 +868,13 @@ class SnapshotCatalogue:
             # The caller may hold a model loaded before the snapshot was updated.
             # Installation must use the persisted manifest that matches on-disk data.
             snap_manager = self._manager(stored_snapshot)
-            backup = None
-            if self.settings.bck_before_install_enabled:
-                backup = snap_manager._create_backup_for_existing_associations(
-                    self.settings.backup_path,
-                    "preinstall",
-                )
-            snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
+            backup = SnapshotInstaller(snap_manager._storage()).install(
+                self.settings.install_with_everyone_full_control,
+                clear_destination=clear_destination,
+                progress_callback=progress_callback,
+                message_callback=message_callback,
+                backup_path=self.settings.backup_path if self.settings.bck_before_install_enabled else None,
+            )
             snap.date_last_used = stored_snapshot.date_last_used
             return SnapshotOperationResult(backup)
 

@@ -14,6 +14,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.archives.zip.publication import write_verified_zip_exclusive as _write_verified_zip_exclusive
 from pylizlib.core.os.filesystem.tree import is_link_or_junction
 from pylizlib.core.os.paths.safety import assert_no_link_components
+from pylizlib.core.os.snap.copy_strategy import SourceChangedError
 from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation, Snapshot
 from pylizlib.core.os.snap.integrity import IntegrityManifest, assert_manifest_matches
 from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
@@ -27,6 +28,55 @@ from pylizlib.core.os.snap.storage.metadata import SnapshotJsonCodec
 from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage
 from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
+
+
+def verify_displaced_install_sources(archive_path: Path | None, displaced: dict[str, Path], *, merge: bool) -> None:
+    """Compare displaced directories or merge entries with their restorable ZIP members.
+
+    Args:
+        archive_path (Path | None): Published pre-install backup, omitted only when no destinations existed.
+        displaced (dict[str, Path]): Archived root names mapped to the journal's saved copies.
+        merge (bool): In merge mode, each root name includes the replaced top-level child.
+
+    Returns:
+        None: Every displaced file and directory is backed up.
+
+    Raises:
+        SourceChangedError: The displaced entries differ from the completed archive.
+        OSError: The archive or a displaced entry cannot be verified.
+    """
+    if not displaced:
+        return
+    if archive_path is None:
+        raise SourceChangedError("Install destinations appeared after the pre-install backup was prepared.")
+
+    paths = dict(displaced)
+    for member_root, source_root in displaced.items():
+        assert_no_link_components(source_root)
+        if source_root.is_dir():
+            for entry in iter_tree_entries_strict(source_root):
+                paths[f"{member_root}/{entry.relative_to(source_root).as_posix()}"] = entry
+
+    depth = 2 if merge else 1
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            name = member.filename.rstrip("/")
+            root = "/".join(name.split("/", depth)[:depth])
+            if root not in displaced:
+                continue
+            source = paths.pop(name, None)
+            if source is None or source.is_dir() != member.is_dir():
+                raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+            if member.is_dir():
+                continue
+            info = source.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_size != member.file_size:
+                raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+            with source.open("rb") as current_file, archive.open(member) as backed_up_file:
+                if hashlib.file_digest(current_file, "sha256").digest() != hashlib.file_digest(backed_up_file, "sha256").digest():
+                    raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+    if paths:
+        raise SourceChangedError(f"Install destination changed after backup: '{next(iter(paths))}'.")
 
 
 class BackupCreator:
