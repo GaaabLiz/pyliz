@@ -9,6 +9,7 @@ import pytest
 
 from pylizlib.core.os.snap import (
     BackupType,
+    QueryType,
     SnapDirAssociation,
     Snapshot,
     SnapshotCatalogue,
@@ -270,3 +271,104 @@ def test_corruption_and_missing_source_are_reported_before_destructive_work(snap
     assert error.value.missing_folders == [association.original_path]
 
     catalogue.delete(loaded)
+
+
+def test_delete_backs_up_latest_metadata_from_disk(snapshot_workspace: Path):
+    source = make_source(snapshot_workspace, "original")
+    extra = make_source(snapshot_workspace, "added")
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=snapshot_workspace / "backups", backup_pre_delete=True),
+    )
+    stale = make_snapshot("stale", source)
+    catalogue.add(stale)
+    current = catalogue.update_snapshot(stale.id, directory_paths=[source, extra])
+    assert len(stale.directories) == 1
+
+    result = catalogue.delete_with_result(stale)
+    assert not catalogue.exists(stale.id)
+    catalogue.restore_backup(result.backup_path)
+    restored = catalogue.get_by_id(stale.id)
+    assert restored is not None
+    assert restored.directories == current.directories
+
+
+@pytest.mark.parametrize("limit", ["max_archive_entries", "max_archive_uncompressed_bytes"])
+def test_unrestorable_backup_prevents_deletion(snapshot_workspace: Path, limit: str):
+    backup_path = snapshot_workspace / "backups"
+    settings = SnapshotSettings(backup_path=backup_path, backup_pre_delete=True)
+    setattr(settings, limit, 1)
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", settings)
+    snap = make_snapshot("protected", make_source(snapshot_workspace, "protected"))
+    catalogue.add(snap)
+
+    with pytest.raises(ValueError, match="configured limit"):
+        catalogue.delete(snap)
+
+    assert catalogue.exists(snap.id)
+    assert not list(backup_path.iterdir())
+
+
+@pytest.mark.parametrize("clear_destination", [True, False])
+def test_reinstall_transfers_only_the_shared_destination(snapshot_workspace: Path, clear_destination: bool):
+    shared = make_source(snapshot_workspace, "shared", text="first")
+    other = make_source(snapshot_workspace, "other", text="only first")
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(backup_path=snapshot_workspace / "backups"))
+    first = make_snapshot("first", shared)
+    first.directories.append(SnapDirAssociation(index=2, original_path=str(other), folder_id="other"))
+    catalogue.add(first)
+    (shared / "readme.txt").write_text("second", encoding="utf-8")
+    second = make_snapshot("second", shared)
+    catalogue.add(second)
+
+    catalogue.install(first)
+    catalogue.install(second, clear_destination=clear_destination)
+
+    assert catalogue.get_removable_paths(first.id) == [other]
+    assert catalogue.get_removable_paths(second.id) == [shared]
+    catalogue.remove_installed_copies(first.id)
+    assert not other.exists()
+    assert (shared / "readme.txt").read_text(encoding="utf-8") == "second"
+
+
+def test_association_exports_choose_local_or_captured_content(snapshot_workspace: Path):
+    import zipfile
+
+    source = make_source(snapshot_workspace, "export")
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
+    snap = make_snapshot("export", source)
+    catalogue.add(snap)
+    (source / "readme.txt").write_text("local version", encoding="utf-8")
+    member = f"{snap.directories[0].directory_name}/readme.txt"
+
+    for export, expected in [(catalogue.export_assoc_dirs, b"local version"), (catalogue.export_captured_assoc_dirs, b"captured version")]:
+        destination = snapshot_workspace / export.__name__
+        export(snap.id, destination)
+        (archive,) = destination.glob("*.zip")
+        with zipfile.ZipFile(archive) as zipped:
+            assert zipped.read(member) == expected
+
+
+def test_search_report_distinguishes_full_page_extra_matches_and_cancellation(snapshot_workspace: Path):
+    source = make_source(snapshot_workspace, "search-report", text="match\n" * 1200)
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
+    snap = make_snapshot("search-report", source)
+    catalogue.add(snap)
+    searcher = SnapshotSearcher(catalogue)
+
+    limited = searcher.search_with_report(snap, SnapshotSearchParams("match"))
+    assert len(limited.results) == 1000
+    assert limited.result_limit_exceeded
+    assert not limited.file_limit_exceeded
+
+    exact = searcher.search_with_report(snap, SnapshotSearchParams("match", max_results=1200, extensions=["txt"], max_files=1))
+    assert len(exact.results) == 1200
+    assert not exact.result_limit_exceeded
+    assert not exact.file_limit_exceeded
+    assert searcher.search_with_report(snap, SnapshotSearchParams("match", max_files=1)).file_limit_exceeded
+
+    cancelled = searcher.search_with_report(snap, SnapshotSearchParams("match"), on_progress=lambda *_: False)
+    assert not cancelled.results
+    assert cancelled.cancelled
+    with pytest.raises(ValueError):
+        searcher.search_with_report(snap, SnapshotSearchParams("[", query_type=QueryType.REGEX))

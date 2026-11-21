@@ -51,6 +51,8 @@ class TextFileSearcher:
         compiled_regex: TimedPattern | None,
         page: MatchPage,
         on_chunk: Callable[[], bool | None] | None,
+        *,
+        strict: bool = False,
     ) -> bool:
         """Scan a file in chunks; return True when the callback cancels the snapshot.
 
@@ -63,10 +65,11 @@ class TextFileSearcher:
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
             on_chunk (Callable[[], bool | None] | None): Optional zero-argument chunk observer; only literal False
                 cancels, and observer exceptions propagate unchanged.
+            strict (bool): Raise for unreadable files, final decoding failures or regex timeouts.
 
         Returns:
-            bool: True only for literal-False observer cancellation. I/O/decoding failures are logged and skipped;
-                observer exceptions propagate unchanged.
+            bool: True only for literal-False observer cancellation. In tolerant mode, I/O/decoding failures
+                are logged and skipped. Observer exceptions propagate unchanged.
 
         Notes:
             Regex timeouts stop the remaining current-file scan and are logged. A late automatic UTF-8 failure retries
@@ -91,6 +94,7 @@ class TextFileSearcher:
                     compiled_regex,
                     attempt_page,
                     on_chunk,
+                    strict=strict,
                 )
             except UnicodeDecodeError:
                 if params.encoding is None and encoding in {"utf-8", "utf-8-sig"}:
@@ -106,8 +110,11 @@ class TextFileSearcher:
                         compiled_regex,
                         attempt_page,
                         on_chunk,
+                        strict=strict,
                     )
                 else:
+                    if strict:
+                        raise
                     logger.warning("Text decoding failed for %s using %s", file_path, encoding)
                     return False
             page.commit(attempt_page)
@@ -115,10 +122,14 @@ class TextFileSearcher:
         except _ProgressCallbackError as error:
             raise error.original
         except Exception as error:
+            if strict:
+                raise
             logger.warning("Error reading file %s during search: %s", file_path, error)
             return False
 
-    def _scan_file(self, file_path: Path, encoding: str, params: TextSearchConfiguration, compiled_regex: TimedPattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None) -> bool:
+    def _scan_file(
+        self, file_path: Path, encoding: str, params: TextSearchConfiguration, compiled_regex: TimedPattern | None, page: MatchPage, on_chunk: Callable[[], bool | None] | None, *, strict: bool
+    ) -> bool:
         """Run one independent decode attempt; return whether the observer cancels.
 
         Args:
@@ -132,11 +143,12 @@ class TextFileSearcher:
             page (MatchPage): Bounded result sink retaining remaining offset, limit and successful matches.
             on_chunk (Callable[[], bool | None] | None): Optional zero-argument chunk observer; only literal False
                 cancels, and observer exceptions propagate unchanged.
+            strict (bool): Raise when regex matching times out.
 
         Returns:
             bool: Whether this independent decode attempt was cancelled by its observer.
         """
-        return TextScanSession(file_path, params, compiled_regex, page, on_chunk).scan(encoding)
+        return TextScanSession(file_path, params, compiled_regex, page, on_chunk).scan(encoding, raise_on_timeout=strict)
 
 
 class TextScanSession:
@@ -181,12 +193,13 @@ class TextScanSession:
         self.on_chunk = on_chunk
         self.matcher = BufferMatcher(file_path, params, compiled_regex, page)
 
-    def scan(self, encoding: str) -> bool:
+    def scan(self, encoding: str, *, raise_on_timeout: bool = False) -> bool:
         """Read and match bounded chunks, returning True only for explicit cancellation.
 
         Args:
             encoding (str): Codec selected for this decode attempt; UTF encodings are strict and other codecs use
                 replacement.
+            raise_on_timeout (bool): Propagate a timeout before the outer search can mark the file completed.
 
         Returns:
             bool: True only for explicit observer cancellation; EOF, a full page or regex timeout produce False.
@@ -208,11 +221,13 @@ class TextScanSession:
                     self.window.append(chunk, self.buffer_limit)
                     self.total_chars += len(chunk)
                     if self._consume_window():
+                        if raise_on_timeout:
+                            raise TimeoutError(f"Regex search timed out in '{self.file_path.name}'.")
                         return False
 
                 # EOF uses its own tail limit and does not alter the rolling window.
-                if not self.page.full:
-                    self._consume_final_window()
+                if not self.page.full and self._consume_final_window() and raise_on_timeout:
+                    raise TimeoutError(f"Regex search timed out in '{self.file_path.name}'.")
         return False
 
     def _initialize_window(self) -> None:
@@ -270,11 +285,11 @@ class TextScanSession:
         self.scanned_until = result.deferred_match if result.deferred_match is not None else safe_until
         return False
 
-    def _consume_final_window(self) -> None:
+    def _consume_final_window(self) -> bool:
         """Search the bounded EOF tail without waiting for additional preview text.
 
         Returns:
-            None: No return value.
+            bool: Whether regex matching timed out.
         """
         final_window = self.window.tail(self.final_window_limit)
-        self.matcher.search(final_window, max(0, self.scanned_until - final_window.start_offset), len(final_window.text) + 1, self.last_result_line, final=True)
+        return self.matcher.search(final_window, max(0, self.scanned_until - final_window.start_offset), len(final_window.text) + 1, self.last_result_line, final=True).regex_timed_out

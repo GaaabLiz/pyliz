@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from pylizlib.core.os.paths.identity import same_filesystem_entry
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 
 INSTALL_REGISTRY_FILENAME = ".pyliz_installed_copies.json"
@@ -46,11 +47,12 @@ class InstalledCopyRegistry:
         """
         self.path = Path(path_catalogue) / INSTALL_REGISTRY_FILENAME
 
-    def get(self, snapshot_id: str) -> list[InstalledCopy] | None:
+    def get(self, snapshot_id: str, *, require_unique: bool = False) -> list[InstalledCopy] | None:
         """Read one snapshot's installed destinations, or None when untracked.
 
         Args:
             snapshot_id (str): Snapshot identity used as the registry key.
+            require_unique (bool): Reject ambiguous destinations left by older library versions.
 
         Returns:
             list[InstalledCopy] | None: Known installed destinations, including an empty list, or None if untracked.
@@ -62,7 +64,16 @@ class InstalledCopyRegistry:
         raw_records = data["snapshots"].get(snapshot_id)
         if raw_records is None:
             return None
-        return [InstalledCopy(record["folder_id"], Path(record["path"]), record.get("state", "installed")) for record in raw_records]
+        records = [InstalledCopy(record["folder_id"], Path(record["path"]), record.get("state", "installed")) for record in raw_records]
+        if require_unique:
+            for owner, destinations in data["snapshots"].items():
+                if owner == snapshot_id:
+                    continue
+                for destination in destinations:
+                    for record in records:
+                        if same_filesystem_entry(record.path, destination["path"]):
+                            raise ValueError(f"Installed destination '{record.path}' has multiple recorded owners. Reinstall the intended snapshot to establish ownership.")
+        return records
 
     def set(self, snapshot_id: str, records: list[InstalledCopy]) -> None:
         """Atomically replace one snapshot's installed destination list.
@@ -79,11 +90,11 @@ class InstalledCopyRegistry:
             ValueError: The existing registry has an invalid format or destination entry.
         """
         data = self._read()
-        data["snapshots"][snapshot_id] = [{"folder_id": record.folder_id, "path": record.path.as_posix(), "state": record.state} for record in records]
-        SnapshotSerializer.write_text(self.path, json.dumps(data, ensure_ascii=False, indent=2))
+        data["snapshots"][snapshot_id] = self._encode(records)
+        self._write(data)
 
     def register(self, snapshot_id: str, records: list[InstalledCopy]) -> None:
-        """Add successfully installed paths while preserving earlier live targets.
+        """Transfer the installed destinations to the snapshot in one registry write.
 
         Args:
             snapshot_id (str): Snapshot identity used as the registry key.
@@ -96,16 +107,35 @@ class InstalledCopyRegistry:
             OSError: The updated registry cannot be atomically written.
             ValueError: The persisted registry has an invalid format or destination entry.
         """
-        current = self.get(snapshot_id) or []
-        known = {(record.folder_id, record.path) for record in current}
-        for record in records:
-            key = (record.folder_id, record.path)
-            if key not in known:
-                current.append(record)
-                known.add(key)
-            else:
-                current = [InstalledCopy(existing.folder_id, existing.path, "installed") if (existing.folder_id, existing.path) == key else existing for existing in current]
-        self.set(snapshot_id, current)
+        data = self._read()
+        snapshots = data["snapshots"]
+        for owner, destinations in snapshots.items():
+            snapshots[owner] = [destination for destination in destinations if not any(same_filesystem_entry(record.path, destination["path"]) for record in records)]
+        snapshots.setdefault(snapshot_id, []).extend(self._encode(records))
+        self._write(data)
+
+    @staticmethod
+    def _encode(records: list[InstalledCopy]) -> list[dict[str, str]]:
+        """Encode native paths and removal states in the existing JSON format.
+
+        Args:
+            records (list[InstalledCopy]): Destinations to persist.
+
+        Returns:
+            list[dict[str, str]]: JSON-compatible destination records.
+        """
+        return [{"folder_id": record.folder_id, "path": record.path.as_posix(), "state": record.state} for record in records]
+
+    def _write(self, data: dict) -> None:
+        """Publish the entire registry atomically.
+
+        Args:
+            data (dict): Registry document containing all snapshots.
+
+        Returns:
+            None: The updated registry was written.
+        """
+        SnapshotSerializer.write_text(self.path, json.dumps(data, ensure_ascii=False, indent=2))
 
     def _read(self) -> dict:
         """Load and validate the complete registry; malformed state fails closed.

@@ -91,3 +91,19 @@ def test_regex_context_budget_is_not_a_hard_match_length_limit(tmp_path, tail, e
     page = ResultPage(0, 10)
     TextFileSearcher().search_file(path, params, regex.compile(params.query), page, None)
     assert len(page.results) == expected_count
+
+
+def test_strict_search_propagates_regex_timeout_at_end_of_file(tmp_path):
+    """A timed-out final window must not present a search as complete."""
+
+    class TimeoutPattern:
+        def finditer(self, text, *, pos, timeout):
+            raise TimeoutError
+
+    path = tmp_path / "text"
+    path.write_text("search target", encoding="utf-8")
+    params = TextSearchOptions("target", literal=False, max_context_chars=100)
+    searcher = TextFileSearcher()
+    assert not searcher.search_file(path, params, TimeoutPattern(), ResultPage(0, 10), None)
+    with pytest.raises(TimeoutError, match="Regex search timed out"):
+        searcher.search_file(path, params, TimeoutPattern(), ResultPage(0, 10), None, strict=True)

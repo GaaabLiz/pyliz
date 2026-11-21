@@ -79,6 +79,23 @@ class SnapshotSearchResult:
     line_content: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class SnapshotSearchReport:
+    """A bounded result page with its completion status.
+
+    Attributes:
+        results (list[SnapshotSearchResult]): Matches in traversal order, limited to the requested page.
+        cancelled (bool): The progress observer stopped the search.
+        result_limit_exceeded (bool): At least one additional match exists beyond the page.
+        file_limit_exceeded (bool): At least one candidate file was excluded by the file limit.
+    """
+
+    results: list[SnapshotSearchResult]
+    cancelled: bool = False
+    result_limit_exceeded: bool = False
+    file_limit_exceeded: bool = False
+
+
 @dataclass
 class SnapshotSearchParams:
     """Search query and resource limits for a search operation.
@@ -233,6 +250,51 @@ class SnapshotSearcher:
         logger.debug("Finished snapshot search snapshot=%s results=%s", snapshot.id, len(page.results))
         return page.results
 
+    def search_with_report(
+        self,
+        snapshot: Snapshot,
+        params: SnapshotSearchParams,
+        on_progress: SnapshotProgressCallback | None = None,
+    ) -> SnapshotSearchReport:
+        """Search a snapshot and report cancellation and exceeded limits.
+
+        Args:
+            snapshot (Snapshot): Snapshot whose stored content is searched.
+            params (SnapshotSearchParams): Query and limits for the returned page.
+            on_progress (SnapshotProgressCallback | None): Observer whose literal False cancels the search.
+
+        Returns:
+            SnapshotSearchReport: Results and observed reasons why the search or page is incomplete.
+
+        Raises:
+            ValueError: The regular expression is invalid.
+            OSError: A stored snapshot directory or candidate file cannot be read.
+            UnicodeError: A candidate text file cannot be decoded.
+            TimeoutError: The regex matching time budget was exceeded.
+        """
+        pattern = self._compile_regex(params, raise_invalid=True)
+        snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
+
+        # Allow one extra match to distinguish a full page from a truncated one.
+        page = _ResultPage(params.result_offset, params.max_results + 1)
+        cancelled, file_limit_exceeded = self._search_in_snapshot_path(snapshot, snapshot_path, params, pattern, on_progress, page, detailed=True)
+        return SnapshotSearchReport(page.results[: params.max_results], cancelled, page.full, file_limit_exceeded)
+
+    @staticmethod
+    def validate_query(params: SnapshotSearchParams) -> None:
+        """Validate the query before launching a background search.
+
+        Args:
+            params (SnapshotSearchParams): Query text and matching mode.
+
+        Returns:
+            None: The query is valid.
+
+        Raises:
+            ValueError: The regular expression is invalid.
+        """
+        SnapshotSearcher._compile_regex(params, raise_invalid=True)
+
     def search_list(
         self,
         snapshots: list[Snapshot],
@@ -284,12 +346,13 @@ class SnapshotSearcher:
         return _ResultPage(params.result_offset, params.max_results)
 
     @staticmethod
-    def _compile_regex(params: SnapshotSearchParams) -> Optional[TimedPattern]:
-        """Compile a regex query, logging invalid patterns without raising.
+    def _compile_regex(params: SnapshotSearchParams, *, raise_invalid: bool = False) -> Optional[TimedPattern]:
+        """Compile a regex query, with optional propagation of syntax errors.
 
         Args:
             params (SnapshotSearchParams): Query, encoding and resource limits; the search observes this live
                 configuration.
+            raise_invalid (bool): Report invalid syntax as a ValueError for callers that need a strict outcome.
 
         Returns:
             Optional[TimedPattern]: Compiled regex for REGEX mode, otherwise None; invalid regex syntax is
@@ -300,6 +363,8 @@ class SnapshotSearcher:
         try:
             return regex_engine.compile(params.query)
         except regex_engine.error as error:
+            if raise_invalid:
+                raise ValueError(str(error)) from error
             logger.error(f"Invalid regex pattern provided: {error}")
             return None
 
@@ -311,7 +376,9 @@ class SnapshotSearcher:
         compiled_regex: Optional[TimedPattern],
         on_progress: Optional[SnapshotProgressCallback],
         page: _ResultPage,
-    ) -> None:
+        *,
+        detailed: bool = False,
+    ) -> tuple[bool, bool]:
         """Search a resolved snapshot directory into an existing bounded page.
 
         Args:
@@ -325,26 +392,33 @@ class SnapshotSearcher:
             on_progress (Optional[SnapshotProgressCallback]): Optional observer called with (filename, total_files,
                 processed_files), also during chunks; only literal False cancels the current snapshot.
             page (_ResultPage): Bounded result sink retaining remaining offset, limit and successful matches.
+            detailed (bool): Check for an extra candidate and propagate scan errors.
 
         Returns:
-            None: No return value.
+            tuple[bool, bool]: Observer cancellation and candidate limit exceeded, respectively.
         """
         if page.full:
-            return
+            return False, False
         if not snapshot_path or not snapshot_path.is_dir():
-            logger.warning(f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory.")
-            return
+            message = f"Snapshot path '{snapshot_path}' for snapshot id '{snapshot.id}' does not exist or is not a directory."
+            if detailed:
+                raise FileNotFoundError(message)
+            logger.warning(message)
+            return False, False
 
-        files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions, params.max_files)
+        files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions, params.max_files + int(detailed), strict=detailed)
+        file_limit_exceeded = len(files_to_search) > params.max_files
+        if file_limit_exceeded:
+            files_to_search.pop()
         total_files = len(files_to_search)
         for index, file_path in enumerate(files_to_search, 1):
             if page.full:
                 break
             if on_progress and on_progress(file_path.name, total_files, index) is False:
-                break
+                return True, file_limit_exceeded
 
             if params.search_target == SearchTarget.FILE_NAME:
-                if self._matches(file_path.name, params, compiled_regex):
+                if self._matches(file_path.name, params, compiled_regex, strict=detailed):
                     page.add(
                         SnapshotSearchResult(
                             file_path=file_path,
@@ -363,17 +437,19 @@ class SnapshotSearcher:
                     on_progress,
                     total_files,
                     index,
+                    strict=detailed,
                 )
                 page.commit(file_page)
                 if cancelled:
-                    break
+                    return True, file_limit_exceeded
 
-        if len(files_to_search) == params.max_files:
+        if file_limit_exceeded or (not detailed and total_files == params.max_files):
             logger.warning(
                 "Search reached max_files=%d for snapshot %s; additional files may not have been searched.",
                 params.max_files,
                 snapshot.id,
             )
+        return False, file_limit_exceeded
 
     def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
         """Apply file and case-insensitive suffix filters, including compound suffixes.
@@ -404,6 +480,8 @@ class SnapshotSearcher:
         on_progress: Optional[SnapshotProgressCallback],
         total_files: int,
         processed_files: int,
+        *,
+        strict: bool = False,
     ) -> bool:
         """Scan a file in chunks; return True when the callback cancels the snapshot.
 
@@ -419,6 +497,7 @@ class SnapshotSearcher:
                 processed_files), also during chunks; only literal False cancels the current snapshot.
             total_files (int): Candidate-file count for the current snapshot, passed unchanged to search observers.
             processed_files (int): One-based index of the current candidate file, passed unchanged during its chunks.
+            strict (bool): Propagate file read and match errors.
 
         Returns:
             bool: True only when a chunk observer returns literal False; False for normal completion, skipped
@@ -431,7 +510,7 @@ class SnapshotSearcher:
         from pylizlib.core.os.snap.searching import SnapshotMatchPage, SnapshotTextOptions
 
         on_chunk = None if on_progress is None else (lambda: on_progress(file_path.name, total_files, processed_files) if on_progress else None)
-        return self._text_searcher.search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk)
+        return self._text_searcher.search_file(file_path, SnapshotTextOptions(params), compiled_regex, SnapshotMatchPage(page, snapshot_name), on_chunk, strict=strict)
 
     def _collect_files(
         self,
@@ -439,6 +518,8 @@ class SnapshotSearcher:
         snapshot_path: Path,
         extensions: list[str],
         max_files: int,
+        *,
+        strict: bool = False,
     ) -> list[Path]:
         """Collect no more than the configured number of searchable file paths.
 
@@ -450,6 +531,7 @@ class SnapshotSearcher:
                 suffixes; empty searches all files.
             max_files (int): Maximum candidate paths retained for one snapshot; later candidates are not visited after
                 the limit.
+            strict (bool): Propagate a missing captured directory as a search error.
 
         Returns:
             list[Path]: At most max_files matching paths, visited by association order then the native rglob
@@ -459,6 +541,8 @@ class SnapshotSearcher:
         for dir_assoc in snapshot.directories:
             copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
             if not copied_dir_path.is_dir():
+                if strict:
+                    raise FileNotFoundError(f"Captured directory '{copied_dir_path}' is unavailable.")
                 continue
             for file_path in copied_dir_path.rglob("*"):
                 if self._should_search_file(file_path, extensions):
@@ -472,6 +556,8 @@ class SnapshotSearcher:
         text: str,
         params: SnapshotSearchParams,
         compiled_regex: Optional[TimedPattern],
+        *,
+        strict: bool = False,
     ) -> bool:
         """Match a filename using the same text and timed-regex rules as content.
 
@@ -481,9 +567,10 @@ class SnapshotSearcher:
                 configuration.
             compiled_regex (Optional[TimedPattern]): Compiled regex used when literal matching is disabled;
                 None produces no regex matches.
+            strict (bool): Propagate regex timeouts.
 
         Returns:
-            bool: Whether literal substring or timed regex matching accepts the filename; regex timeouts return False.
+            bool: Whether literal substring or timed regex matching accepts the filename.
         """
         if params.query_type == QueryType.TEXT:
             return params.query in text
@@ -491,7 +578,9 @@ class SnapshotSearcher:
             return False
         try:
             return bool(compiled_regex.search(text, timeout=params.regex_timeout_seconds))
-        except TimeoutError:
+        except TimeoutError as error:
+            if strict:
+                raise TimeoutError(f"Regex search timed out while checking '{text}'.") from error
             logger.warning(
                 "Regex search timed out while checking a filename after %.3f seconds",
                 params.regex_timeout_seconds,

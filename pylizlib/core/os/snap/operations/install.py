@@ -208,7 +208,7 @@ class SnapshotInstaller:
             ValueError: A registered target is unsafe for removal.
         """
         recover_storage_transactions(self.storage)
-        records = InstalledCopyRegistry(self.storage.path_catalogue).get(self.storage.snapshot.id)
+        records = InstalledCopyRegistry(self.storage.path_catalogue).get(self.storage.snapshot.id, require_unique=True)
         if records is None:
             return None
         if any(record.state == "removing" for record in records):
@@ -244,7 +244,7 @@ class SnapshotInstaller:
         """
         recover_storage_transactions(self.storage)
         registry = InstalledCopyRegistry(self.storage.path_catalogue)
-        records = registry.get(self.storage.snapshot.id)
+        records = registry.get(self.storage.snapshot.id, require_unique=True)
         if records is None:
             raise RuntimeError("Installed destinations are unknown for this legacy snapshot. Install it once with this version before automatic removal.")
         if any(record.state == "removing" for record in records):

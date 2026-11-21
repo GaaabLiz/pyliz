@@ -51,13 +51,13 @@ def test_creator_injected_clock_and_concurrent_collision(tmp_path, monkeypatch, 
     write = creation._write_verified_zip_exclusive
     collisions = []
 
-    def concurrent_writer(path, entries, message_callback):
+    def concurrent_writer(path, entries, message_callback, *, validate):
         """Publish the first candidate just before the exclusive hard link."""
         if not collisions:
             path.write_bytes(b"concurrent backup")
             collisions.append(path)
             raise FileExistsError(str(path))
-        return write(path, entries, message_callback)
+        return write(path, entries, message_callback, validate=validate)
 
     monkeypatch.setattr(creation, "_write_verified_zip_exclusive", concurrent_writer)
     with caplog.at_level("INFO", logger="PylizLib"):
