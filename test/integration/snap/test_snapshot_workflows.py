@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
@@ -372,3 +373,34 @@ def test_search_report_distinguishes_full_page_extra_matches_and_cancellation(sn
     assert cancelled.cancelled
     with pytest.raises(ValueError):
         searcher.search_with_report(snap, SnapshotSearchParams("[", query_type=QueryType.REGEX))
+
+
+def test_search_report_propagates_discovery_errors_and_cancels_before_scanning(snapshot_workspace: Path, monkeypatch):
+    source = make_source(snapshot_workspace, "discovery", text="match")
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue")
+    snapshot = make_snapshot("discovery", source)
+    catalogue.add(snapshot)
+    root = association_copy(catalogue, snapshot, snapshot.directories[0])
+    scandir = os.scandir
+
+    def deny_nested(path):
+        if path == root / "nested":
+            raise PermissionError("Cannot enumerate nested directory")
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", deny_nested)
+    searcher = SnapshotSearcher(catalogue)
+    query = SnapshotSearchParams("match")
+    with pytest.raises(PermissionError, match="Cannot enumerate nested"):
+        searcher.search_with_report(snapshot, query)
+
+    progress = []
+
+    def stop_discovery(name, total, index):
+        progress.append((name, total, index))
+        return False
+
+    report = searcher.search_with_report(snapshot, query, on_progress=stop_discovery)
+    assert report.cancelled
+    assert report.results == []
+    assert progress == [(root.name, 0, 0)]

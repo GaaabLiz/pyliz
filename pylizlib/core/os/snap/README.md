@@ -159,9 +159,10 @@ snapshot search; the callback is also called while reading, so it can stop a
 very large file.
 
 `search_with_report()` reports cancellation and detects additional matches or
-candidate files beyond the configured limits. It raises `ValueError` for
-invalid regex syntax and propagates read, decoding and match errors so the
-caller can report a failed snapshot search. `validate_query()` allows checking
+candidate files beyond the configured limits. It rejects links and propagates
+directory traversal, read, decoding and match errors so the caller can report
+a failed snapshot search. Its callback receives two zero counters during
+discovery and can cancel before the candidate count is known. `validate_query()` allows checking
 syntax before starting a background job. The existing list-returning methods keep their behavior.
 
 ## Catalogue statistics

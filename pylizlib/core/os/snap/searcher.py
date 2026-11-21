@@ -16,6 +16,7 @@ Classes:
 from __future__ import annotations
 
 import codecs
+import stat
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -27,6 +28,7 @@ from pylizlib.core.data.text.models import TimedPattern
 from pylizlib.core.data.text.results import ResultPage as _ResultPage
 from pylizlib.core.data.text.search import TextFileSearcher
 from pylizlib.core.log.pylizLogger import logger
+from pylizlib.core.os.filesystem.tree import iter_tree_entry_stats_strict
 from pylizlib.core.os.snap.callbacks import SnapshotProgressCallback
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import Snapshot
@@ -262,12 +264,13 @@ class SnapshotSearcher:
             snapshot (Snapshot): Snapshot whose stored content is searched.
             params (SnapshotSearchParams): Query and limits for the returned page.
             on_progress (SnapshotProgressCallback | None): Observer whose literal False cancels the search.
+                During discovery the name identifies a scanned entry, and both counters are zero.
 
         Returns:
             SnapshotSearchReport: Results and observed reasons why the search or page is incomplete.
 
         Raises:
-            ValueError: The regular expression is invalid.
+            ValueError: The regular expression is invalid or the stored tree contains a link.
             OSError: A stored snapshot directory or candidate file cannot be read.
             UnicodeError: A candidate text file cannot be decoded.
             TimeoutError: The regex matching time budget was exceeded.
@@ -406,7 +409,16 @@ class SnapshotSearcher:
             logger.warning(message)
             return False, False
 
-        files_to_search = self._collect_files(snapshot, snapshot_path, params.extensions, params.max_files + int(detailed), strict=detailed)
+        files_to_search, cancelled = self._collect_files(
+            snapshot,
+            snapshot_path,
+            params.extensions,
+            params.max_files + int(detailed),
+            strict=detailed,
+            on_progress=on_progress if detailed else None,
+        )
+        if cancelled:
+            return True, False
         file_limit_exceeded = len(files_to_search) > params.max_files
         if file_limit_exceeded:
             files_to_search.pop()
@@ -451,8 +463,8 @@ class SnapshotSearcher:
             )
         return False, file_limit_exceeded
 
-    def _should_search_file(self, file_path: Path, extensions: list[str]) -> bool:
-        """Apply file and case-insensitive suffix filters, including compound suffixes.
+    def _matches_extension(self, file_path: Path, extensions: list[str]) -> bool:
+        """Apply a case-insensitive suffix filter, including compound suffixes.
 
         Args:
             file_path (Path): Native candidate file path to filter, inspect or search.
@@ -460,10 +472,8 @@ class SnapshotSearcher:
                 suffixes; empty searches all files.
 
         Returns:
-            bool: Whether the entry is a file and matches any enabled case-insensitive suffix filter.
+            bool: Whether the path matches the enabled suffix filters.
         """
-        if not file_path.is_file():
-            return False
         if not extensions:
             return True
         normalized = [extension.casefold() if extension.startswith(".") else f".{extension.casefold()}" for extension in extensions]
@@ -520,7 +530,8 @@ class SnapshotSearcher:
         max_files: int,
         *,
         strict: bool = False,
-    ) -> list[Path]:
+        on_progress: SnapshotProgressCallback | None = None,
+    ) -> tuple[list[Path], bool]:
         """Collect no more than the configured number of searchable file paths.
 
         Args:
@@ -531,25 +542,33 @@ class SnapshotSearcher:
                 suffixes; empty searches all files.
             max_files (int): Maximum candidate paths retained for one snapshot; later candidates are not visited after
                 the limit.
-            strict (bool): Propagate a missing captured directory as a search error.
+            strict (bool): Propagate discovery errors and reject links in the stored tree.
+            on_progress (SnapshotProgressCallback | None): Optional observer notified before each association and
+                periodically during its traversal. Both counters are zero until the candidate total is known.
 
         Returns:
-            list[Path]: At most max_files matching paths, visited by association order then the native rglob
-                traversal.
+            tuple[list[Path], bool]: Paths in traversal order, capped at max_files, and whether discovery was
+                cancelled.
         """
         files_to_search: list[Path] = []
         for dir_assoc in snapshot.directories:
             copied_dir_path = snapshot_path.joinpath(dir_assoc.directory_name)
-            if not copied_dir_path.is_dir():
-                if strict:
-                    raise FileNotFoundError(f"Captured directory '{copied_dir_path}' is unavailable.")
-                continue
-            for file_path in copied_dir_path.rglob("*"):
-                if self._should_search_file(file_path, extensions):
+            if on_progress and on_progress(copied_dir_path.name, 0, 0) is False:
+                return files_to_search, True
+            if strict:
+                entries = ((path, stat.S_ISREG(info.st_mode)) for path, info in iter_tree_entry_stats_strict(copied_dir_path))
+            else:
+                if not copied_dir_path.is_dir():
+                    continue
+                entries = ((path, path.is_file()) for path in copied_dir_path.rglob("*"))
+            for index, (file_path, is_file) in enumerate(entries, 1):
+                if on_progress and index % 128 == 0 and on_progress(file_path.name, 0, 0) is False:
+                    return files_to_search, True
+                if is_file and self._matches_extension(file_path, extensions):
                     files_to_search.append(file_path)
                     if len(files_to_search) >= max_files:
-                        return files_to_search
-        return files_to_search
+                        return files_to_search, False
+        return files_to_search, False
 
     @staticmethod
     def _matches(
