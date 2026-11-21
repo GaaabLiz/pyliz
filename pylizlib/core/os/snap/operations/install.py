@@ -3,6 +3,7 @@
 import hashlib
 import shutil
 import stat
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -224,12 +225,13 @@ class SnapshotInstaller:
         return [path for _, path in targets]
 
     @coordinated("storage.path_catalogue")
-    def remove_installed_copies(self, message_callback=None) -> Path | None:
+    def remove_installed_copies(self, message_callback=None, *, expected_paths: Collection[Path] | None = None) -> Path | None:
         """Back up and remove only destinations recorded by a completed installation.
 
         Args:
             message_callback (MessageCallback | None): Optional status observer receiving one message string; its
                 exceptions propagate according to the calling operation.
+            expected_paths (Collection[Path] | None): Exact confirmed destinations to check under the removal lock.
 
         Returns:
             Path | None: Published backup path, or None when there are no registered local copies to remove.
@@ -240,7 +242,7 @@ class SnapshotInstaller:
                 unregistered while failed targets remain recorded.
             NotADirectoryError: A registered destination is no longer a real directory.
             SnapshotIncompleteError: A selected directory cannot be completely backed up; nothing is removed.
-            ValueError: Backup storage is not configured or a registered target is unsafe.
+            ValueError: Backup storage is not configured, a target is unsafe, or the confirmed path set differs.
         """
         recover_storage_transactions(self.storage)
         registry = InstalledCopyRegistry(self.storage.path_catalogue)
@@ -251,6 +253,8 @@ class SnapshotInstaller:
             raise RuntimeError("A previous removal was interrupted; review the local backup before retrying.")
 
         targets = self._existing_registered_targets(records, reject_invalid=True)
+        if expected_paths is not None and {path for _, path in targets} != set(expected_paths):
+            raise ValueError("The installed folders changed. Review the list and try again.")
         if not targets:
             registry.set(self.storage.snapshot.id, [])
             return None

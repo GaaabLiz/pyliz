@@ -3,7 +3,7 @@
 This facade owns backup triggers and caller-visible orchestration. Storage
 scans and archive algorithms live in dedicated internal modules."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -754,23 +754,36 @@ class SnapshotCatalogue:
         """
         self.remove_installed_copies_with_result(snap_id, message_callback=message_callback)
 
-    def remove_installed_copies_with_result(self, snap_id: str, message_callback: MessageCallback | None = None) -> SnapshotOperationResult:
+    def remove_installed_copies_with_result(
+        self,
+        snap_id: str,
+        message_callback: MessageCallback | None = None,
+        *,
+        expected_paths: Collection[Path] | None = None,
+    ) -> SnapshotOperationResult:
         """Remove registered copies and report the backup of their current state.
 
         Args:
             snap_id (str): ID of the snapshot whose installed copies are removed.
             message_callback (MessageCallback | None): Optional status observer.
+            expected_paths (Collection[Path] | None): Exact set previously confirmed by the caller. None uses the
+                current registered destinations without a separate confirmation.
 
         Returns:
             SnapshotOperationResult: Published backup path, or no path when there are no copies to remove.
+
+        Raises:
+            ValueError: A snapshot with confirmed destinations is missing or its removable paths have changed.
         """
         with catalogue_access(self.path_catalogue):
             snap = self.get_by_id(snap_id)
             if not snap:
+                if expected_paths is not None:
+                    raise ValueError(f"No snapshot found with ID {snap_id}.")
                 logger.warning(f"Snapshot with ID '{snap_id}' not found. Cannot remove installed copies.")
                 return SnapshotOperationResult(None)
             snap_manager = self._manager(snap)
-            backup = snap_manager._remove_installed_copies(message_callback=message_callback)
+            backup = snap_manager._remove_installed_copies(message_callback=message_callback, expected_paths=expected_paths)
             return SnapshotOperationResult(backup)
 
     def get_removable_paths(self, snap_id: str) -> list[Path] | None:

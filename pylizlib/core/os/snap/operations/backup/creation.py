@@ -1,23 +1,30 @@
 """Collect snapshot backup members and publish verified archives exclusively."""
 
+import hashlib
 import json
 import stat
 import tempfile
+import zipfile
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
 from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.archives.zip.publication import write_verified_zip_exclusive as _write_verified_zip_exclusive
 from pylizlib.core.os.filesystem.tree import is_link_or_junction
 from pylizlib.core.os.paths.safety import assert_no_link_components
-from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation
+from pylizlib.core.os.snap.domain import BackupType, SnapDirAssociation, Snapshot
+from pylizlib.core.os.snap.integrity import IntegrityManifest, assert_manifest_matches
 from pylizlib.core.os.snap.operations.archives import SnapshotIncompleteError
-from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, build_backup_manifest
+from pylizlib.core.os.snap.operations.backup.associations import association_identities
+from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, build_backup_manifest, parse_backup_manifest
 from pylizlib.core.os.snap.operations.backup_names import build_backup_filename
 from pylizlib.core.os.snap.storage.archives import validate_zip_archive
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
+from pylizlib.core.os.snap.storage.metadata import SnapshotJsonCodec
+from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage
 from pylizlib.core.os.snap.storage.transactions import recover_storage_transactions
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
@@ -175,8 +182,13 @@ class BackupCreator:
             self.storage.snapshot.validate()
             self.storage.root_path()
             snapshot_json_path = self.storage.child_path(self.storage.settings.json_filename)
-            if backup_type == BackupType.SNAPSHOT_DIRECTORY and not snapshot_json_path.is_file():
-                raise FileNotFoundError(f"Snapshot metadata '{snapshot_json_path}' is missing.")
+            manifest_snapshot = self.storage.snapshot
+
+            # Edits may already hold the proposed model while disk still holds the old snapshot.
+            if backup_type == BackupType.SNAPSHOT_DIRECTORY:
+                manifest_snapshot = self.storage.metadata.from_json(snapshot_json_path)
+                if manifest_snapshot.id != self.storage.snapshot.id:
+                    raise ValueError("Stored snapshot ID does not match the requested backup.")
             timestamp = self.now().strftime("%Y%m%d_%H%M%S")
 
             associations = self.storage.snapshot.directories if backup_type == BackupType.ASSOCIATED_DIRECTORIES else None
@@ -206,10 +218,10 @@ class BackupCreator:
             entries = list(self._files_to_archive(backup_type, associations=associations, captured=captured))
             if any(archive_name == Path(BACKUP_MANIFEST_NAME) for _, archive_name in entries):
                 raise ValueError(f"Snapshot content conflicts with reserved backup manifest '{BACKUP_MANIFEST_NAME}'.")
-            manifest_path = self._write_backup_manifest(backup_path, backup_type, prefix, is_export, timestamp, associations=associations)
+            manifest_path = self._write_backup_manifest(backup_path, manifest_snapshot, backup_type, prefix, is_export, timestamp, associations=associations)
             entries.append((manifest_path, Path(BACKUP_MANIFEST_NAME)))
             try:
-                result = self._publish_unique_archive(backup_path, base_zip_name, entries, message_callback)
+                result = self._publish_unique_archive(backup_path, base_zip_name, entries, backup_type, message_callback)
                 logger.info("Created snapshot backup snapshot=%s archive=%s type=%s", self.storage.snapshot.id, result, backup_type.name)
                 return result
             finally:
@@ -270,6 +282,7 @@ class BackupCreator:
     def _write_backup_manifest(
         self,
         directory: Path,
+        snapshot: Snapshot,
         backup_type: BackupType,
         prefix: str,
         is_export: bool,
@@ -281,6 +294,7 @@ class BackupCreator:
 
         Args:
             directory (Path): Existing directory receiving the temporary manifest file.
+            snapshot (Snapshot): Metadata describing the snapshot version included in the archive.
             backup_type (BackupType): Whether to archive live associated directories (AD) or the stored snapshot tree
                 (SD).
             prefix (str): Backup filename prefix recorded unchanged in the archive manifest.
@@ -293,7 +307,7 @@ class BackupCreator:
         Returns:
             Path: Temporary UTF-8 JSON manifest path; the caller owns unlinking it after archive publication.
         """
-        data = build_backup_manifest(self.storage.snapshot, backup_type, prefix, is_export, timestamp, association_subset=associations)
+        data = build_backup_manifest(snapshot, backup_type, prefix, is_export, timestamp, association_subset=associations)
         temporary_path = None
         try:
             temporary_file_context = tempfile.NamedTemporaryFile(
@@ -381,14 +395,16 @@ class BackupCreator:
         else:
             snapshot_root = self.storage.root_path()
             assert_no_symlinks(snapshot_root)
+            assert_no_operational_storage(snapshot_root)
             for tree_entry in iter_tree_entries_strict(snapshot_root):
                 yield tree_entry, tree_entry.relative_to(self.storage.path_snapshot)
 
-    def _validate_written_archive(self, archive: Path) -> None:
+    def _validate_written_archive(self, archive: Path, *, backup_type: BackupType) -> None:
         """Apply the restore member and resource checks before publication.
 
         Args:
             archive (Path): Completed ZIP in private staging.
+            backup_type (BackupType): SD archives also verify captured content against their metadata.
 
         Returns:
             None: The archive passed restore preflight.
@@ -398,14 +414,61 @@ class BackupCreator:
             max_entries=self.storage.settings.max_archive_entries,
             max_uncompressed_bytes=self.storage.settings.max_archive_uncompressed_bytes,
         )
+        if backup_type == BackupType.SNAPSHOT_DIRECTORY:
+            self._validate_snapshot_archive(archive)
 
-    def _publish_unique_archive(self, backup_path: Path, base_zip_name: str, entries: list[tuple[Path, Path]], message_callback=None) -> Path:
+    def _validate_snapshot_archive(self, archive_path: Path) -> None:
+        """Check archived SD contents against the same metadata used by restore.
+
+        Args:
+            archive_path (Path): Closed private ZIP that passed member validation.
+
+        Returns:
+            None: All association roots and available integrity manifests agree with the archived bytes.
+
+        Raises:
+            FileNotFoundError: An association directory is missing from the archive.
+            SnapshotIntegrityError: Archived content differs from a captured manifest.
+            ValueError: Snapshot identity or association metadata does not agree across archive members.
+        """
+        with zipfile.ZipFile(archive_path) as archive:
+            snapshot = SnapshotJsonCodec.decode(archive.read(self.storage.settings.json_filename).decode("utf-8"))
+            manifest = parse_backup_manifest(json.loads(archive.read(BACKUP_MANIFEST_NAME)))
+            if snapshot.id != manifest.snapshot_id or association_identities(snapshot.directories) != association_identities(manifest.associations):
+                raise ValueError("Snapshot-directory metadata does not match the backup manifest.")
+
+            names = set(archive.namelist())
+            observed: dict[str, IntegrityManifest] = {}
+            for association in snapshot.directories:
+                root = association.directory_name
+                if f"{root}/" not in names:
+                    raise FileNotFoundError(f"Snapshot backup is missing association directory '{root}'.")
+                if association.integrity_manifest is not None:
+                    observed[root] = {".": {"type": "directory", "size": 0, "sha256": None}}
+
+            for member in archive.infolist():
+                root, _, relative_path = member.filename.rstrip("/").partition("/")
+                if root not in observed or not relative_path:
+                    continue
+                if member.is_dir():
+                    observed[root][relative_path] = {"type": "directory", "size": 0, "sha256": None}
+                else:
+                    with archive.open(member) as stream:
+                        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                    observed[root][relative_path] = {"type": "file", "size": member.file_size, "sha256": digest}
+
+            for association in snapshot.directories:
+                if association.integrity_manifest is not None:
+                    assert_manifest_matches(association.integrity_manifest, observed[association.directory_name])
+
+    def _publish_unique_archive(self, backup_path: Path, base_zip_name: str, entries: list[tuple[Path, Path]], backup_type: BackupType, message_callback=None) -> Path:
         """Retry only final-name collisions while retaining exclusive publication.
 
         Args:
             backup_path (Path): Existing directory receiving the verified archive.
             base_zip_name (str): Initial filename, including the .zip suffix.
             entries (list[tuple[Path, Path]]): Fully enumerated sources and member names.
+            backup_type (BackupType): Archive type used to select post-write checks.
             message_callback (Callable[[str], None] | None): Per-member observer.
 
         Returns:
@@ -423,7 +486,7 @@ class BackupCreator:
                 collision_index += 1
                 continue
             try:
-                return _write_verified_zip_exclusive(zip_path, entries, message_callback, validate=self._validate_written_archive)
+                return _write_verified_zip_exclusive(zip_path, entries, message_callback, validate=partial(self._validate_written_archive, backup_type=backup_type))
             except FileExistsError:
                 if not (zip_path.exists() or zip_path.is_symlink()):
                     raise

@@ -114,6 +114,11 @@ path is removed from the registry; errors leave paths that still exist
 registered. An interruption during removal leaves the entry marked as pending
 and requires review before retrying.
 
+After prompting the user with `get_removable_paths()`, pass the confirmed paths
+as `expected_paths` to `remove_installed_copies_with_result()`. The library checks
+that the set matches the actual removal plan under the catalogue lock before
+creating a backup or deleting any directory.
+
 ## Automatic backup results
 
 `SnapshotCatalogue.install_with_result()`, `delete_with_result()`,
@@ -154,9 +159,10 @@ snapshot search; the callback is also called while reading, so it can stop a
 very large file.
 
 `search_with_report()` reports cancellation and detects additional matches or
-candidate files beyond the configured limits. It raises `ValueError` for
-invalid regex syntax and propagates read, decoding and match errors so the
-caller can report a failed snapshot search. `validate_query()` allows checking
+candidate files beyond the configured limits. It rejects links and propagates
+directory traversal, read, decoding and match errors so the caller can report
+a failed snapshot search. Its callback receives two zero counters during
+discovery and can cancel before the candidate count is known. `validate_query()` allows checking
 syntax before starting a background job. The existing list-returning methods keep their behavior.
 
 ## Catalogue statistics
@@ -285,7 +291,10 @@ and rejects mismatches. Imports leave the source archive untouched.
 
 Before deleting a snapshot, the catalogue reloads its metadata under the same
 lock as backup creation and removal. Before publication, a backup ZIP passes the
-same member and size checks used to preflight restore. Associated-directory
+same member and size checks used to preflight restore. SD ZIPs also check every
+association root and verify archived bytes against any recorded integrity
+manifest. A failed check prevents automatic deletion, edit, or synchronization
+from proceeding with an unusable backup. Associated-directory
 exports can read current files with `export_assoc_dirs()` or the captured copies
 with `export_captured_assoc_dirs()`. Both use the association layout of AD ZIPs.
 
