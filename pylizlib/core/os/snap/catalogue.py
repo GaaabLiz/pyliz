@@ -188,10 +188,11 @@ class SnapshotCatalogue:
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            OSError: The new directory cannot be initialized; the previous path is retained.
         """
-        with catalogue_access(self.path_catalogue):
+        with catalogue_access(self.path_catalogue, allow_unavailable=True):
+            new_path.mkdir(parents=True, exist_ok=True)
             self.path_catalogue = new_path
-            self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def add(self, snap: Snapshot, progress_callback=None, message_callback=None):
         """Adds a new snapshot to the catalogue.

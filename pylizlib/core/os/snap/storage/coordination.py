@@ -66,7 +66,7 @@ if hasattr(os, "register_at_fork"):
 
 
 @contextmanager
-def catalogue_access(path_catalogue: Path, *, write: bool = True) -> Iterator[None]:
+def catalogue_access(path_catalogue: Path, *, write: bool = True, allow_unavailable: bool = False) -> Iterator[None]:
     """Hold one catalogue gate across recovery, preflight, publication and cleanup.
 
     Internal calls on the owning thread reuse the gate. Metadata queries from
@@ -76,18 +76,26 @@ def catalogue_access(path_catalogue: Path, *, write: bool = True) -> Iterator[No
     Args:
         path_catalogue (Path): Catalogue root; missing parents are created as for normal catalogue initialization.
         write (bool): True for mutations, export or backup; False only for metadata lookup and implicit recovery.
+        allow_unavailable (bool): For switching away from a catalogue only. Do not create its root and retain
+            the thread gate if native locking fails with a filesystem error.
 
     Yields:
-        None: Protected execution while the process and thread gates remain held.
+        None: Execution under the thread gate and the native lock when the catalogue is accessible.
 
     Raises:
         SnapshotBusyError: Another owner is active or an observer attempts a mutation.
-        OSError: Native locking is unavailable; execution never continues without the lock.
+        OSError: Native locking is unavailable and access to the old catalogue is required.
         ValueError: The persistent sidecar is unsafe.
     """
     if write and _in_observer.get():
         raise SnapshotBusyError("Snapshot callback observers cannot start a modifying operation.")
-    root = Path(path_catalogue).resolve(strict=False)
+    root = Path(path_catalogue)
+    try:
+        root = root.resolve(strict=False)
+    except OSError:
+        if not allow_unavailable:
+            raise
+        root = root.absolute()
     key = os.path.normcase(str(root))
     with _leases_gate:
         lease = _leases.get(key)
@@ -106,15 +114,20 @@ def catalogue_access(path_catalogue: Path, *, write: bool = True) -> Iterator[No
                 lease.active_journals.intersection_update(previous_journals)
                 lease.depth -= 1
             return
-        root.mkdir(parents=True, exist_ok=True)
         with ExitStack() as resources:
             try:
+                if not allow_unavailable:
+                    root.mkdir(parents=True, exist_ok=True)
                 resources.enter_context(FileLock(root / CATALOGUE_LOCK_FILENAME))
+                logger.debug("Acquired snapshot catalogue gate at '%s'.", root)
             except FileLockBusyError as error:
                 raise SnapshotBusyError(f"Snapshot catalogue '{root}' is busy with another process.") from error
+            except OSError as error:
+                if not allow_unavailable:
+                    raise
+                logger.debug("Cannot lock previous catalogue '%s' while switching away: %s", root, error)
             lease.owner = threading.get_ident()
             lease.depth = 1
-            logger.debug("Acquired snapshot catalogue gate at '%s'.", root)
             try:
                 yield
             finally:
