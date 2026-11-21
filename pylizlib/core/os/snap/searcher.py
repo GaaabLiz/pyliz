@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import codecs
 import stat
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -32,6 +33,7 @@ from pylizlib.core.os.filesystem.tree import iter_tree_entry_stats_strict
 from pylizlib.core.os.snap.callbacks import SnapshotProgressCallback
 from pylizlib.core.os.snap.catalogue import SnapshotCatalogue
 from pylizlib.core.os.snap.domain import Snapshot
+from pylizlib.core.os.snap.storage.coordination import catalogue_access, observer_callback
 
 
 class QueryType(Enum):
@@ -274,13 +276,21 @@ class SnapshotSearcher:
             OSError: A stored snapshot directory or candidate file cannot be read.
             UnicodeError: A candidate text file cannot be decoded.
             TimeoutError: The regex matching time budget was exceeded.
+            SnapshotBusyError: A competing operation holds the catalogue.
+
+        Notes:
+            A SnapshotCatalogue is held for the entire scan, so an edit or
+            synchronization through the library cannot change its contents mid-search.
         """
         pattern = self._compile_regex(params, raise_invalid=True)
-        snapshot_path = self.catalogue.get_snap_directory_path(snapshot)
+        catalogue = self.catalogue
+        access = catalogue_access(catalogue.path_catalogue, write=False) if isinstance(catalogue, SnapshotCatalogue) else nullcontext()
+        with access:
+            snapshot_path = catalogue.get_snap_directory_path(snapshot)
 
-        # Allow one extra match to distinguish a full page from a truncated one.
-        page = _ResultPage(params.result_offset, params.max_results + 1)
-        cancelled, file_limit_exceeded = self._search_in_snapshot_path(snapshot, snapshot_path, params, pattern, on_progress, page, detailed=True)
+            # Allow one extra match to distinguish a full page from a truncated one.
+            page = _ResultPage(params.result_offset, params.max_results + 1)
+            cancelled, file_limit_exceeded = self._search_in_snapshot_path(snapshot, snapshot_path, params, pattern, observer_callback(on_progress), page, detailed=True)
         return SnapshotSearchReport(page.results[: params.max_results], cancelled, page.full, file_limit_exceeded)
 
     @staticmethod

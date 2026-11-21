@@ -161,8 +161,10 @@ very large file.
 `search_with_report()` reports cancellation and detects additional matches or
 candidate files beyond the configured limits. It rejects links and propagates
 directory traversal, read, decoding and match errors so the caller can report
-a failed snapshot search. Its callback receives two zero counters during
-discovery and can cancel before the candidate count is known. `validate_query()` allows checking
+a failed snapshot search. With a `SnapshotCatalogue`, it holds the catalogue
+gate throughout the scan to read a consistent version of the snapshot. Its
+callback receives two zero counters during discovery and can cancel before
+the candidate count is known. `validate_query()` allows checking
 syntax before starting a background job. The existing list-returning methods keep their behavior.
 
 ## Catalogue statistics
