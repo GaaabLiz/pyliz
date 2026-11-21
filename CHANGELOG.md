@@ -4,6 +4,240 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.0.0] - 2026-11-14
+
+### Bump
+
+- V1.0.0
+
+### Ci
+
+- Install Qt extras for test suite
+- Install EGL runtime for Qt tests
+- Install GUI dependencies on Linux runner and use pytest importorskip for Qt tests
+- Run full test suite across platforms
+- Configure AI import check in project.mk
+- Install docs group for test suite
+- Run AI import check after tests
+
+### License
+
+- Dedicate project under Unlicense
+
+### ♻️ Refactor
+
+- Separate snapshot diff sorting and entry checks
+- Isolate snapshot storage and archive primitives
+- Separate snapshot JSON codec from protected metadata I/O
+- Separate snapshot edit planning from publication
+- Extract staged snapshot installation phases
+- Isolate snapshot synchronization and recovery phases
+- Extract snapshot root lifecycle operations
+- Isolate snapshot backup and restore services
+- Separate catalogue scanning and ZIP transfers
+- Delegate association copying and sample generation
+- Document and share snapshot progress callback contracts
+- Scope sequential copy state to a documented session
+- Isolate search path contract and shared matching
+- Preserve serializer hook resolution order across delegates
+- **os**: Extract strict tree traversal and path identity
+- **os**: Separate lexical paths and Windows drive adapters
+- **os**: Extract validated ZIP and capacity services
+- **os**: Extract protected atomic publication and durability
+- **snap**: Define compatible versioned journal contracts
+- **snap**: Separate recovery coordinator and operation handlers
+- **snap**: Share identity-preserving model restoration
+- **snap**: Isolate backup creation and archive inspection
+- **snap**: Separate restore planning staging and publication
+- **text**: Extract encoding detection and bounded previews
+- **text**: Extract streaming search with snapshot adapters
+- **text**: Model scan windows and separate matching algorithms
+- **os**: Isolate tree metadata and copy fingerprint primitives
+- **snap**: Compose provider consistency and metadata policies
+- **snap**: Separate installation intent and metadata completion
+- **snap**: Separate acquisition state and snapshot publication
+- **snap**: Clarify edit and sync transaction phases
+- **snap**: Share association manifest validation policies
+- **snap**: Isolate recovery record and path validators
+- **snap**: Separate archive metadata decoders
+- **os**: Clarify atomic version and metadata application phases
+- **snap**: Keep recovery decisions in operation handlers
+- **snap**: Isolate import metadata checks and operation events
+- **os**: Share strict filesystem entry traversal
+- **snap**: Name mutable copy configuration policies
+- **text**: Define narrow timed pattern and page contracts
+- **os**: Clarify optional hooks and lexical path roles
+- **snap**: Align positional metadata adapter capabilities
+- **os**: Group helpers by responsibility
+- **snap**: Split models, strategies, and test suites
+- Deduplicate helpers across package modules
+- **core**: Reuse atomic text publication
+- **network**: Share request execution
+- **filesystem**: Simplify path checks
+- **snap**: Share archive extraction workflow
+- **media**: Share frame and sidecar helpers
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog [skip ci]
+- Update .gitignore to include .build directory
+- Ignore macOS Finder metadata
+- Update Python template workflows
+- Remove obsolete temporary sources
+- **deps**: Normalize package extras and metadata
+- **deps**: Update vulnerable packages and split dev groups
+- **dev**: Add pytest-cov
+
+### ⚡ Performance
+
+- **snap**: Avoid repeated catalogue reads
+
+### 🎨 Styling
+
+- **test**: Clear Ruff issues in regression suite
+- Satisfy CI formatting check
+
+### 🐛 Bug Fixes
+
+- Align CI tests with project dependencies
+- Make AI integration tests portable
+- Resolve Ruff CI quality failures
+- **core**: Avoid following symlinks during deletion
+- **core**: Preserve existing files on failed downloads
+- **core**: Write JSON files atomically
+- **network**: Verify TLS on POST requests by default
+- **log**: Replace unsupported trace calls
+- **ai**: Pin JoyTag model and code revisions
+- **ai**: Report unknown NSFW results for unreadable videos
+- **config**: Write INI files atomically
+- **core**: Visit each scanned path exactly once
+- **core**: Reject copies inside source directories
+- **core**: Avoid following symlinks during recursive scans
+- **core**: Recognize media extensions case insensitively
+- **media**: Validate FPS and clamp selected frames
+- **media**: Distribute video samples across full duration
+- **config**: Preserve literal percent signs in INI values
+- **config**: Report INI creation failures accurately
+- **network**: Scope connectivity timeout to its socket
+- **network**: Classify all 2xx HTTP responses as successful
+- **network**: Retain responses when JSON decoding fails
+- **packaging**: Include media dependencies in AI extras
+- **core**: Check command availability without running it
+- **core**: Query free space portably on Windows
+- **ai**: Use reopenable temporary files for video frames
+- **qt**: Always resolve a valid themed icon color
+- **qt**: Handle optional toolbar absence safely
+- **qtfw**: Remove folder entries by their file path
+- **qt**: Persist scalar preference values
+- **qtfw**: Preserve selections when combo items change
+- **qtfw**: Key software widgets by full path
+- **qt**: Make operation cancellation cooperative
+- **qt**: Marshal operation completion to runner thread
+- **qt**: Reserve active slots before worker start
+- **qt**: Await workers after aborting the batch
+- **qt**: Retain errors from continued tasks
+- **qt**: Finish empty operation batches
+- **qt**: Isolate each runner thread pool
+- **qt**: Dispatch action group IDs correctly
+- **qt**: Manage toolbar button widgets
+- **qt**: Generate valid QRC files with correct paths
+- **qt**: Generate importable resource and CSS modules
+- **qt**: Honor QRC aliases and root resources
+- **qt**: Honor task-level cancellation flags
+- **ai**: Preserve positional dataclass compatibility
+- **qt**: Report cooperative cancellations accurately
+- **qt**: Escape generated resource prefix docs
+- **core**: Register custom TRACE level on logger and fix menu/card handler bugs
+- Preserve original snapshot when restore rename fails
+- Plan snapshot directory edits by stable association IDs
+- Separate snapshot commits from backup cleanup
+- Use symlink-safe deletion with message callbacks
+- Make snapshot recreation explicit and transactional
+- Publish verified backups atomically and propagate failures
+- Fail backup and catalogue exports on incomplete scans
+- Report deletion failures before updating snapshot metadata
+- Require explicit opt-in for Windows Everyone permissions
+- Validate snapshot paths and metadata
+- Harden catalogue path containment
+- Block unverified legacy snapshot installs
+- Publish snapshot metadata atomically
+- Keep snapshot data and metadata consistent
+- Recover snapshot transactions after restart
+- Reject overlapping snapshot install paths
+- Reject recursive snapshot destinations
+- Make snapshot association storage names stable
+- Validate snapshot imports and duplicates before publish
+- Filter unpublished snapshot catalogue entries
+- Preserve empty directories in snapshot archives
+- Reject incomplete associated backups and restores
+- **snap**: Validate destructive restore destinations
+- **snap**: Avoid overwriting same-second backups
+- **snap**: Reject backup paths inside archived trees
+- **snap**: Read backup identity from archive metadata
+- **snap**: Reject symlinks consistently
+- **snap**: Anchor association paths
+- **snap**: Compare edit targets by filesystem identity
+- **snap**: Bound and harden snapshot search
+- **snap**: Report captured sizes and acquisition progress
+- **snap**: Preflight ZIP archives and staging space
+- Make the full test suite portable on Windows
+- Restore CI API and documentation contracts
+- **snap**: Reject imported recovery instructions before publication
+- **snap**: Clean only association-owned staging copies
+- **snap**: Verify staged backup contents before replacing snapshots
+- **snap**: Preserve lexical destinations and reject linked components
+- **snap**: Persist resumable edit rollback progress before cleanup
+- **snap**: Coordinate active operations and implicit recovery
+- **ci**: Resolve test collection and quality failures
+- Run PyPI publish after optional builds
+
+### 📚 Documentation
+
+- Document snapshot architecture and guard the legacy public API
+- **core**: Document shared filesystem and text contracts
+- **snap**: Complete API contracts and document recovery invariants
+- **snap**: Map extracted packages and verify API rendering
+- Add contributor and AI agent guidance
+- Consolidate generated API under docs/api
+- Rewrite project README
+
+### 🚀 Features
+
+- Add snapshot copy strategies
+- Verify snapshot content integrity
+- Make associated backups self-contained
+- **snap**: Add extended metadata copy mode
+
+### 🧪 Testing
+
+- **qtfw**: Provide card type on folder removal stub
+- **network**: Add unit tests for error cases and timeouts
+- **core**: Add unit tests for WindowsOsUtils and platform edge cases
+- **core**: Add unit tests for path validation and directory manipulation
+- **core**: Add unit tests for sample image downloader
+- **core**: Add unit tests for app lifecycle, progress tracking, and loggiz logger
+- **media**: Add unit tests for image, metadata, and video utilities
+- **media**: Add unit tests for dynamic and all frame selectors
+- **ai**: Add unit tests for unique preserving order utility
+- **qt**: Add unit tests for config handler and toolbar handler edge cases
+- Avoid resource module name collision
+- **core**: Expand unit tests for os, log, network, progress and testing utilities
+- **media**: Expand unit tests for media processing, metadata and views
+- **ai**: Add unit tests and mock provider tests for JoyTag, EasyOCR and NudeNet
+- **qt**: Add comprehensive unit tests for Qt and Qt Fluent Widgets modules
+- Reconcile combined suites with main fixes
+- Characterize snapshot compatibility boundaries
+- **snap**: Characterize second refactor compatibility contracts
+- **text**: Characterize streaming window and decode boundaries
+- **snap**: Verify shared boundaries and native platform contracts
+- **snap**: Add end-to-end snapshot runner
+- **snap**: Classify filesystem workflows as integration
+- Fix cross-platform CI contracts
+- Stabilize filesystem and AST contracts
+- Reconcile main OS tests with refactored helpers
+- Make media JSON path assertions portable
+- **filesystem**: Avoid reading locked byte on Windows
+- Mirror unit layout and group integration suites
 ## [0.6.11] - 2026-09-02
 
 ### Bump
