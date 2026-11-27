@@ -82,7 +82,10 @@ def remove_confirmed_associations(
     if backup_path is None:
         raise ValueError("Set a backup folder before deleting associated folders.")
     archive = SnapshotArchiveService(storage).create_backup_for_associations(
-        backup_path, "beforeRemove", [association for association, _ in targets], message_callback,
+        backup_path,
+        "beforeRemove",
+        [association for association, _ in targets],
+        message_callback,
     )
 
     entries = [{"folder_id": association.folder_id, "destination": str(path)} for association, path in targets]
