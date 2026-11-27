@@ -10,6 +10,7 @@ from pylizlib.core.os.snap.storage.coordination import catalogue_access, is_acti
 from pylizlib.core.os.snap.storage.recovery.edits import _recover_edit
 from pylizlib.core.os.snap.storage.recovery.metadata import _refresh_snapshot_model
 from pylizlib.core.os.snap.storage.recovery.models import JOURNAL_FILENAME, TRANSACTION_DIRECTORY, JournalCodec
+from pylizlib.core.os.snap.storage.recovery.removal import recover_association_removal
 from pylizlib.core.os.snap.storage.recovery.replacements import (
     recover_manifest_restore,
     recover_replacements,
@@ -142,6 +143,9 @@ def _recover_one(journal: SnapshotTransactionJournal, storage) -> None:
         return
     if storage is None:
         raise TransactionRecoveryError(f"Transaction '{operation}' requires snapshot metadata context.")
+    if operation == "remove_associations":
+        recover_association_removal(journal, storage)
+        return
     if operation == "edit":
         _recover_edit(journal, state, data, storage)
         return

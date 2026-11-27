@@ -18,7 +18,7 @@ from pylizlib.core.os.snap.copy_strategy import SourceChangedError
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
-from pylizlib.core.os.snap.operations.backup.creation import verify_displaced_install_sources
+from pylizlib.core.os.snap.operations.backup.creation import verify_displaced_sources
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
@@ -205,7 +205,7 @@ class SnapshotInstaller:
                             original_name = entry.get("original_name", Path(entry["destination"]).name)
                             name = f"{name}/{original_name}"
                         displaced[name] = Path(entry["backup"])
-                verify_displaced_install_sources(backup, displaced, merge=not clear_destination)
+                verify_displaced_sources(backup, displaced, merge=not clear_destination)
 
             self._apply_windows_permissions(replacements, enable_everyone_full_control, win32security, con)
             journal.set_state("commit_decided")

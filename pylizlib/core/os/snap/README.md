@@ -122,6 +122,17 @@ as `expected_paths` to `remove_installed_copies_with_result()`. The library chec
 that the set matches the actual removal plan under the catalogue lock before
 creating a backup or deleting any directory.
 
+When the user explicitly selects the snapshot's local associations, use
+`get_associated_paths_for_removal()` and pass the confirmed list as
+`expected_paths` to `remove_associated_paths()`. This operation uses the
+associations instead of the installation registry. Under the catalogue lock,
+it reloads the snapshot, checks the confirmed paths and publishes an AD backup.
+Then it moves each folder aside in a journaled transaction before committing
+the removal. Pass `verify_backup=True` to compare every displaced directory
+and file with the ZIP before committing. If verification fails, the transaction
+rolls back the moves and retains the published backup. The comparison is
+disabled by default.
+
 ## Automatic backup results
 
 `SnapshotCatalogue.install_with_result()`, `delete_with_result()`,

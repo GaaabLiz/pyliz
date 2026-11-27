@@ -27,6 +27,7 @@ from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.configuration import build_associations, configure_snapshot
 from pylizlib.core.os.snap.operations.install import SnapshotInstaller
+from pylizlib.core.os.snap.operations.removal import existing_associations, remove_confirmed_associations
 from pylizlib.core.os.snap.operations.statistics import collect_catalogue_statistics
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
@@ -751,6 +752,47 @@ class SnapshotCatalogue:
                 backup = snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
             snap_manager.update_associated_dirs_from_system(message_callback=message_callback)
             return SnapshotOperationResult(backup)
+
+    def get_associated_paths_for_removal(self, snap_id: str) -> list[Path]:
+        """List the existing local directories associated with a snapshot for removal confirmation.
+
+        Args:
+            snap_id (str): Snapshot whose associated local directories should be listed.
+
+        Returns:
+            list[Path]: Validated local directory paths in association order.
+        """
+        with catalogue_access(self.path_catalogue, write=False):
+            storage = self._manager(self._require_snapshot(snap_id))._storage()
+            return [path for _, path in existing_associations(storage)]
+
+    def remove_associated_paths(
+        self,
+        snap_id: str,
+        *,
+        expected_paths: Collection[Path],
+        verify_backup: bool = False,
+        message_callback: MessageCallback | None = None,
+    ) -> Path | None:
+        """Back up and transactionally remove the confirmed local association paths.
+
+        Args:
+            snap_id (str): Snapshot whose associated directories should be removed.
+            expected_paths (Collection[Path]): Exact paths returned for confirmation.
+            verify_backup (bool): Compare the backed-up contents with the directories moved for removal.
+            message_callback (MessageCallback | None): Optional callback for backup progress messages.
+
+        Returns:
+            Path | None: Published backup ZIP, or None if no directories were confirmed or remain.
+
+        Raises:
+            SourceChangedError: A displaced directory differs from its backup and the removal was rolled back.
+            ValueError: The confirmed paths changed, a path is unsafe, or backup storage is unset.
+            SnapshotBusyError: Another operation owns the catalogue.
+        """
+        with catalogue_access(self.path_catalogue):
+            storage = self._manager(self._require_snapshot(snap_id))._storage()
+            return remove_confirmed_associations(storage, expected_paths, verify_backup=verify_backup, message_callback=message_callback)
 
     def remove_installed_copies(self, snap_id: str, message_callback=None):
         """Removes the installed copies of a snapshot's associated directories from the system.

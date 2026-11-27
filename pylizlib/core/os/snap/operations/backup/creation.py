@@ -30,13 +30,14 @@ from pylizlib.core.os.snap.storage.transactions import recover_storage_transacti
 from pylizlib.core.os.snap.storage.tree import assert_no_symlinks, iter_tree_entries_strict
 
 
-def verify_displaced_install_sources(archive_path: Path | None, displaced: dict[str, Path], *, merge: bool) -> None:
+def verify_displaced_sources(archive_path: Path | None, displaced: dict[str, Path], *, merge: bool = False, subject: str = "Install destination") -> None:
     """Compare displaced directories or merge entries with their restorable ZIP members.
 
     Args:
-        archive_path (Path | None): Published pre-install backup, omitted only when no destinations existed.
+        archive_path (Path | None): Published backup, omitted only when no destinations existed.
         displaced (dict[str, Path]): Archived root names mapped to the journal's saved copies.
         merge (bool): In merge mode, each root name includes the replaced top-level child.
+        subject (str): Name of the affected directory in discrepancy messages.
 
     Returns:
         None: Every displaced file and directory is backed up.
@@ -66,17 +67,17 @@ def verify_displaced_install_sources(archive_path: Path | None, displaced: dict[
                 continue
             source = paths.pop(name, None)
             if source is None or source.is_dir() != member.is_dir():
-                raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+                raise SourceChangedError(f"{subject} changed after backup: '{name}'.")
             if member.is_dir():
                 continue
             info = source.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_size != member.file_size:
-                raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+                raise SourceChangedError(f"{subject} changed after backup: '{name}'.")
             with source.open("rb") as current_file, archive.open(member) as backed_up_file:
                 if hashlib.file_digest(current_file, "sha256").digest() != hashlib.file_digest(backed_up_file, "sha256").digest():
-                    raise SourceChangedError(f"Install destination changed after backup: '{name}'.")
+                    raise SourceChangedError(f"{subject} changed after backup: '{name}'.")
     if paths:
-        raise SourceChangedError(f"Install destination changed after backup: '{next(iter(paths))}'.")
+        raise SourceChangedError(f"{subject} changed after backup: '{next(iter(paths))}'.")
 
 
 class BackupCreator:
