@@ -297,3 +297,36 @@ def test_sd_restore_preserves_executable_file_permissions(snapshot_workspace: Pa
 
     restored = catalogue.path_catalogue / snapshot.id / member
     assert stat.S_IMODE(restored.stat().st_mode) & 0o111 == 0o111
+
+
+@pytest.mark.parametrize("allow_legacy", [False, True])
+def test_catalogue_import_checks_modern_manifests_independently_of_legacy_migration(snapshot_workspace: Path, allow_legacy: bool) -> None:
+    source_catalogue, snapshot, _, _ = _captured_snapshot(snapshot_workspace)
+    source = snapshot_workspace / "source"
+    source_catalogue.create_snapshot(snap_id="valid", name="Valid", directory_paths=[source])
+    exports = snapshot_workspace / "exports"
+    source_catalogue.export_catalogue(exports, file_name="catalogue.zip")
+    archive_path = snapshot_workspace / "altered.zip"
+    altered_member = f"{snapshot.id}/{snapshot.directories[0].directory_name}/payload"
+    with zipfile.ZipFile(exports / "catalogue.zip") as exported, zipfile.ZipFile(archive_path, "w") as altered:
+        for member in exported.infolist():
+            content = b"changed" if member.filename == altered_member else exported.read(member)
+            altered.writestr(member, content)
+        legacy_metadata = {
+            "id": "legacy",
+            "name": "Legacy",
+            "desc": "",
+            "directories": [{"folder_id": "stable-id", "index": 1, "original_path": str(source)}],
+        }
+        altered.writestr("legacy/snapshot.json", json.dumps(legacy_metadata))
+        altered.writestr("legacy/1-source/file.txt", b"legacy contents")
+
+    target = SnapshotCatalogue(snapshot_workspace / "imported", SnapshotSettings(allow_unverified_legacy_snapshots=allow_legacy))
+    report = target.import_catalogue_with_report(archive_path)
+
+    assert set(report.imported) == {"valid", "legacy"}
+    assert set(report.failed) == {snapshot.id}
+    assert not (target.path_catalogue / snapshot.id).exists()
+    legacy = target.get_by_id("legacy")
+    assert legacy is not None
+    assert (legacy.directories[0].integrity_manifest is not None) == allow_legacy

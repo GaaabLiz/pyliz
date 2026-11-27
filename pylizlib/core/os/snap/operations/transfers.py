@@ -236,8 +236,8 @@ class CatalogueTransferService:
     def _import_entry(self, potential_snap_dir: Path, report: SnapshotCatalogueImportReport) -> None:
         """Import one extracted directory and record its outcome.
 
-        With legacy migration enabled, validate and prepare each entry in
-        staging. Preserve the original ID-only batch behavior by default.
+        Validate staged snapshots independently of legacy migration. Preserve
+        support for historical ID-only entries when migration is disabled.
 
         Args:
             potential_snap_dir (Path): One extracted batch-import entry; non-directories and invalid entries are
@@ -256,7 +256,7 @@ class CatalogueTransferService:
             logger.warning(f"Skipping directory '{potential_snap_dir.name}' as it does not contain a snapshot json file.")
             return
 
-        # Read just the ID to avoid loading the whole object unnecessarily
+        # Read the ID to skip entries already present before staging.
         try:
             data = json.loads(SnapshotSerializer.read_text(json_path))
             snap_id = data.get("id")
@@ -274,12 +274,17 @@ class CatalogueTransferService:
             install_registry = InstalledCopyRegistry(self.path_catalogue)
             install_registry.set(snap_id, [])
 
-            # Copy the extracted folder to the catalogue
+            # Only historical records containing just an ID lack a snapshot model to validate.
+            id_only = data.keys() == {"id"}
+            prepare_staging = None
+            if not id_only or self.settings.allow_unverified_legacy_snapshots:
+                prepare_staging = partial(self._prepare_staged_import, snapshot_id=snap_id)
+
             publish_snapshot_tree(
                 potential_snap_dir,
                 snap_id,
                 self.path_catalogue,
-                prepare_staging=partial(self._prepare_staged_import, snapshot_id=snap_id) if self.settings.allow_unverified_legacy_snapshots else None,
+                prepare_staging=prepare_staging,
                 copy_strategy=self.settings.copy_strategy,
                 operation="Catalogue import",
             )

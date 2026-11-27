@@ -292,8 +292,9 @@ With `allow_unverified_legacy_snapshots=True`, single and batch imports
 rewrite legacy metadata in the staged copy before publication. Association IDs
 and stored directory names remain stable. Where an integrity manifest is
 missing, it is generated from the imported bytes and becomes the baseline for
-later integrity checks. If a manifest is already present, import verifies it
-and rejects mismatches. Imports leave the source archive untouched.
+later integrity checks. Both import routes verify existing manifests before
+publication, regardless of the migration setting. Imports leave the source
+archive untouched.
 
 `import_catalogue_with_report()` lists newly imported and already present
 snapshot IDs and gives a reason for each failed directory. Valid entries are
