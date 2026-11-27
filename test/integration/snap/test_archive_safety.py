@@ -1,6 +1,8 @@
 """Reject unsafe archive inputs before replacing or publishing snapshot data."""
 
 import json
+import os
+import stat
 import zipfile
 from pathlib import Path
 
@@ -272,3 +274,26 @@ def test_catalogue_import_reports_each_snapshot_outcome(snapshot_workspace: Path
     assert report.failed["incomplete"]
     assert {snap.id for snap in catalogue.get_all()} == {"valid", "existing"}
     assert catalogue.import_catalogue(archive_path) is None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Unix executable bits require POSIX permissions")
+def test_sd_restore_preserves_executable_file_permissions(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "scripts"
+    source.mkdir()
+    script = source / "launch.sh"
+    script.write_bytes(b"#!/bin/sh\n")
+    script.chmod(0o755)
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
+    snapshot = catalogue.create_snapshot(snap_id="scripts", name="Scripts", directory_paths=[source])
+    exports = snapshot_workspace / "exports"
+    catalogue.export_snapshot(snapshot.id, exports)
+    (archive,) = exports.glob("*.zip")
+    member = f"{snapshot.directories[0].directory_name}/launch.sh"
+    with zipfile.ZipFile(archive) as exported:
+        assert (exported.getinfo(member).external_attr >> 16) & 0o777 == 0o755
+
+    catalogue.delete(snapshot)
+    catalogue.restore_backup(archive)
+
+    restored = catalogue.path_catalogue / snapshot.id / member
+    assert stat.S_IMODE(restored.stat().st_mode) & 0o111 == 0o111

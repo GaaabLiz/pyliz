@@ -309,7 +309,8 @@ from proceeding with an unusable backup. Associated-directory
 exports can read current files with `export_assoc_dirs()` or the captured copies
 with `export_captured_assoc_dirs()`. Both use the association layout of AD ZIPs.
 
-ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
+ZIP extraction on POSIX restores executable bits for files with Unix ZIP
+metadata. ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
 the range representable by the format. Before extraction, import and restore
 check the entry count, total uncompressed bytes, and available space, including
 the second staging area needed for publication. Defaults are 100 GiB and
