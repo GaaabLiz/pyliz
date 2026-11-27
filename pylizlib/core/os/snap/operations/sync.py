@@ -10,6 +10,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import IntegrityManifest
 from pylizlib.core.os.snap.model_state import CapturedContentState
+from pylizlib.core.os.snap.operations.destinations import validate_associations_outside_backups
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, prepare_snapshot_metadata, recover_storage_transactions, rename_and_sync
@@ -128,6 +129,7 @@ class SnapshotSynchronizer:
         """
 
         # Validate all sources before deleting anything
+        validate_associations_outside_backups(self.storage.snapshot, self.storage.settings.backup_path)
         for dir_assoc in self.storage.snapshot.directories:
             system_path = Path(dir_assoc.original_path)
             if not system_path.exists() or not system_path.is_dir():

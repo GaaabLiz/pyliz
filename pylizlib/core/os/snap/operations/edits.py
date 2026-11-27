@@ -7,6 +7,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.snap.diff import get_edits_between_snapshots
 from pylizlib.core.os.snap.domain import SnapDirAssociation, SnapEditAction, SnapEditType, Snapshot
 from pylizlib.core.os.snap.model_state import restore_snapshot_model
+from pylizlib.core.os.snap.operations.destinations import validate_associations_outside_backups
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
 from pylizlib.core.os.snap.storage.path_identity import same_filesystem_entry
@@ -89,6 +90,7 @@ class SnapshotEditPlanner:
             ValueError: A value, path, resource limit or metadata field violates the validation rules described above.
         """
         self.storage.snapshot.validate()
+        validate_associations_outside_backups(self.storage.snapshot, self.storage.settings.backup_path)
         self.storage.root_path()
         for edit in edits:
             edit.validate()

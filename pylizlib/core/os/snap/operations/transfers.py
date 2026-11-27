@@ -13,6 +13,7 @@ from pylizlib.core.os.snap.domain import BackupType, Snapshot, SnapshotCatalogue
 from pylizlib.core.os.snap.integrity import build_integrity_manifest
 from pylizlib.core.os.snap.operations.backup.associations import association_identities
 from pylizlib.core.os.snap.operations.backup_manifest import BACKUP_MANIFEST_NAME, parse_backup_manifest
+from pylizlib.core.os.snap.operations.destinations import validate_associations_outside_backups
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, write_verified_zip
 from pylizlib.core.os.snap.storage.coordination import coordinated
@@ -311,6 +312,7 @@ class CatalogueTransferService:
         """
         json_filename = self.settings.json_filename
         snapshot = validate_staged_snapshot_tree(staged_path, snapshot_id, json_filename)
+        validate_associations_outside_backups(snapshot, self.settings.backup_path)
         if not self.settings.allow_unverified_legacy_snapshots:
             return
 

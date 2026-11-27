@@ -14,11 +14,11 @@ from pylizlib.core.os.snap.operations.backup.associations import association_ide
 from pylizlib.core.os.snap.operations.backup.inspection import BackupArchiveInspector
 from pylizlib.core.os.snap.operations.backup.planning import AssociationRestoreTask, RestorePlanner
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
-from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
+from pylizlib.core.os.snap.operations.destinations import validate_associations_outside_backups, validate_backup_separation, validate_destructive_destinations
 from pylizlib.core.os.snap.serializer import SnapshotSerializer
 from pylizlib.core.os.snap.storage.archives import extract_zip, validate_zip_archive
 from pylizlib.core.os.snap.storage.coordination import coordinated
-from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage
+from pylizlib.core.os.snap.storage.paths import assert_no_operational_storage, get_snapshot_path
 from pylizlib.core.os.snap.storage.publication import publish_snapshot_tree, validate_staged_snapshot_tree
 from pylizlib.core.os.snap.storage.recovery.models import ReplacementEntry
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, recover_pending_transactions, rename_and_sync
@@ -47,12 +47,13 @@ class SnapshotTreeRestorer:
         self.settings = settings
 
     @coordinated("path_catalogue")
-    def restore(self, temp_dir_path: Path, metadata: _ArchiveMetadata) -> None:
+    def restore(self, temp_dir_path: Path, metadata: _ArchiveMetadata, *, archive_path: Path | None = None) -> None:
         """Replace a complete snapshot root after checking its embedded identity and associations.
 
         Args:
             temp_dir_path (Path): Extraction root owned by the surrounding temporary-directory context.
             metadata (_ArchiveMetadata): Validated archive interpretation or staged JSON names used by this operation.
+            archive_path (Path | None): Input ZIP to keep outside the replaced snapshot tree.
 
         Returns:
             None: No return value.
@@ -76,6 +77,9 @@ class SnapshotTreeRestorer:
             snapshot_associations = association_identities(restored_snapshot.directories)
             if archived_associations != snapshot_associations:
                 raise ValueError("Snapshot-directory associations do not match the archive metadata.")
+        destination = get_snapshot_path(restored_snapshot.id, self.path_catalogue)
+        validate_backup_separation([destination], self.settings.backup_path, archive_path=archive_path)
+        validate_associations_outside_backups(restored_snapshot, self.settings.backup_path)
         if metadata.manifest_name is not None:
             (temp_dir_path / metadata.manifest_name).unlink(missing_ok=True)
 
@@ -96,6 +100,7 @@ class SnapshotTreeRestorer:
             actual = validate_staged_snapshot_tree(staged_path, restored_snapshot.id, self.settings.json_filename)
             if association_identities(actual.directories) != association_identities(restored_snapshot.directories):
                 raise ValueError("Staged snapshot associations changed while copying the backup.")
+            validate_backup_separation([destination], self.settings.backup_path, archive_path=archive_path)
 
         try:
             publish_snapshot_tree(
@@ -137,7 +142,14 @@ class AssociationRestorer:
         self.settings = planner.settings
 
     @coordinated("path_catalogue")
-    def restore(self, metadata: _ArchiveMetadata, temp_dir_path: Path, destination_mapping: Mapping[str, str | Path] | None = None) -> None:
+    def restore(
+        self,
+        metadata: _ArchiveMetadata,
+        temp_dir_path: Path,
+        destination_mapping: Mapping[str, str | Path] | None = None,
+        *,
+        archive_path: Path | None = None,
+    ) -> None:
         """Revalidate extracted AD contents and execute the resulting plan.
 
         Args:
@@ -145,6 +157,7 @@ class AssociationRestorer:
             temp_dir_path (Path): Extraction root owned by the surrounding temporary-directory context.
             destination_mapping (Mapping[str, str | Path] | None): Overrides keyed by stable folder_id; unmapped AD
                 associations retain their archived source paths.
+            archive_path (Path | None): Input ZIP to keep outside the restored directories.
 
         Returns:
             None: No return value.
@@ -154,15 +167,16 @@ class AssociationRestorer:
         """
         associations, origin_os = self.planner.associations_from(metadata)
         tasks = self.planner.build(temp_dir_path, associations, destination_mapping, metadata.manifest_name, origin_os)
-        self.execute(tasks)
+        self.execute(tasks, archive_path=archive_path)
 
     @coordinated("path_catalogue")
-    def execute(self, tasks: list[AssociationRestoreTask]) -> None:
+    def execute(self, tasks: list[AssociationRestoreTask], *, archive_path: Path | None = None) -> None:
         """Persist recovery paths, stage every copy, publish, then finalize.
 
         Args:
             tasks (list[AssociationRestoreTask]): Complete AD restore plan with distinct extracted source, sibling
                 staging, target and backup paths.
+            archive_path (Path | None): Input ZIP to keep outside the restored directories.
 
         Returns:
             None: No return value.
@@ -191,6 +205,8 @@ class AssociationRestorer:
                 catalogue_path=self.path_catalogue,
                 origin_os=None,
                 operation="publish restored associations",
+                backup_path=self.settings.backup_path,
+                archive_path=archive_path,
             )
             self._publish_copies(tasks)
 
@@ -333,7 +349,7 @@ class BackupRestorer:
         restore_space_requirements = []
         if info.backup_type == BackupType.ASSOCIATED_DIRECTORIES:
             associations, origin_os = self.planner.associations_from(metadata)
-            destinations = self.planner.resolve_destinations(associations, destination_mapping, origin_os)
+            destinations = self.planner.resolve_destinations(associations, destination_mapping, origin_os, archive_path=backup_zip_path)
             for association, destination in zip(associations, destinations, strict=True):
                 if not destination.parent.is_dir():
                     raise FileNotFoundError(f"Parent directory for restore destination '{destination}' does not exist.")
@@ -362,8 +378,8 @@ class BackupRestorer:
             )
 
             if info.backup_type == BackupType.SNAPSHOT_DIRECTORY:
-                self.tree_restorer.restore(temp_dir_path, metadata)
+                self.tree_restorer.restore(temp_dir_path, metadata, archive_path=backup_zip_path)
             else:
-                self.association_restorer.restore(metadata, temp_dir_path, destination_mapping)
+                self.association_restorer.restore(metadata, temp_dir_path, destination_mapping, archive_path=backup_zip_path)
 
         logger.info("Restored backup snapshot=%s type=%s", info.snapshot_id, info.backup_type.name)

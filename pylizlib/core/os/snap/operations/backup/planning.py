@@ -113,6 +113,8 @@ class RestorePlanner:
         associations: list[ArchivedAssociation],
         destination_mapping: Mapping[str, str | Path] | None,
         origin_os: str | None,
+        *,
+        archive_path: Path | None = None,
     ) -> list[Path]:
         """Validate association mapping and all paths before extraction or replacement.
 
@@ -122,6 +124,7 @@ class RestorePlanner:
                 associations retain their archived source paths.
             origin_os (str | None): Originating OS label to compare with platform.system(); None omits that
                 compatibility check.
+            archive_path (Path | None): Input ZIP to keep outside the restored directories.
 
         Returns:
             list[Path]: Validated live destination paths in association order, applying only explicit ID-keyed
@@ -158,6 +161,8 @@ class RestorePlanner:
             catalogue_path=self.path_catalogue,
             origin_os=origin_os,
             operation="restore associated directories",
+            backup_path=self.settings.backup_path,
+            archive_path=archive_path,
         )
 
     def build(

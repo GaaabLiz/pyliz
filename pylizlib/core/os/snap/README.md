@@ -244,6 +244,12 @@ the start and end of the latest complete capture performed by create or sync,
 as UTC timestamps with an explicit offset (`+00:00`). Both fields remain `None`
 for legacy snapshots until they are captured again.
 
+Snapshot associations must be disjoint from the configured backup directory.
+The check rejects the backup directory itself, paths inside it, and parent
+directories that contain it. Restore also rejects destinations that contain
+the input ZIP, including when it was moved outside the configured backup
+directory or the restore uses a destination mapping.
+
 A backup destination must resolve outside the trees that will be archived.
 This prevents previous ZIP files from being included and is checked even when
 the destination uses an alias or symlink.

@@ -159,6 +159,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="install snapshot",
+            backup_path=self.storage.settings.backup_path,
         )
         self._validate_existing_targets()
         recover_storage_transactions(self.storage)
@@ -249,6 +250,7 @@ class SnapshotInstaller:
                 catalogue_path=self.storage.path_catalogue,
                 origin_os=self.storage.snapshot.os_created,
                 operation="remove installed copies",
+                backup_path=self.storage.settings.backup_path,
             )
         return [path for _, path in targets]
 
@@ -292,6 +294,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="remove installed copies",
+            backup_path=self.storage.settings.backup_path,
         )
         backup_path = self.storage.settings.backup_path
         if backup_path is None:
@@ -598,6 +601,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="publish installed copies",
+            backup_path=self.storage.settings.backup_path,
         )
 
         # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging

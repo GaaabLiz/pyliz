@@ -9,6 +9,7 @@ from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_
 from pylizlib.core.os.snap.callbacks import report_directory_progress
 from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.model_state import CapturedContentState
+from pylizlib.core.os.snap.operations.destinations import validate_associations_outside_backups
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import catalogue_access, coordinated, observer_callback
 from pylizlib.core.os.snap.storage.install_registry import InstalledCopyRegistry
@@ -70,6 +71,7 @@ class SnapshotLifecycle:
         for association in self.storage.snapshot.directories:
             assert_destination_outside_source(association.original_path, self.storage.path_catalogue)
         with catalogue_access(self.storage.path_catalogue):
+            validate_associations_outside_backups(self.storage.snapshot, self.storage.settings.backup_path)
             progress_callback = observer_callback(progress_callback)
             message_callback = observer_callback(message_callback)
             self.storage.path_catalogue.mkdir(parents=True, exist_ok=True)
@@ -148,6 +150,7 @@ class SnapshotLifecycle:
         if not self.storage.path_snapshot.exists():
             raise FileNotFoundError(f"The snapshot path {self.storage.path_snapshot} does not exist.")
         new_snap = self.storage.snapshot.clone()
+        validate_associations_outside_backups(new_snap, self.storage.settings.backup_path)
         new_snap.id = gen_random_string(self.storage.settings.snap_id_length)
         install_registry = InstalledCopyRegistry(self.storage.path_catalogue)
         new_snap.name = self.storage.snapshot.name + " Copy"
