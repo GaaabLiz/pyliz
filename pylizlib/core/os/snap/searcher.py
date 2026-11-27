@@ -263,7 +263,8 @@ class SnapshotSearcher:
         """Search a snapshot and report cancellation and exceeded limits.
 
         Args:
-            snapshot (Snapshot): Snapshot whose stored content is searched.
+            snapshot (Snapshot): Snapshot whose stored content is searched. For a SnapshotCatalogue, its ID
+                selects the current persisted snapshot.
             params (SnapshotSearchParams): Query and limits for the returned page.
             on_progress (SnapshotProgressCallback | None): Observer whose literal False cancels the search.
                 During discovery the name identifies a scanned entry, and both counters are zero.
@@ -279,13 +280,19 @@ class SnapshotSearcher:
             SnapshotBusyError: A competing operation holds the catalogue.
 
         Notes:
-            A SnapshotCatalogue is held for the entire scan, so an edit or
-            synchronization through the library cannot change its contents mid-search.
+            A SnapshotCatalogue reloads the stored snapshot under the same lock
+            held throughout the scan, so the associations and contents come from
+            the same version.
         """
         pattern = self._compile_regex(params, raise_invalid=True)
         catalogue = self.catalogue
         access = catalogue_access(catalogue.path_catalogue, write=False) if isinstance(catalogue, SnapshotCatalogue) else nullcontext()
         with access:
+            if isinstance(catalogue, SnapshotCatalogue):
+                stored_snapshot = catalogue.get_by_id(snapshot.id)
+                if stored_snapshot is None:
+                    raise FileNotFoundError(f"Could not load stored snapshot '{snapshot.id}'.")
+                snapshot = stored_snapshot
             snapshot_path = catalogue.get_snap_directory_path(snapshot)
 
             # Allow one extra match to distinguish a full page from a truncated one.

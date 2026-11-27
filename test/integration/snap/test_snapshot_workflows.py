@@ -74,6 +74,22 @@ def test_detailed_search_keeps_snapshot_contents_stable(snapshot_workspace: Path
     assert [result.line_content for result in report.results] == ["needle new", "needle new"]
 
 
+def test_detailed_search_reloads_associations_added_by_another_catalogue(snapshot_workspace: Path) -> None:
+    original = make_source(snapshot_workspace, "original")
+    added = make_source(snapshot_workspace, "added", text="unique needle")
+    settings = SnapshotSettings()
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", settings)
+    other = SnapshotCatalogue(catalogue.path_catalogue, settings)
+    stale = catalogue.create_snapshot(snap_id="search", name="Search", directory_paths=[original])
+
+    current = other.update_snapshot(stale.id, directory_paths=[original, added])
+    report = SnapshotSearcher(catalogue).search_with_report(stale, SnapshotSearchParams("unique needle", extensions=["txt"]))
+
+    assert len(stale.directories) == 1
+    assert [result.line_content for result in report.results] == ["unique needle"]
+    assert report.results[0].file_path.parent.name == current.directories[1].directory_name
+
+
 def make_snapshot(snapshot_id: str, source: Path, folder_id: str = "folder-main") -> Snapshot:
     return Snapshot(
         id=snapshot_id,
