@@ -154,8 +154,9 @@ Text and regex queries can span lines. Content is read in chunks of
 `chunk_size` (default 65,536 **decoded characters**); the initial encoding
 sample is 8,192 bytes. Regexes have a timeout for each match operation
 (`regex_timeout_seconds`, default 0.1 seconds), not a global search deadline.
-`max_context_chars` (default 1,048,576 characters) is the context budget held
-between chunks. It does not impose a strict maximum length on each match: a
+`max_context_chars` (default 1,048,576 characters) is the context budget per
+side of the regex scan boundary. The left context supports lookbehind both
+between chunks and in the final scan. It does not impose a strict maximum length on each match: a
 longer span may be found when it fits in the current window, but matches across
 chunks and the EOF tail are not guaranteed. Only `False` stops the current
 snapshot search; the callback is also called while reading, so it can stop a
