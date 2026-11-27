@@ -9,6 +9,7 @@ from pylizlib.core.os.filesystem.durability import rename_and_sync
 from pylizlib.core.os.filesystem.entries import entry_exists as _lexists
 from pylizlib.core.os.filesystem.entries import remove_entry as _remove_path
 from pylizlib.core.os.paths.safety import assert_no_link_components
+from pylizlib.core.os.snap.domain import validate_directory_component
 from pylizlib.core.os.snap.storage.install_registry import InstalledCopy, InstalledCopyRegistry
 from pylizlib.core.os.snap.storage.recovery.metadata import _publish_new_metadata, _restore_old_metadata, _validate_metadata_paths
 from pylizlib.core.os.snap.storage.transactions import SnapshotTransactionJournal, TransactionRecoveryError
@@ -111,6 +112,8 @@ def _validate_manifest_restore_entries(data: dict, workspace: Path) -> None:
                 raise TransactionRecoveryError(f"Manifest restore journal path '{key}' must be a nonempty string.")
         if type(entry.get("had_original")) is not bool:
             raise TransactionRecoveryError("Manifest restore journal 'had_original' must be a boolean.")
+        if "original_name" in entry:
+            raise TransactionRecoveryError("Manifest restore journals cannot specify an original merge name.")
         stage = Path(entry["stage"])
         destination = Path(entry["destination"])
         backup = Path(entry["backup"])
@@ -197,9 +200,12 @@ def _rollback_replacements(data: dict) -> None:
         destination = Path(entry["destination"])
         backup = Path(entry["backup"])
         if _lexists(backup):
+            original = destination.with_name(entry.get("original_name", destination.name))
+            if "original_name" in entry and any(item.name == original.name for item in original.parent.iterdir()):
+                raise TransactionRecoveryError(f"Unexpected original path while rolling back '{destination}'.")
             if _lexists(destination):
                 _remove_path(destination)
-            rename_and_sync(backup, destination)
+            rename_and_sync(backup, original)
         elif not entry["had_original"] and not _lexists(stage) and _lexists(destination):
             _remove_path(destination)
         if _lexists(stage):
@@ -228,7 +234,8 @@ def _complete_replacements(data: dict) -> None:
         if _lexists(stage):
             if _lexists(destination):
                 if entry["had_original"] and not _lexists(backup):
-                    rename_and_sync(destination, backup)
+                    original = destination.with_name(entry.get("original_name", destination.name))
+                    rename_and_sync(original, backup)
                 else:
                     raise TransactionRecoveryError(f"Unexpected destination while completing '{destination}'.")
             rename_and_sync(stage, destination)
@@ -331,6 +338,15 @@ class ReplacementValidator:
         stage = Path(entry["stage"])
         destination = Path(entry["destination"])
         backup = Path(entry["backup"])
+        if "original_name" in entry:
+            if self.operation != "install" or entry.get("merge_child") is not True or not entry["had_original"]:
+                raise TransactionRecoveryError("Only colliding install merge entries can specify an original name.")
+            try:
+                original_name = validate_directory_component(entry["original_name"], "install merge original name")
+            except (TypeError, ValueError) as error:
+                raise TransactionRecoveryError(str(error)) from error
+            if original_name == destination.name or original_name.casefold() != destination.name.casefold():
+                raise TransactionRecoveryError("Install merge original name does not match its destination.")
         paths = ReplacementPaths(stage, destination, backup)
         if self.operation in {"install", "restore_associations"}:
             self._validate_external_paths(entry, association, paths)

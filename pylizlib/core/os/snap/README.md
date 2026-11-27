@@ -441,7 +441,7 @@ physical durability on a particular SMB/NFS share.
 | Synchronization | Prepare all copies, replace them, update sizes/manifests, and save; restore copies and in-memory metadata according to the existing protocol. |
 | Installation | Reject coincident or nested destinations before staging; verify and prepare all copies before changing targets; save `date_last_used` after the content commit. |
 | Installed-copy removal | Use only registered paths, back up their current local state before the first deletion, and update the registry after each outcome. |
-| Installation merge | Replace top-level collisions; do not introduce a recursive merge. |
+| Installation merge | Replace top-level collisions and use the displaced entry's spelling to verify its backup and restore it on rollback. |
 | `_ad` restore | Restore recognized associations using staging and a journal; recovery completes or rolls back the swap after a crash. |
 | Post-commit cleanup | Record errors and continue without reactivating rollback of data already published. |
 

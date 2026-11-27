@@ -166,3 +166,45 @@ def test_removal_reports_its_backup_and_skips_when_nothing_is_installed(snapshot
     assert not source.exists()
     assert catalogue.remove_installed_copies_with_result(snap.id).backup_path is None
     assert catalogue.get_backup_count() == 1
+
+
+@pytest.mark.parametrize("change_after_backup", [False, True])
+def test_merge_backup_uses_real_local_spelling(snapshot_workspace: Path, monkeypatch: pytest.MonkeyPatch, change_after_backup: bool) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    captured = source / "Settings.txt"
+    captured.write_text("captured", encoding="utf-8")
+    local = source / "settings.txt"
+    if not local.exists():
+        pytest.skip("Requires a case-insensitive volume")
+
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=snapshot_workspace / "backups", backup_pre_install=True),
+    )
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    captured.unlink()
+    local.write_text("before merge", encoding="utf-8")
+    assert [file.name for file in source.iterdir()] == ["settings.txt"]
+
+    if change_after_backup:
+        create_backup = SnapshotArchiveService.create_backup_for_existing_associations
+
+        def write_late(self, *args, **kwargs):
+            archive = create_backup(self, *args, **kwargs)
+            local.write_text("changed after backup", encoding="utf-8")
+            return archive
+
+        monkeypatch.setattr(SnapshotArchiveService, "create_backup_for_existing_associations", write_late)
+        with pytest.raises(SourceChangedError, match="changed after backup"):
+            catalogue.install_with_result(snapshot, clear_destination=False)
+        assert [file.name for file in source.iterdir()] == ["settings.txt"]
+        assert local.read_text(encoding="utf-8") == "changed after backup"
+    else:
+        result = catalogue.install_with_result(snapshot, clear_destination=False)
+        assert [file.name for file in source.iterdir() if file.name.casefold() == "settings.txt"] == ["Settings.txt"]
+        assert captured.read_text(encoding="utf-8") == "captured"
+        assert result.backup_path is not None
+        with ZipFile(result.backup_path) as archive:
+            member = f"{snapshot.directories[0].directory_name}/settings.txt"
+            assert archive.read(member) == b"before merge"

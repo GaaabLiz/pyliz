@@ -1,6 +1,7 @@
 """Staged snapshot installation, legacy merge and installed-copy removal."""
 
 import hashlib
+import os
 import shutil
 import stat
 from collections.abc import Collection
@@ -13,6 +14,7 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_temp
 from pylizlib.core.os.filesystem.tree import is_link_or_junction
 from pylizlib.core.os.snap.callbacks import report_directory_progress
+from pylizlib.core.os.snap.copy_strategy import SourceChangedError
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
@@ -199,7 +201,8 @@ class SnapshotInstaller:
                     if entry["had_original"]:
                         name = names[entry["folder_id"]]
                         if entry.get("merge_child"):
-                            name = f"{name}/{Path(entry['destination']).name}"
+                            original_name = entry.get("original_name", Path(entry["destination"]).name)
+                            name = f"{name}/{original_name}"
                         displaced[name] = Path(entry["backup"])
                 verify_displaced_install_sources(backup, displaced, merge=not clear_destination)
 
@@ -540,27 +543,34 @@ class SnapshotInstaller:
         """
         entries = []
         for replacement in replacements:
+            live_root = replacement.install_loc
+            live_names = {item.name for item in live_root.iterdir()} if live_root.is_dir() else set()
             for staged_item in sorted(replacement.staging_dir.iterdir()):
                 destination = replacement.install_loc / staged_item.name
                 backup = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
                 if backup.exists() or backup.is_symlink():
                     raise FileExistsError(f"Could not reserve merge backup '{backup}'.")
+                entry = {
+                    "folder_id": replacement.folder_id,
+                    "stage": staged_item.as_posix(),
+                    "stage_root": replacement.staging_dir.as_posix(),
+                    "destination": destination.as_posix(),
+                    "backup": backup.as_posix(),
+                    "had_original": False,
+                    "merge_child": True,
+                }
                 try:
-                    destination.lstat()
-                    had_original = True
+                    live_stat = destination.lstat()
                 except FileNotFoundError:
-                    had_original = False
-                entries.append(
-                    {
-                        "folder_id": replacement.folder_id,
-                        "stage": staged_item.as_posix(),
-                        "stage_root": replacement.staging_dir.as_posix(),
-                        "destination": destination.as_posix(),
-                        "backup": backup.as_posix(),
-                        "had_original": had_original,
-                        "merge_child": True,
-                    }
-                )
+                    pass
+                else:
+                    entry["had_original"] = True
+                    if destination.name not in live_names:
+                        aliases = [name for name in live_names if name.casefold() == destination.name.casefold() and os.path.samestat((live_root / name).lstat(), live_stat)]
+                        if len(aliases) != 1:
+                            raise SourceChangedError(f"Cannot determine the original name of merge destination '{destination}'.")
+                        entry["original_name"] = aliases[0]
+                entries.append(entry)
         return entries
 
     def _publish_directories(self, replacements: list[InstallReplacement], clear_destination: bool, merge_entries: list[dict]) -> None:
@@ -610,14 +620,16 @@ class SnapshotInstaller:
                 if not install_loc.exists():
                     install_loc.mkdir(parents=True, exist_ok=True)
         if not clear_destination:
+            live_names = {rb.install_loc: {item.name for item in rb.install_loc.iterdir()} for rb in replacements}
             for entry in merge_entries:
                 staged_item = Path(entry["stage"])
                 destination = Path(entry["destination"])
                 backup = Path(entry["backup"])
                 if entry["had_original"]:
-                    if not (destination.exists() or destination.is_symlink()):
-                        raise FileNotFoundError(f"Merge destination '{destination}' disappeared before publication.")
-                    rename_and_sync(destination, backup)
+                    original = destination.with_name(entry.get("original_name", destination.name))
+                    if original.name not in live_names[destination.parent] or not (original.exists() or original.is_symlink()):
+                        raise FileNotFoundError(f"Merge destination '{original}' disappeared before publication.")
+                    rename_and_sync(original, backup)
                 elif destination.exists() or destination.is_symlink():
                     raise FileExistsError(f"Merge destination '{destination}' appeared during staging.")
                 rename_and_sync(staged_item, destination)
