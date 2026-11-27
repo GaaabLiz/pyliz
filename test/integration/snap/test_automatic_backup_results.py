@@ -202,9 +202,33 @@ def test_merge_backup_uses_real_local_spelling(snapshot_workspace: Path, monkeyp
         assert local.read_text(encoding="utf-8") == "changed after backup"
     else:
         result = catalogue.install_with_result(snapshot, clear_destination=False)
-        assert [file.name for file in source.iterdir() if file.name.casefold() == "settings.txt"] == ["Settings.txt"]
+        assert [file.name for file in source.iterdir()] == ["Settings.txt"]
         assert captured.read_text(encoding="utf-8") == "captured"
         assert result.backup_path is not None
         with ZipFile(result.backup_path) as archive:
             member = f"{snapshot.directories[0].directory_name}/settings.txt"
             assert archive.read(member) == b"before merge"
+
+
+def test_merge_commit_cleans_rollback_copies_before_sync(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    (source / "settings.txt").write_text("captured", encoding="utf-8")
+    (source / "assets").mkdir()
+    (source / "assets" / "new.txt").write_text("captured asset", encoding="utf-8")
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    (source / "settings.txt").write_text("old", encoding="utf-8")
+    (source / "assets" / "old.txt").write_text("old asset", encoding="utf-8")
+    (source / "manual_bck_notes.txt").write_text("keep", encoding="utf-8")
+
+    catalogue.install(snapshot, clear_destination=False)
+
+    assert set(item.name for item in source.iterdir()) == {"settings.txt", "assets", "manual_bck_notes.txt"}
+    assert (source / "manual_bck_notes.txt").read_text(encoding="utf-8") == "keep"
+    assert not list(catalogue.path_catalogue.rglob("journal.json"))
+
+    catalogue.sync_with_result(snapshot.id)
+    updated = catalogue.get_by_id(snapshot.id)
+    assert updated is not None
+    assert set(updated.directories[0].integrity_manifest) == {".", "settings.txt", "assets", "assets/new.txt", "manual_bck_notes.txt"}

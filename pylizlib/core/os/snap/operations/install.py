@@ -218,7 +218,7 @@ class SnapshotInstaller:
             raise
 
         self._complete_install_metadata(journal, metadata_info, last_used, previous_date)
-        cleanup_paths = [rb.backup_dir for rb in replacements]
+        cleanup_paths = [Path(entry["backup"]) for entry in journal.payload["payload"]["entries"] if entry["had_original"]]
         cleanup_paths.extend(staging_roots)
         journal.finalize(cleanup_paths, "Installation")
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
