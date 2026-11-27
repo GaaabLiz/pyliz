@@ -15,6 +15,7 @@ from pylizlib.core.os.snap.domain import (
     SnapEditAction,
     Snapshot,
     SnapshotBackupInfo,
+    SnapshotCatalogueImportReport,
     SnapshotCatalogueStatistics,
     SnapshotOperationResult,
     SnapshotSettings,
@@ -25,6 +26,8 @@ from pylizlib.core.os.snap.manager import SnapshotManager
 from pylizlib.core.os.snap.operations.archives import CatalogueBackupService
 from pylizlib.core.os.snap.operations.backup_names import parse_backup_filename
 from pylizlib.core.os.snap.operations.configuration import build_associations, configure_snapshot
+from pylizlib.core.os.snap.operations.install import SnapshotInstaller
+from pylizlib.core.os.snap.operations.removal import existing_associations, remove_confirmed_associations
 from pylizlib.core.os.snap.operations.statistics import collect_catalogue_statistics
 from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService
 from pylizlib.core.os.snap.storage.catalogue import _is_operational_directory, read_catalogue, read_snapshot_by_id
@@ -188,10 +191,11 @@ class SnapshotCatalogue:
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            OSError: The new directory cannot be initialized; the previous path is retained.
         """
-        with catalogue_access(self.path_catalogue):
+        with catalogue_access(self.path_catalogue, allow_unavailable=True):
+            new_path.mkdir(parents=True, exist_ok=True)
             self.path_catalogue = new_path
-            self.path_catalogue.mkdir(parents=True, exist_ok=True)
 
     def add(self, snap: Snapshot, progress_callback=None, message_callback=None):
         """Adds a new snapshot to the catalogue.
@@ -675,8 +679,24 @@ class SnapshotCatalogue:
             ValueError: If the provided path is not a valid .zip file.
             IOError: If the zip file fails to extract.
         """
+        self.import_catalogue_with_report(zip_path)
+
+    def import_catalogue_with_report(self, zip_path: Path) -> SnapshotCatalogueImportReport:
+        """Import a batch and report every snapshot imported, skipped or failed.
+
+        Args:
+            zip_path (Path): ZIP export of a snapshot catalogue.
+
+        Returns:
+            SnapshotCatalogueImportReport: Outcomes of the individual archive directories.
+
+        Raises:
+            SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
+            ValueError: The ZIP is invalid or contains operational transaction storage.
+            OSError: The archive cannot be extracted.
+        """
         with catalogue_access(self.path_catalogue):
-            self._transfers().import_catalogue(zip_path)
+            return self._transfers().import_catalogue_with_report(zip_path)
 
     def import_snapshot(self, zip_path: Path):
         """Imports a snapshot from a zip file into the catalogue.
@@ -732,6 +752,47 @@ class SnapshotCatalogue:
                 backup = snap_manager.create_backup(self.settings.backup_path, "beforeUpdateLocal", BackupType.SNAPSHOT_DIRECTORY)
             snap_manager.update_associated_dirs_from_system(message_callback=message_callback)
             return SnapshotOperationResult(backup)
+
+    def get_associated_paths_for_removal(self, snap_id: str) -> list[Path]:
+        """List the existing local directories associated with a snapshot for removal confirmation.
+
+        Args:
+            snap_id (str): Snapshot whose associated local directories should be listed.
+
+        Returns:
+            list[Path]: Validated local directory paths in association order.
+        """
+        with catalogue_access(self.path_catalogue, write=False):
+            storage = self._manager(self._require_snapshot(snap_id))._storage()
+            return [path for _, path in existing_associations(storage)]
+
+    def remove_associated_paths(
+        self,
+        snap_id: str,
+        *,
+        expected_paths: Collection[Path],
+        verify_backup: bool = False,
+        message_callback: MessageCallback | None = None,
+    ) -> Path | None:
+        """Back up and transactionally remove the confirmed local association paths.
+
+        Args:
+            snap_id (str): Snapshot whose associated directories should be removed.
+            expected_paths (Collection[Path]): Exact paths returned for confirmation.
+            verify_backup (bool): Compare the backed-up contents with the directories moved for removal.
+            message_callback (MessageCallback | None): Optional callback for backup progress messages.
+
+        Returns:
+            Path | None: Published backup ZIP, or None if no directories were confirmed or remain.
+
+        Raises:
+            SourceChangedError: A displaced directory differs from its backup and the removal was rolled back.
+            ValueError: The confirmed paths changed, a path is unsafe, or backup storage is unset.
+            SnapshotBusyError: Another operation owns the catalogue.
+        """
+        with catalogue_access(self.path_catalogue):
+            storage = self._manager(self._require_snapshot(snap_id))._storage()
+            return remove_confirmed_associations(storage, expected_paths, verify_backup=verify_backup, message_callback=message_callback)
 
     def remove_installed_copies(self, snap_id: str, message_callback=None):
         """Removes the installed copies of a snapshot's associated directories from the system.
@@ -854,6 +915,9 @@ class SnapshotCatalogue:
 
         Returns:
             SnapshotOperationResult: Published backup path when a backup was created. Missing targets are omitted.
+
+        Raises:
+            SourceChangedError: A displaced entry changed after the backup was written; the installation is rolled back.
         """
         with catalogue_access(self.path_catalogue):
             stored_snapshot = self.get_by_id(snap.id)
@@ -863,13 +927,13 @@ class SnapshotCatalogue:
             # The caller may hold a model loaded before the snapshot was updated.
             # Installation must use the persisted manifest that matches on-disk data.
             snap_manager = self._manager(stored_snapshot)
-            backup = None
-            if self.settings.bck_before_install_enabled:
-                backup = snap_manager._create_backup_for_existing_associations(
-                    self.settings.backup_path,
-                    "preinstall",
-                )
-            snap_manager.install(self.settings.install_with_everyone_full_control, clear_destination=clear_destination, progress_callback=progress_callback, message_callback=message_callback)
+            backup = SnapshotInstaller(snap_manager._storage()).install(
+                self.settings.install_with_everyone_full_control,
+                clear_destination=clear_destination,
+                progress_callback=progress_callback,
+                message_callback=message_callback,
+                backup_path=self.settings.backup_path if self.settings.bck_before_install_enabled else None,
+            )
             snap.date_last_used = stored_snapshot.date_last_used
             return SnapshotOperationResult(backup)
 

@@ -4,7 +4,49 @@ from pathlib import Path
 
 import pytest
 
-from pylizlib.core.os.snap import SnapshotCatalogue, SnapshotSettings
+from pylizlib.core.os.filesystem.locking import FileLock
+from pylizlib.core.os.snap import SnapshotBusyError, SnapshotCatalogue, SnapshotSettings
+from pylizlib.core.os.snap.storage.coordination import CATALOGUE_LOCK_FILENAME
+
+
+def test_catalogue_switch_keeps_previous_path_when_new_path_is_invalid(snapshot_workspace: Path) -> None:
+    previous = snapshot_workspace / "previous"
+    invalid = snapshot_workspace / "file"
+    invalid.touch()
+    catalogue = SnapshotCatalogue(previous, SnapshotSettings())
+    with pytest.raises(OSError):
+        catalogue.set_catalogue_path(invalid)
+    assert catalogue.path_catalogue == previous
+    assert catalogue.get_all() == []
+
+
+@pytest.mark.parametrize("old_path_is_file", [False, True])
+def test_catalogue_switch_leaves_an_unavailable_old_path_alone(snapshot_workspace: Path, old_path_is_file: bool) -> None:
+    previous = snapshot_workspace / "previous"
+    new_directory = snapshot_workspace / "new"
+    catalogue = SnapshotCatalogue(previous, SnapshotSettings())
+    previous.rmdir()
+    if old_path_is_file:
+        previous.write_text("old location", encoding="utf-8")
+
+    catalogue.set_catalogue_path(new_directory)
+    assert catalogue.path_catalogue == new_directory
+    assert new_directory.is_dir()
+    assert previous.exists() is old_path_is_file
+    if old_path_is_file:
+        assert previous.read_text(encoding="utf-8") == "old location"
+
+
+def test_catalogue_switch_rejects_native_lock_contention(snapshot_workspace: Path) -> None:
+    previous = snapshot_workspace / "previous"
+    destination = snapshot_workspace / "new"
+    catalogue = SnapshotCatalogue(previous, SnapshotSettings())
+
+    with FileLock(previous / CATALOGUE_LOCK_FILENAME), pytest.raises(SnapshotBusyError):
+        catalogue.set_catalogue_path(destination)
+
+    assert catalogue.path_catalogue == previous
+    assert not destination.exists()
 
 
 def test_create_and_edit_from_fields(snapshot_workspace: Path) -> None:

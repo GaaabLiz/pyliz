@@ -36,6 +36,7 @@ class ReplacementEntry(TypedDict):
         had_original (bool): Whether the target existed before publication.
         stage_root (NotRequired[str]): Optional shared staging root, used for install merge.
         merge_child (NotRequired[bool]): Optional flag identifying a top-level merge child.
+        original_name (NotRequired[str]): Existing merge entry spelling when it differs from the incoming name.
     """
 
     folder_id: str
@@ -45,6 +46,7 @@ class ReplacementEntry(TypedDict):
     had_original: bool
     stage_root: NotRequired[str]
     merge_child: NotRequired[bool]
+    original_name: NotRequired[str]
 
 
 class EditEntry(TypedDict):

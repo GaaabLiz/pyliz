@@ -164,7 +164,7 @@ class TextScanSession:
         matcher (BufferMatcher): File-scoped matcher sharing live options and this attempt's result sink.
         context_limit (int): Context budget fixed at the start of this decode attempt.
         final_window_limit (int): EOF tail budget fixed from context/query/preview limits at attempt start.
-        buffer_limit (int): Retained context/preview budget plus one decoded chunk.
+        buffer_limit (int): Retained context/preview budgets plus one decoded chunk.
         window (TextWindow): Retained text and its absolute character/line coordinates.
         scanned_until (int): Absolute character boundary whose match starts are already committed or deferred.
         total_chars (int): Total decoded characters read by this attempt, including discarded window prefixes.
@@ -238,9 +238,13 @@ class TextScanSession:
         """
         query_window = len(self.params.query) if self.params.literal else self.params.max_context_chars
         self.context_limit = max(self.params.max_context_chars, query_window)
+
+        # Regex assertions can inspect text before the next eligible start.
         self.final_window_limit = self.context_limit
         if self.params.literal:
             self.final_window_limit = max(self.context_limit, self.params.max_line_preview_chars)
+        else:
+            self.final_window_limit += self.context_limit
         self.buffer_limit = self.final_window_limit + self.params.chunk_size
         self.window = TextWindow()
         self.scanned_until = 0

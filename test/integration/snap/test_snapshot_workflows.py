@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from pylizlib.core.os.snap import (
     QueryType,
     SnapDirAssociation,
     Snapshot,
+    SnapshotBusyError,
     SnapshotCatalogue,
     SnapshotIncompleteError,
     SnapshotIntegrityError,
@@ -32,6 +34,60 @@ def make_source(root: Path, name: str, *, text: str = "captured version") -> Pat
     (source / "readme.txt").write_text(text, encoding="utf-8")
     (source / "nested" / "payload.bin").write_bytes(b"\x00\x01snapshot\xff\x10")
     return source
+
+
+def test_detailed_search_keeps_snapshot_contents_stable(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    files = [source / "first.txt", source / "second.txt"]
+    for file in files:
+        file.write_text("needle old", encoding="utf-8")
+
+    settings = SnapshotSettings()
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", settings)
+    other = SnapshotCatalogue(catalogue.path_catalogue, settings)
+    snapshot = catalogue.create_snapshot(snap_id="search", name="Search", directory_paths=[source])
+    query = SnapshotSearchParams("needle")
+    attempted = False
+
+    for file in files:
+        file.write_text("needle new", encoding="utf-8")
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+
+        def during_search(_name: str, total: int, index: int) -> None:
+            nonlocal attempted
+            if total != 2 or index != 2 or attempted:
+                return
+            attempted = True
+            with pytest.raises(SnapshotBusyError):
+                other.sync_with_result(snapshot.id)
+            with pytest.raises(SnapshotBusyError):
+                executor.submit(other.sync_with_result, snapshot.id).result(timeout=5)
+
+        report = SnapshotSearcher(catalogue).search_with_report(snapshot, query, during_search)
+    assert attempted
+    assert [result.line_content for result in report.results] == ["needle old", "needle old"]
+
+    other.sync_with_result(snapshot.id)
+    report = SnapshotSearcher(catalogue).search_with_report(snapshot, query)
+    assert [result.line_content for result in report.results] == ["needle new", "needle new"]
+
+
+def test_detailed_search_reloads_associations_added_by_another_catalogue(snapshot_workspace: Path) -> None:
+    original = make_source(snapshot_workspace, "original")
+    added = make_source(snapshot_workspace, "added", text="unique needle")
+    settings = SnapshotSettings()
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", settings)
+    other = SnapshotCatalogue(catalogue.path_catalogue, settings)
+    stale = catalogue.create_snapshot(snap_id="search", name="Search", directory_paths=[original])
+
+    current = other.update_snapshot(stale.id, directory_paths=[original, added])
+    report = SnapshotSearcher(catalogue).search_with_report(stale, SnapshotSearchParams("unique needle", extensions=["txt"]))
+
+    assert len(stale.directories) == 1
+    assert [result.line_content for result in report.results] == ["unique needle"]
+    assert report.results[0].file_path.parent.name == current.directories[1].directory_name
 
 
 def make_snapshot(snapshot_id: str, source: Path, folder_id: str = "folder-main") -> Snapshot:

@@ -5,7 +5,8 @@ from zipfile import ZipFile
 
 import pytest
 
-from pylizlib.core.os.snap import BackupType, SnapshotCatalogue, SnapshotSettings
+from pylizlib.core.os.snap import BackupType, SnapshotCatalogue, SnapshotSettings, SourceChangedError
+from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
 
 
 def test_install_reports_skipped_and_partial_backups(snapshot_workspace: Path) -> None:
@@ -64,6 +65,61 @@ def test_failed_automatic_backup_stops_install(snapshot_workspace: Path) -> None
     assert snap.date_last_used is None
 
 
+@pytest.mark.parametrize("clear_destination", [True, False])
+def test_install_backs_up_changes_made_during_staging(snapshot_workspace: Path, clear_destination: bool) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    file = source / "data.txt"
+    file.write_text("captured", encoding="utf-8")
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(
+            backup_path=snapshot_workspace / "backups",
+            backup_pre_install=True,
+        ),
+    )
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    file.write_text("before staging", encoding="utf-8")
+
+    def during_staging(_progress: int) -> None:
+        file.write_text("written during staging", encoding="utf-8")
+
+    result = catalogue.install_with_result(snapshot, clear_destination=clear_destination, progress_callback=during_staging)
+    assert file.read_text(encoding="utf-8") == "captured"
+    assert result.backup_path is not None
+    catalogue.restore_backup(result.backup_path)
+    assert file.read_text(encoding="utf-8") == "written during staging"
+
+
+@pytest.mark.parametrize("clear_destination", [True, False])
+def test_install_rolls_back_if_a_displaced_file_changed_after_backup(snapshot_workspace: Path, monkeypatch: pytest.MonkeyPatch, clear_destination: bool) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    file = source / "data.txt"
+    file.write_text("captured", encoding="utf-8")
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(
+            backup_path=snapshot_workspace / "backups",
+            backup_pre_install=True,
+        ),
+    )
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    file.write_text("before", encoding="utf-8")
+    create_backup = SnapshotArchiveService.create_backup_for_existing_associations
+
+    def write_late(self, *args, **kwargs):
+        result = create_backup(self, *args, **kwargs)
+        file.write_text("edited", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(SnapshotArchiveService, "create_backup_for_existing_associations", write_late)
+    with pytest.raises(SourceChangedError, match="changed after backup"):
+        catalogue.install_with_result(snapshot, clear_destination=clear_destination)
+    assert file.read_text(encoding="utf-8") == "edited"
+    assert catalogue.get_by_id(snapshot.id).date_last_used is None
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 def test_edit_sync_and_delete_report_only_their_own_backups(snapshot_workspace: Path, enabled: bool) -> None:
     source = snapshot_workspace / "source"
@@ -110,3 +166,69 @@ def test_removal_reports_its_backup_and_skips_when_nothing_is_installed(snapshot
     assert not source.exists()
     assert catalogue.remove_installed_copies_with_result(snap.id).backup_path is None
     assert catalogue.get_backup_count() == 1
+
+
+@pytest.mark.parametrize("change_after_backup", [False, True])
+def test_merge_backup_uses_real_local_spelling(snapshot_workspace: Path, monkeypatch: pytest.MonkeyPatch, change_after_backup: bool) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    captured = source / "Settings.txt"
+    captured.write_text("captured", encoding="utf-8")
+    local = source / "settings.txt"
+    if not local.exists():
+        pytest.skip("Requires a case-insensitive volume")
+
+    catalogue = SnapshotCatalogue(
+        snapshot_workspace / "catalogue",
+        SnapshotSettings(backup_path=snapshot_workspace / "backups", backup_pre_install=True),
+    )
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    captured.unlink()
+    local.write_text("before merge", encoding="utf-8")
+    assert [file.name for file in source.iterdir()] == ["settings.txt"]
+
+    if change_after_backup:
+        create_backup = SnapshotArchiveService.create_backup_for_existing_associations
+
+        def write_late(self, *args, **kwargs):
+            archive = create_backup(self, *args, **kwargs)
+            local.write_text("changed after backup", encoding="utf-8")
+            return archive
+
+        monkeypatch.setattr(SnapshotArchiveService, "create_backup_for_existing_associations", write_late)
+        with pytest.raises(SourceChangedError, match="changed after backup"):
+            catalogue.install_with_result(snapshot, clear_destination=False)
+        assert [file.name for file in source.iterdir()] == ["settings.txt"]
+        assert local.read_text(encoding="utf-8") == "changed after backup"
+    else:
+        result = catalogue.install_with_result(snapshot, clear_destination=False)
+        assert [file.name for file in source.iterdir()] == ["Settings.txt"]
+        assert captured.read_text(encoding="utf-8") == "captured"
+        assert result.backup_path is not None
+        with ZipFile(result.backup_path) as archive:
+            member = f"{snapshot.directories[0].directory_name}/settings.txt"
+            assert archive.read(member) == b"before merge"
+
+
+def test_merge_commit_cleans_rollback_copies_before_sync(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    (source / "settings.txt").write_text("captured", encoding="utf-8")
+    (source / "assets").mkdir()
+    (source / "assets" / "new.txt").write_text("captured asset", encoding="utf-8")
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
+    snapshot = catalogue.create_snapshot(snap_id="sample", name="Sample", directory_paths=[source])
+    (source / "settings.txt").write_text("old", encoding="utf-8")
+    (source / "assets" / "old.txt").write_text("old asset", encoding="utf-8")
+    (source / "manual_bck_notes.txt").write_text("keep", encoding="utf-8")
+
+    catalogue.install(snapshot, clear_destination=False)
+
+    assert set(item.name for item in source.iterdir()) == {"settings.txt", "assets", "manual_bck_notes.txt"}
+    assert (source / "manual_bck_notes.txt").read_text(encoding="utf-8") == "keep"
+    assert not list(catalogue.path_catalogue.rglob("journal.json"))
+
+    catalogue.sync_with_result(snapshot.id)
+    updated = catalogue.get_by_id(snapshot.id)
+    assert updated is not None
+    assert set(updated.directories[0].integrity_manifest) == {".", "settings.txt", "assets", "assets/new.txt", "manual_bck_notes.txt"}

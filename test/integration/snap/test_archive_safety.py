@@ -1,6 +1,9 @@
 """Reject unsafe archive inputs before replacing or publishing snapshot data."""
 
 import json
+import os
+import shutil
+import stat
 import zipfile
 from pathlib import Path
 
@@ -245,3 +248,159 @@ def test_import_migrates_legacy_storage_name_and_manifest(snapshot_workspace: Pa
     assert snapshot is not None
     catalogue.install(snapshot)
     assert (original_path / "settings.txt").read_bytes() == b"legacy content"
+
+
+def test_catalogue_import_reports_each_snapshot_outcome(snapshot_workspace: Path) -> None:
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(allow_unverified_legacy_snapshots=True))
+    source = snapshot_workspace / "source"
+    source.mkdir()
+    catalogue.create_snapshot(snap_id="existing", name="Existing", directory_paths=[source])
+    archive_path = snapshot_workspace / "partial.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for snap_id in ("valid", "existing", "incomplete"):
+            metadata = {
+                "id": snap_id,
+                "name": snap_id,
+                "desc": "",
+                "directories": [{"folder_id": "stable-id", "index": 1, "original_path": str(source)}],
+            }
+            archive.writestr(f"{snap_id}/snapshot.json", json.dumps(metadata))
+            if snap_id != "incomplete":
+                archive.writestr(f"{snap_id}/1-source/captured.txt", b"archive contents")
+
+    report = catalogue.import_catalogue_with_report(archive_path)
+    assert report.imported == ["valid"]
+    assert report.skipped == ["existing"]
+    assert set(report.failed) == {"incomplete"}
+    assert report.failed["incomplete"]
+    assert {snap.id for snap in catalogue.get_all()} == {"valid", "existing"}
+    assert catalogue.import_catalogue(archive_path) is None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Unix executable bits require POSIX permissions")
+def test_sd_restore_preserves_executable_file_permissions(snapshot_workspace: Path) -> None:
+    source = snapshot_workspace / "scripts"
+    source.mkdir()
+    script = source / "launch.sh"
+    script.write_bytes(b"#!/bin/sh\n")
+    script.chmod(0o755)
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings())
+    snapshot = catalogue.create_snapshot(snap_id="scripts", name="Scripts", directory_paths=[source])
+    exports = snapshot_workspace / "exports"
+    catalogue.export_snapshot(snapshot.id, exports)
+    (archive,) = exports.glob("*.zip")
+    member = f"{snapshot.directories[0].directory_name}/launch.sh"
+    with zipfile.ZipFile(archive) as exported:
+        assert (exported.getinfo(member).external_attr >> 16) & 0o777 == 0o755
+
+    catalogue.delete(snapshot)
+    catalogue.restore_backup(archive)
+
+    restored = catalogue.path_catalogue / snapshot.id / member
+    assert stat.S_IMODE(restored.stat().st_mode) & 0o111 == 0o111
+
+
+@pytest.mark.parametrize("allow_legacy", [False, True])
+def test_catalogue_import_checks_modern_manifests_independently_of_legacy_migration(snapshot_workspace: Path, allow_legacy: bool) -> None:
+    source_catalogue, snapshot, _, _ = _captured_snapshot(snapshot_workspace)
+    source = snapshot_workspace / "source"
+    source_catalogue.create_snapshot(snap_id="valid", name="Valid", directory_paths=[source])
+    exports = snapshot_workspace / "exports"
+    source_catalogue.export_catalogue(exports, file_name="catalogue.zip")
+    archive_path = snapshot_workspace / "altered.zip"
+    altered_member = f"{snapshot.id}/{snapshot.directories[0].directory_name}/payload"
+    with zipfile.ZipFile(exports / "catalogue.zip") as exported, zipfile.ZipFile(archive_path, "w") as altered:
+        for member in exported.infolist():
+            content = b"changed" if member.filename == altered_member else exported.read(member)
+            altered.writestr(member, content)
+        legacy_metadata = {
+            "id": "legacy",
+            "name": "Legacy",
+            "desc": "",
+            "directories": [{"folder_id": "stable-id", "index": 1, "original_path": str(source)}],
+        }
+        altered.writestr("legacy/snapshot.json", json.dumps(legacy_metadata))
+        altered.writestr("legacy/1-source/file.txt", b"legacy contents")
+
+    target = SnapshotCatalogue(snapshot_workspace / "imported", SnapshotSettings(allow_unverified_legacy_snapshots=allow_legacy))
+    report = target.import_catalogue_with_report(archive_path)
+
+    assert set(report.imported) == {"valid", "legacy"}
+    assert set(report.failed) == {snapshot.id}
+    assert not (target.path_catalogue / snapshot.id).exists()
+    legacy = target.get_by_id("legacy")
+    assert legacy is not None
+    assert (legacy.directories[0].integrity_manifest is not None) == allow_legacy
+
+
+@pytest.mark.parametrize("location", ["equal", "contains", "inside"])
+def test_backup_path_cannot_be_associated_to_new_or_existing_snapshots(snapshot_workspace: Path, location: str) -> None:
+    backups = snapshot_workspace / "project" / "backups"
+    backups.mkdir(parents=True)
+    child = backups / "subfolder"
+    child.mkdir()
+    source = {"equal": backups, "contains": backups.parent, "inside": child}[location]
+    valid = snapshot_workspace / "valid"
+    valid.mkdir()
+    catalogue = SnapshotCatalogue(snapshot_workspace / "catalogue", SnapshotSettings(backup_path=backups))
+
+    with pytest.raises(ValueError, match="overlaps the backup directory"):
+        catalogue.create_snapshot(snap_id="blocked", name="Blocked", directory_paths=[source])
+    assert not catalogue.exists("blocked")
+
+    initial = catalogue.create_snapshot(snap_id="safe", name="Safe", directory_paths=[valid])
+    with pytest.raises(ValueError, match="overlaps the backup directory"):
+        catalogue.update_snapshot(initial.id, directory_paths=[valid, source])
+    assert catalogue.get_by_id(initial.id).directories == initial.directories
+
+
+@pytest.mark.parametrize("archive_location", ["inside-configured-backups", "outside-configured-backups", "outside-destination"])
+def test_ad_restore_refuses_to_replace_a_tree_containing_backup_storage(snapshot_workspace: Path, archive_location: str) -> None:
+    catalogue, snapshot, manager, _ = _captured_snapshot(snapshot_workspace)
+    target = Path(snapshot.directories[0].original_path)
+    archive = manager.create_backup(snapshot_workspace / "exports", "current", BackupType.ASSOCIATED_DIRECTORIES)
+    (target / "payload").write_bytes(b"live")
+    local_backups = target / "backups"
+    local_backups.mkdir()
+    configured = snapshot_workspace / "other-backups" if archive_location == "outside-configured-backups" else local_backups
+    catalogue.settings.backup_path = configured
+    archive_to_restore = archive if archive_location == "outside-destination" else local_backups / "first.zip"
+    if archive_to_restore != archive:
+        shutil.copyfile(archive, archive_to_restore)
+    second_archive = local_backups / "second.zip"
+    shutil.copyfile(archive, second_archive)
+
+    with pytest.raises(ValueError, match="overlaps the backup directory|contains the backup archive"):
+        catalogue.restore_backup_with_mapping(archive_to_restore, {snapshot.directories[0].folder_id: target})
+
+    assert (target / "payload").read_bytes() == b"live"
+    assert archive_to_restore.read_bytes() == second_archive.read_bytes() == archive.read_bytes()
+
+
+def test_sd_restore_refuses_to_replace_the_tree_containing_its_input(snapshot_workspace: Path) -> None:
+    catalogue, snapshot, manager, archive = _captured_snapshot(snapshot_workspace)
+    moved_archive = manager.path_snapshot / "input.zip"
+    shutil.copyfile(archive, moved_archive)
+    preserved = manager.path_snapshot / "preserve.txt"
+    preserved.write_bytes(b"live")
+
+    with pytest.raises(ValueError, match="contains the backup archive"):
+        catalogue.restore_backup(moved_archive)
+
+    assert moved_archive.read_bytes() == archive.read_bytes()
+    assert preserved.read_bytes() == b"live"
+
+
+def test_import_refuses_an_association_overlapping_the_receiving_catalogue_backups(snapshot_workspace: Path) -> None:
+    catalogue, snapshot, _, archive = _captured_snapshot(snapshot_workspace)
+    source = Path(snapshot.directories[0].original_path)
+    target = SnapshotCatalogue(
+        snapshot_workspace / "imported",
+        SnapshotSettings(backup_path=source / "backups"),
+    )
+
+    with pytest.raises(ValueError, match="overlaps the backup directory"):
+        target.import_snapshot(archive)
+
+    assert not target.exists(snapshot.id)
+    assert catalogue.exists(snapshot.id)

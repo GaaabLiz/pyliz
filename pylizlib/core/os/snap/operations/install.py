@@ -1,6 +1,7 @@
 """Staged snapshot installation, legacy merge and installed-copy removal."""
 
 import hashlib
+import os
 import shutil
 import stat
 from collections.abc import Collection
@@ -13,9 +14,11 @@ from pylizlib.core.log.pylizLogger import logger
 from pylizlib.core.os.filesystem.directories import remove_directory_or_move_to_temp
 from pylizlib.core.os.filesystem.tree import is_link_or_junction
 from pylizlib.core.os.snap.callbacks import report_directory_progress
+from pylizlib.core.os.snap.copy_strategy import SourceChangedError
 from pylizlib.core.os.snap.domain import SnapDirAssociation
 from pylizlib.core.os.snap.integrity import SnapshotIntegrityError
 from pylizlib.core.os.snap.operations.archives import SnapshotArchiveService
+from pylizlib.core.os.snap.operations.backup.creation import verify_displaced_sources
 from pylizlib.core.os.snap.operations.destinations import validate_destructive_destinations
 from pylizlib.core.os.snap.storage.context import SnapshotStorage
 from pylizlib.core.os.snap.storage.coordination import coordinated
@@ -110,7 +113,15 @@ class SnapshotInstaller:
         self.storage = storage
 
     @coordinated("storage.path_catalogue")
-    def install(self, enable_everyone_full_control: bool = False, clear_destination: bool = True, progress_callback=None, message_callback=None):
+    def install(
+        self,
+        enable_everyone_full_control: bool = False,
+        clear_destination: bool = True,
+        progress_callback=None,
+        message_callback=None,
+        *,
+        backup_path: Path | None = None,
+    ) -> Path | None:
         """Installs the snapshot's contents to their original locations on the filesystem.
         Copies are prepared and verified in staging before live destinations are replaced or merged.
 
@@ -124,9 +135,10 @@ class SnapshotInstaller:
                 percentage from 0 through 100; return values do not cancel the operation.
             message_callback (MessageCallback | None): Optional status observer receiving one message string; its
                 exceptions propagate according to the calling operation.
+            backup_path (Path | None): Pre-install archive directory when automatic backups are enabled.
 
         Returns:
-            None: No return value.
+            Path | None: Published pre-install backup when existing destinations were archived.
 
         Raises:
             SnapshotBusyError: Another operation owns the catalogue, or an observer attempts a modifying call.
@@ -147,6 +159,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="install snapshot",
+            backup_path=self.storage.settings.backup_path,
         )
         self._validate_existing_targets()
         recover_storage_transactions(self.storage)
@@ -160,6 +173,7 @@ class SnapshotInstaller:
 
         previous_date = self.storage.snapshot.date_last_used
         last_used = datetime.now()
+        backup = None
         replacements = self._plan_replacements()
         staging_roots = [rb.staging_dir for rb in replacements]
         journal = self._begin_install_journal(replacements, staging_roots, clear_destination)
@@ -177,7 +191,21 @@ class SnapshotInstaller:
             if not clear_destination:
                 merge_entries = self._plan_merge_entries(replacements)
                 journal.update_payload(entries=merge_entries)
+            if backup_path is not None:
+                backup = SnapshotArchiveService(self.storage).create_backup_for_existing_associations(backup_path, "preinstall", message_callback)
             self._publish_directories(replacements, clear_destination, merge_entries)
+
+            if backup_path is not None:
+                names = {association.folder_id: association.directory_name for association in self.storage.snapshot.directories}
+                displaced = {}
+                for entry in journal.payload["payload"]["entries"]:
+                    if entry["had_original"]:
+                        name = names[entry["folder_id"]]
+                        if entry.get("merge_child"):
+                            original_name = entry.get("original_name", Path(entry["destination"]).name)
+                            name = f"{name}/{original_name}"
+                        displaced[name] = Path(entry["backup"])
+                verify_displaced_sources(backup, displaced, merge=not clear_destination)
 
             self._apply_windows_permissions(replacements, enable_everyone_full_control, win32security, con)
             journal.set_state("commit_decided")
@@ -191,10 +219,11 @@ class SnapshotInstaller:
             raise
 
         self._complete_install_metadata(journal, metadata_info, last_used, previous_date)
-        cleanup_paths = [rb.backup_dir for rb in replacements]
+        cleanup_paths = [Path(entry["backup"]) for entry in journal.payload["payload"]["entries"] if entry["had_original"]]
         cleanup_paths.extend(staging_roots)
         journal.finalize(cleanup_paths, "Installation")
         logger.info("Installed snapshot id=%s", self.storage.snapshot.id)
+        return backup
 
     @coordinated("storage.path_catalogue")
     def get_removable_paths(self) -> list[Path] | None:
@@ -221,6 +250,7 @@ class SnapshotInstaller:
                 catalogue_path=self.storage.path_catalogue,
                 origin_os=self.storage.snapshot.os_created,
                 operation="remove installed copies",
+                backup_path=self.storage.settings.backup_path,
             )
         return [path for _, path in targets]
 
@@ -264,6 +294,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="remove installed copies",
+            backup_path=self.storage.settings.backup_path,
         )
         backup_path = self.storage.settings.backup_path
         if backup_path is None:
@@ -515,27 +546,34 @@ class SnapshotInstaller:
         """
         entries = []
         for replacement in replacements:
+            live_root = replacement.install_loc
+            live_names = {item.name for item in live_root.iterdir()} if live_root.is_dir() else set()
             for staged_item in sorted(replacement.staging_dir.iterdir()):
                 destination = replacement.install_loc / staged_item.name
                 backup = destination.with_name(f"{destination.name}_bck_{gen_random_string(6)}")
                 if backup.exists() or backup.is_symlink():
                     raise FileExistsError(f"Could not reserve merge backup '{backup}'.")
+                entry = {
+                    "folder_id": replacement.folder_id,
+                    "stage": staged_item.as_posix(),
+                    "stage_root": replacement.staging_dir.as_posix(),
+                    "destination": destination.as_posix(),
+                    "backup": backup.as_posix(),
+                    "had_original": False,
+                    "merge_child": True,
+                }
                 try:
-                    destination.lstat()
-                    had_original = True
+                    live_stat = destination.lstat()
                 except FileNotFoundError:
-                    had_original = False
-                entries.append(
-                    {
-                        "folder_id": replacement.folder_id,
-                        "stage": staged_item.as_posix(),
-                        "stage_root": replacement.staging_dir.as_posix(),
-                        "destination": destination.as_posix(),
-                        "backup": backup.as_posix(),
-                        "had_original": had_original,
-                        "merge_child": True,
-                    }
-                )
+                    pass
+                else:
+                    entry["had_original"] = True
+                    if destination.name not in live_names:
+                        aliases = [name for name in live_names if name.casefold() == destination.name.casefold() and os.path.samestat((live_root / name).lstat(), live_stat)]
+                        if len(aliases) != 1:
+                            raise SourceChangedError(f"Cannot determine the original name of merge destination '{destination}'.")
+                        entry["original_name"] = aliases[0]
+                entries.append(entry)
         return entries
 
     def _publish_directories(self, replacements: list[InstallReplacement], clear_destination: bool, merge_entries: list[dict]) -> None:
@@ -563,6 +601,7 @@ class SnapshotInstaller:
             catalogue_path=self.storage.path_catalogue,
             origin_os=self.storage.snapshot.os_created,
             operation="publish installed copies",
+            backup_path=self.storage.settings.backup_path,
         )
 
         # Sostituire la destinazione soltanto dopo il completamento di tutti gli staging
@@ -585,14 +624,16 @@ class SnapshotInstaller:
                 if not install_loc.exists():
                     install_loc.mkdir(parents=True, exist_ok=True)
         if not clear_destination:
+            live_names = {rb.install_loc: {item.name for item in rb.install_loc.iterdir()} for rb in replacements}
             for entry in merge_entries:
                 staged_item = Path(entry["stage"])
                 destination = Path(entry["destination"])
                 backup = Path(entry["backup"])
                 if entry["had_original"]:
-                    if not (destination.exists() or destination.is_symlink()):
-                        raise FileNotFoundError(f"Merge destination '{destination}' disappeared before publication.")
-                    rename_and_sync(destination, backup)
+                    original = destination.with_name(entry.get("original_name", destination.name))
+                    if original.name not in live_names[destination.parent] or not (original.exists() or original.is_symlink()):
+                        raise FileNotFoundError(f"Merge destination '{original}' disappeared before publication.")
+                    rename_and_sync(original, backup)
                 elif destination.exists() or destination.is_symlink():
                     raise FileExistsError(f"Merge destination '{destination}' appeared during staging.")
                 rename_and_sync(staged_item, destination)

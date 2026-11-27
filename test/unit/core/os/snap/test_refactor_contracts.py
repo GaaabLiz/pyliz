@@ -719,7 +719,7 @@ def test_edit_journal_restores_original_names_after_process_stops_during_staging
 
 
 def test_catalogue_import_keeps_id_only_entries_and_continues_after_bad_json(tmp_path):
-    """Batch import keeps its raw-ID policy instead of adding model validation."""
+    """Batch import keeps compatibility for historical entries containing only an ID."""
     import zipfile
 
     from pylizlib.core.os.snap.operations.transfers import CatalogueTransferService

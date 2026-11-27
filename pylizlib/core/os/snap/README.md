@@ -95,6 +95,9 @@ destination. The automatic pre-install backup is partial: it archives existing
 destinations and lists them in the manifest, so missing destinations can be
 recreated while the others remain protected. If no destination exists, the
 archive is skipped and installation continues.
+The installer creates this archive after staging the incoming copies. It
+checks the displaced copies against the archive before committing. A mismatch
+rolls back installation while the previous copies are still available.
 
 Completed installations record their published destinations in
 `.pyliz_installed_copies.json` at the catalogue root. This local file is not
@@ -118,6 +121,17 @@ After prompting the user with `get_removable_paths()`, pass the confirmed paths
 as `expected_paths` to `remove_installed_copies_with_result()`. The library checks
 that the set matches the actual removal plan under the catalogue lock before
 creating a backup or deleting any directory.
+
+When the user explicitly selects the snapshot's local associations, use
+`get_associated_paths_for_removal()` and pass the confirmed list as
+`expected_paths` to `remove_associated_paths()`. This operation uses the
+associations instead of the installation registry. Under the catalogue lock,
+it reloads the snapshot, checks the confirmed paths and publishes an AD backup.
+Then it moves each folder aside in a journaled transaction before committing
+the removal. Pass `verify_backup=True` to compare every displaced directory
+and file with the ZIP before committing. If verification fails, the transaction
+rolls back the moves and retains the published backup. The comparison is
+disabled by default.
 
 ## Automatic backup results
 
@@ -151,8 +165,9 @@ Text and regex queries can span lines. Content is read in chunks of
 `chunk_size` (default 65,536 **decoded characters**); the initial encoding
 sample is 8,192 bytes. Regexes have a timeout for each match operation
 (`regex_timeout_seconds`, default 0.1 seconds), not a global search deadline.
-`max_context_chars` (default 1,048,576 characters) is the context budget held
-between chunks. It does not impose a strict maximum length on each match: a
+`max_context_chars` (default 1,048,576 characters) is the context budget per
+side of the regex scan boundary. The left context supports lookbehind both
+between chunks and in the final scan. It does not impose a strict maximum length on each match: a
 longer span may be found when it fits in the current window, but matches across
 chunks and the EOF tail are not guaranteed. Only `False` stops the current
 snapshot search; the callback is also called while reading, so it can stop a
@@ -161,8 +176,10 @@ very large file.
 `search_with_report()` reports cancellation and detects additional matches or
 candidate files beyond the configured limits. It rejects links and propagates
 directory traversal, read, decoding and match errors so the caller can report
-a failed snapshot search. Its callback receives two zero counters during
-discovery and can cancel before the candidate count is known. `validate_query()` allows checking
+a failed snapshot search. With a `SnapshotCatalogue`, it reloads the stored
+snapshot by ID under the same lock it holds throughout the scan. Its
+callback receives two zero counters during discovery and can cancel before
+the candidate count is known. `validate_query()` allows checking
 syntax before starting a background job. The existing list-returning methods keep their behavior.
 
 ## Catalogue statistics
@@ -238,6 +255,12 @@ the start and end of the latest complete capture performed by create or sync,
 as UTC timestamps with an explicit offset (`+00:00`). Both fields remain `None`
 for legacy snapshots until they are captured again.
 
+Snapshot associations must be disjoint from the configured backup directory.
+The check rejects the backup directory itself, paths inside it, and parent
+directories that contain it. Restore also rejects destinations that contain
+the input ZIP, including when it was moved outside the configured backup
+directory or the restore uses a destination mapping.
+
 A backup destination must resolve outside the trees that will be archived.
 This prevents previous ZIP files from being included and is checked even when
 the destination uses an alias or symlink.
@@ -286,8 +309,14 @@ With `allow_unverified_legacy_snapshots=True`, single and batch imports
 rewrite legacy metadata in the staged copy before publication. Association IDs
 and stored directory names remain stable. Where an integrity manifest is
 missing, it is generated from the imported bytes and becomes the baseline for
-later integrity checks. If a manifest is already present, import verifies it
-and rejects mismatches. Imports leave the source archive untouched.
+later integrity checks. Both import routes verify existing manifests before
+publication, regardless of the migration setting. Imports leave the source
+archive untouched.
+
+`import_catalogue_with_report()` lists newly imported and already present
+snapshot IDs and gives a reason for each failed directory. Valid entries are
+published even when others fail. `import_catalogue()` keeps its existing
+return value.
 
 Before deleting a snapshot, the catalogue reloads its metadata under the same
 lock as backup creation and removal. Before publication, a backup ZIP passes the
@@ -298,7 +327,8 @@ from proceeding with an unusable backup. Associated-directory
 exports can read current files with `export_assoc_dirs()` or the captured copies
 with `export_captured_assoc_dirs()`. Both use the association layout of AD ZIPs.
 
-ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
+ZIP extraction on POSIX restores executable bits for files with Unix ZIP
+metadata. ZIP writing also accepts source timestamps earlier than 1980 and clamps them to
 the range representable by the format. Before extraction, import and restore
 check the entry count, total uncompressed bytes, and available space, including
 the second staging area needed for publication. Defaults are 100 GiB and
@@ -429,7 +459,7 @@ physical durability on a particular SMB/NFS share.
 | Synchronization | Prepare all copies, replace them, update sizes/manifests, and save; restore copies and in-memory metadata according to the existing protocol. |
 | Installation | Reject coincident or nested destinations before staging; verify and prepare all copies before changing targets; save `date_last_used` after the content commit. |
 | Installed-copy removal | Use only registered paths, back up their current local state before the first deletion, and update the registry after each outcome. |
-| Installation merge | Replace top-level collisions; do not introduce a recursive merge. |
+| Installation merge | Replace top-level collisions and use the displaced entry's spelling to verify its backup and restore it on rollback. |
 | `_ad` restore | Restore recognized associations using staging and a journal; recovery completes or rolls back the swap after a crash. |
 | Post-commit cleanup | Record errors and continue without reactivating rollback of data already published. |
 

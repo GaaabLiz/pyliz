@@ -107,3 +107,19 @@ def test_strict_search_propagates_regex_timeout_at_end_of_file(tmp_path):
     assert not searcher.search_file(path, params, TimeoutPattern(), ResultPage(0, 10), None)
     with pytest.raises(TimeoutError, match="Regex search timed out"):
         searcher.search_file(path, params, TimeoutPattern(), ResultPage(0, 10), None, strict=True)
+
+
+@pytest.mark.parametrize("suffix", ["", "\n" + "tail" * 8])
+@pytest.mark.parametrize("query", [r"(?<=AB)NEEDLE", r"(?<!AB)NEEDLE"])
+def test_regex_lookbehind_keeps_left_context_across_chunks_and_at_eof(tmp_path, suffix, query):
+    """A trimmed window must not hide characters inspected before the match start."""
+    text = "header\nXXNEEDLE\n" + "padding\n" * 3 + "ABNEEDLE" + suffix
+    path = tmp_path / "text"
+    path.write_text(text, encoding="utf-8")
+    pattern = regex.compile(query)
+    expected_lines = [text.count("\n", 0, match.start()) + 1 for match in pattern.finditer(text)]
+    params = TextSearchOptions(query, literal=False, chunk_size=1, max_context_chars=7)
+    page = ResultPage(0, 10)
+
+    assert not TextFileSearcher().search_file(path, params, pattern, page, None)
+    assert [match.line_number for match in page.results] == expected_lines

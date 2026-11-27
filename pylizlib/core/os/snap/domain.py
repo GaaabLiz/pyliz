@@ -239,6 +239,21 @@ class SnapshotUpdateResult(SnapshotOperationResult):
 
 
 @dataclass(frozen=True)
+class SnapshotCatalogueImportReport:
+    """Report outcomes of the individual directories in a catalogue archive.
+
+    Attributes:
+        imported (list[str]): IDs of the snapshots published by this import.
+        skipped (list[str]): IDs left in place because they already existed.
+        failed (dict[str, str]): Archive directory names and their failure reasons.
+    """
+
+    imported: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    failed: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class SnapshotFileInfo:
     """Identify a file within a captured association.
 
